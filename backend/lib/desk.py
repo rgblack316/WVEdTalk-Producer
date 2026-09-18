@@ -278,6 +278,7 @@ async def run_briefing(date_str: Optional[str] = None) -> Briefing:
                 {"date": date_str}, briefing.model_dump(), upsert=True
             )
             _run_status.message = f"Briefing for {date_str} published ({len(stories)} stories)."
+            await _send_digest_safe(briefing)
             return briefing
         except Exception as exc:
             logger.exception("briefing run failed")
@@ -289,7 +290,23 @@ async def run_briefing(date_str: Optional[str] = None) -> Briefing:
             _run_status.finished_at = datetime.now(timezone.utc)
 
 
+async def _send_digest_safe(briefing: Briefing) -> None:
+    """Email the digest to configured recipients after a run — never fail the run on this."""
+    try:
+        from lib import email_digest
+
+        cfg = await db.desk_config.find_one({"key": "singleton"}, {"_id": 0})
+        recipients = (cfg or {}).get("recipients") or []
+        if recipients:
+            _run_status.message = "Emailing the digest to subscribers…"
+            sent = await email_digest.send_digest(briefing, recipients)
+            logger.info("digest emailed to %d/%d recipients", sent, len(recipients))
+    except Exception:
+        logger.exception("digest email step failed (non-fatal)")
+
+
 async def scheduler_loop() -> None:
+    """Fire the daily edition at 6:00 AM Eastern if that date has no briefing yet."""
     """Fire the daily edition at 6:00 AM Eastern if that date has no briefing yet."""
     while True:
         try:

@@ -41,5 +41,21 @@ story can be flagged as a podcast episode candidate with free-text prep notes.
 ## Auth
 None — single-host tool, no login.
 
+## Added features (post-MVP)
+- **Region filter + search** (frontend, `lib/regions.ts`): 8 WV region quick-filters (county->region
+  map) plus a county/keyword search box on any briefing. Filtering hides trends/ideas/source-log.
+- **Markdown export** (frontend): Copy-to-clipboard and Download `.md` of the full edition.
+- **Watchlist** (backend `desk_config` singleton, `routers/settings.py`): case-insensitive terms
+  matched anywhere in a story's text; matches surface as a highlighted alert atop the briefing.
+- **Email digest** (backend `lib/email_digest.py`, managed Resend via EMERGENT_EMAIL_KEY,
+  EMAIL_FROM_NAME="WV Education News Desk"): HTML digest built from a server-side template and sent
+  to configured recipients automatically after each run (`_send_digest_safe`, non-fatal) and via
+  POST /api/settings/send-digest. Guardrail gate `_assert_safe_email` runs on every send.
+- **Settings page** (`/settings`): manage recipients (EmailStr-validated) and watch terms, plus a
+  "Send latest briefing now" button.
+- Config endpoints: GET /api/settings, POST/DELETE /api/settings/recipients, POST/DELETE
+  /api/settings/watch-terms, POST /api/settings/send-digest.
+
 ## Seed data
-None seeded. First real briefing generated for 2026-09-18 via the auto-scheduler.
+None seeded. First real briefing generated for 2026-09-18. Demo watch terms ("consolidation",
+"special education") were added during testing and left as harmless examples; no recipients configured.

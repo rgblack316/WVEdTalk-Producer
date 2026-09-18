@@ -10,6 +10,7 @@ const NAV = [
   { to: "/", label: "Today's Briefing" },
   { to: "/archive", label: "Archive" },
   { to: "/candidates", label: "Podcast Prep" },
+  { to: "/settings", label: "Settings" },
 ];
 
 export default function DeskLayout({ children }: { children: React.ReactNode }) {

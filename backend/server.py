@@ -19,6 +19,7 @@ load_dotenv(ROOT_DIR / '.env')
 from lib.db import client, db, ensure_indexes
 from lib.desk import scheduler_loop
 from routers.briefings import router as briefings_router
+from routers.settings import router as settings_router
 
 
 # Startup runs before the yield, shutdown after it. Add your own setup/teardown here.
@@ -65,6 +66,7 @@ async def get_status_checks():
     return [StatusCheck(**status_check) for status_check in status_checks]
 
 api_router.include_router(briefings_router)
+api_router.include_router(settings_router)
 
 # Include the router in the main app
 app.include_router(api_router)

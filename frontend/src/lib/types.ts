@@ -82,6 +82,11 @@ export interface CandidateStory {
   story: Story;
 }
 
+export interface DeskConfig {
+  recipients: string[];
+  watch_terms: string[];
+}
+
 export const SECTION_LABELS: Record<string, string> = {
   big_three: "The Big Three",
   other: "Other Significant Stories",

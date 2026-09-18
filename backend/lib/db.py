@@ -23,6 +23,7 @@ INDEXES: dict[str, list[IndexModel]] = {
         IndexModel([("date", DESCENDING)], name="date_desc", unique=True),
         IndexModel([("stories.is_candidate", ASCENDING)], name="story_candidate"),
     ],
+    "desk_config": [IndexModel([("key", ASCENDING)], name="key", unique=True)],
 }
 
 
