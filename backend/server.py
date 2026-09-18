@@ -18,7 +18,9 @@ load_dotenv(ROOT_DIR / '.env')
 # MongoDB connection
 from lib.db import client, db, ensure_indexes
 from lib.desk import scheduler_loop
+from lib.producer import scheduler_loop as weekly_scheduler_loop
 from routers.briefings import router as briefings_router
+from routers.episodes import router as episodes_router
 from routers.settings import router as settings_router
 
 
@@ -27,8 +29,10 @@ from routers.settings import router as settings_router
 async def lifespan(app: FastAPI):
     app.state.index_task = asyncio.create_task(ensure_indexes())  # background: a big index build must not block boot
     app.state.scheduler_task = asyncio.create_task(scheduler_loop())  # daily 6:00 AM ET edition
+    app.state.weekly_task = asyncio.create_task(weekly_scheduler_loop())  # Friday 2:00 PM ET WVEdTalk episode
     yield
     app.state.scheduler_task.cancel()
+    app.state.weekly_task.cancel()
     client.close()
 
 
@@ -67,6 +71,7 @@ async def get_status_checks():
 
 api_router.include_router(briefings_router)
 api_router.include_router(settings_router)
+api_router.include_router(episodes_router)
 
 # Include the router in the main app
 app.include_router(api_router)

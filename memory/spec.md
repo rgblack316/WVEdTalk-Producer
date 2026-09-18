@@ -59,3 +59,20 @@ None — single-host tool, no login.
 ## Seed data
 None seeded. First real briefing generated for 2026-09-18. Demo watch terms ("consolidation",
 "special education") were added during testing and left as harmless examples; no recipients configured.
+
+## WVEdTalk Weekly Producer (feature)
+- **Purpose**: every Friday 2:00 PM ET, independently reviews the week and writes a recording-ready
+  WVEdTalk episode. Adapts the user's full producer brief (`lib/producer.py` PRODUCER_BRIEF).
+- **Model**: Gemini 3.1 Pro + googleSearch grounding; fresh research, does not merely restate the
+  daily briefings (they are passed as reference context only).
+- **Data model** (collection `episodes`, one doc per `week_of` = the Friday date, unique index):
+  WeeklyEpisode {week_of, week_start, week_end, editorial_summary, selected_stories[EpisodeStory],
+  not_selected[NotSelectedStory], look_ahead[LookAheadItem], recording_script (str), source_log[]}.
+- **Verbatim intro**: `REQUIRED_INTRO` (Randy Black) is enforced — `_ensure_intro()` prepends the
+  show ID + exact intro if the model omitted it. Sources resolved via `desk.resolve_links()`.
+- **Scheduler**: `lib/producer.scheduler_loop` fires Friday >=14:00 ET if no episode for the week.
+- **Endpoints**: GET /api/episodes, /api/episodes/latest, /api/episodes/{week_of},
+  GET /api/produce-status, POST /api/produce (background trigger, 409 if running).
+- **Frontend**: `/episodes` (Weekly Script — latest episode, producer notes, not-selected audit,
+  look-ahead, full recording script, copy/download, past-episode list) and `/episodes/:week`
+  (past episode detail). Nav item "Weekly Script".

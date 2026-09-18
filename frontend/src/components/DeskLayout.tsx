@@ -9,6 +9,7 @@ import type { RunStatus } from "@/lib/types";
 const NAV = [
   { to: "/", label: "Today's Briefing" },
   { to: "/archive", label: "Archive" },
+  { to: "/episodes", label: "Weekly Script" },
   { to: "/candidates", label: "Podcast Prep" },
   { to: "/settings", label: "Settings" },
 ];

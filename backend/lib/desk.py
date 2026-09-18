@@ -185,12 +185,11 @@ async def _resolve_one(client, url: str, cache: Dict[str, str]) -> str:
     return final
 
 
-async def _resolve_sources(briefing: Briefing) -> None:
+async def resolve_links(links: List[SourceLink]) -> None:
+    """Resolve Google grounding redirects to publisher URLs and fill missing outlets. Reusable."""
     import httpx
 
-    links = list(briefing.source_log)
-    for s in briefing.stories:
-        links.extend(s.sources)
+    links = [l for l in links if l]
     if not links:
         return
     cache: Dict[str, str] = {}
@@ -204,6 +203,13 @@ async def _resolve_sources(briefing: Briefing) -> None:
                 link.outlet = _domain(resolved)
 
         await asyncio.gather(*(fix(link) for link in links), return_exceptions=True)
+
+
+async def _resolve_sources(briefing: Briefing) -> None:
+    links = list(briefing.source_log)
+    for s in briefing.stories:
+        links.extend(s.sources)
+    await resolve_links(links)
 
 
 def _merge_workspace(new: Briefing, previous: Optional[Dict[str, Any]]) -> None:

@@ -24,6 +24,7 @@ INDEXES: dict[str, list[IndexModel]] = {
         IndexModel([("stories.is_candidate", ASCENDING)], name="story_candidate"),
     ],
     "desk_config": [IndexModel([("key", ASCENDING)], name="key", unique=True)],
+    "episodes": [IndexModel([("week_of", DESCENDING)], name="week_of_desc", unique=True)],
 }
 
 

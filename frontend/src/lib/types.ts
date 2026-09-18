@@ -87,6 +87,67 @@ export interface DeskConfig {
   watch_terms: string[];
 }
 
+export interface EpisodeStory {
+  story: string;
+  location: string;
+  classification: string[];
+  importance: number | null;
+  podcast_potential: number | null;
+  why_it_made_the_cut: string;
+  what_happened_during_week: string;
+  what_remains_unresolved: string;
+  why_it_matters: string;
+  sources: SourceLink[];
+}
+
+export interface NotSelectedStory {
+  story: string;
+  location: string;
+  why_considered: string;
+  why_not_selected: string;
+}
+
+export interface LookAheadItem {
+  label: string;
+  date: string;
+}
+
+export interface WeeklyEpisode {
+  id: string;
+  week_of: string;
+  week_start: string;
+  week_end: string;
+  generated_at: string;
+  status: string;
+  model: string;
+  editorial_summary: string;
+  selected_stories: EpisodeStory[];
+  not_selected: NotSelectedStory[];
+  look_ahead: LookAheadItem[];
+  recording_script: string;
+  source_log: SourceLink[];
+  error: string;
+}
+
+export interface EpisodeSummary {
+  week_of: string;
+  week_start: string;
+  week_end: string;
+  generated_at: string;
+  status: string;
+  story_count: number;
+  selected_headlines: string[];
+}
+
+export interface ProduceStatus {
+  running: boolean;
+  week_of: string;
+  started_at: string | null;
+  finished_at: string | null;
+  message: string;
+  last_error: string;
+}
+
 export const SECTION_LABELS: Record<string, string> = {
   big_three: "The Big Three",
   other: "Other Significant Stories",
