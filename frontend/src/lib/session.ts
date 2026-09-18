@@ -1,19 +1,18 @@
-// Session boundary: auth is an httpOnly cookie the backend owns; the frontend's one
-// duty is wiping the react-query cache so one account's data never renders for the next.
-import { queryClient } from "./queryClient";
-import { apiPost } from "./api";
+import { apiPost } from "@/lib/api";
+import type { QueryClient } from "@tanstack/react-query";
 
-// Call after every successful login/signup.
-export function beginSession(): void {
-  queryClient.clear();
+// Single shared-passcode session. The httpOnly cookie is set/cleared by the backend;
+// the frontend only nudges the react-query cache so the gate re-evaluates.
+export async function beginSession(qc: QueryClient) {
+  await qc.invalidateQueries({ queryKey: ["auth", "me"] });
 }
 
-// Call from every sign-out control; the hard redirect resets all in-memory state.
-export async function endSession(redirectTo: string = "/login"): Promise<void> {
+export async function endSession() {
   try {
     await apiPost("/auth/logout");
   } finally {
-    queryClient.clear();
-    window.location.assign(redirectTo);
+    // Hard redirect: a full page load re-evaluates AuthGate from scratch with the
+    // cookie already cleared, and wipes all in-memory (react-query) state — no race.
+    window.location.href = "/";
   }
 }

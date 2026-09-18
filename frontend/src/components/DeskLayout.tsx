@@ -1,9 +1,10 @@
 import { Link, useLocation } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Loader2, RefreshCw } from "lucide-react";
+import { Loader2, RefreshCw, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { apiGet, apiPost, ApiError } from "@/lib/api";
+import { endSession } from "@/lib/session";
 import type { RunStatus } from "@/lib/types";
 
 const NAV = [
@@ -85,6 +86,16 @@ export default function DeskLayout({ children }: { children: React.ReactNode }) 
                 <RefreshCw className="size-4" />
               )}
               {running ? "Researching…" : "Run now"}
+            </Button>
+            <Button
+              size="icon-sm"
+              variant="ghost"
+              onClick={() => endSession()}
+              aria-label="Lock desk"
+              title="Lock desk"
+              data-testid="lock-desk-button"
+            >
+              <Lock className="size-4" />
             </Button>
           </div>
         </div>

@@ -39,7 +39,17 @@ story can be flagged as a podcast episode candidate with free-text prep notes.
   `/briefings/:date` (full edition), `/briefings/:date/stories/:storyId` (detail + prep panel).
 
 ## Auth
-None — single-host tool, no login.
+Single shared passcode gating the whole desk (added on request).
+- Stateless HMAC-signed httpOnly cookie (`lib/auth.py`, cookie `wv_desk_session`, 30-day expiry,
+  `secure`+`samesite=lax`). `SESSION_SECRET` + `APP_PASSCODE` in backend/.env.
+- Auth routes open (`routers/auth.py`): POST /api/auth/login {passcode}, POST /api/auth/logout,
+  GET /api/auth/me. All other routers mounted with `Depends(require_auth)` → 401 without auth.
+- Programmatic clients (the downstream weekly agent reading /api/briefings/{date} or
+  /api/episodes/{week}) authenticate with header `X-Desk-Passcode: <passcode>` instead of a cookie.
+- Frontend: `components/AuthGate.tsx` wraps all routes — shows a passcode screen until
+  authenticated; `lib/session.ts` beginSession/endSession; a Lock button in the header signs out
+  and clears the react-query cache. CORS tightened to the app origin.
+- Passcode is in memory/test_credentials.md.
 
 ## Added features (post-MVP)
 - **Region filter + search** (frontend, `lib/regions.ts`): 8 WV region quick-filters (county->region

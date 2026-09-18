@@ -1,5 +1,6 @@
 import { Routes, Route } from "react-router-dom";
 import { Toaster } from "@/components/ui/sonner";
+import AuthGate from "@/components/AuthGate";
 import Home from "@/pages/Home";
 import Archive from "@/pages/Archive";
 import BriefingPage from "@/pages/BriefingPage";
@@ -13,16 +14,18 @@ import EpisodePage from "@/pages/EpisodePage";
 export default function App() {
   return (
     <>
-      <Routes>
-        <Route path="/" element={<Home />} />
-        <Route path="/archive" element={<Archive />} />
-        <Route path="/candidates" element={<Candidates />} />
-        <Route path="/episodes" element={<Episodes />} />
-        <Route path="/episodes/:week" element={<EpisodePage />} />
-        <Route path="/settings" element={<Settings />} />
-        <Route path="/briefings/:date" element={<BriefingPage />} />
-        <Route path="/briefings/:date/stories/:storyId" element={<StoryDetail />} />
-      </Routes>
+      <AuthGate>
+        <Routes>
+          <Route path="/" element={<Home />} />
+          <Route path="/archive" element={<Archive />} />
+          <Route path="/candidates" element={<Candidates />} />
+          <Route path="/episodes" element={<Episodes />} />
+          <Route path="/episodes/:week" element={<EpisodePage />} />
+          <Route path="/settings" element={<Settings />} />
+          <Route path="/briefings/:date" element={<BriefingPage />} />
+          <Route path="/briefings/:date/stories/:storyId" element={<StoryDetail />} />
+        </Routes>
+      </AuthGate>
       <Toaster />
     </>
   );

@@ -17,8 +17,11 @@ load_dotenv(ROOT_DIR / '.env')
 
 # MongoDB connection
 from lib.db import client, db, ensure_indexes
+from fastapi import Depends
+from lib.auth import require_auth
 from lib.desk import scheduler_loop
 from lib.producer import scheduler_loop as weekly_scheduler_loop
+from routers.auth import router as auth_router
 from routers.briefings import router as briefings_router
 from routers.episodes import router as episodes_router
 from routers.settings import router as settings_router
@@ -69,9 +72,12 @@ async def get_status_checks():
     status_checks = await db.status_checks.find().to_list(1000)
     return [StatusCheck(**status_check) for status_check in status_checks]
 
-api_router.include_router(briefings_router)
-api_router.include_router(settings_router)
-api_router.include_router(episodes_router)
+# Auth routes are open; everything else requires the shared passcode (cookie or header).
+api_router.include_router(auth_router)
+_guard = [Depends(require_auth)]
+api_router.include_router(briefings_router, dependencies=_guard)
+api_router.include_router(settings_router, dependencies=_guard)
+api_router.include_router(episodes_router, dependencies=_guard)
 
 # Include the router in the main app
 app.include_router(api_router)
