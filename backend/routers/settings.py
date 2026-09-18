@@ -3,13 +3,22 @@
 from fastapi import APIRouter, HTTPException
 
 from lib import email_digest
+from lib import auth
 from lib.db import db
-from models.config import DeskConfig, RecipientCreate, ScriptLengthUpdate, WatchTermCreate
+from models.config import (
+    AutoLockUpdate,
+    DeskConfig,
+    PasscodeChange,
+    RecipientCreate,
+    ScriptLengthUpdate,
+    WatchTermCreate,
+)
 
 router = APIRouter(tags=["settings"])
 
 _KEY = {"key": "singleton"}
 _VALID_LENGTHS = {"concise", "standard", "full"}
+_VALID_LOCK = {0, 5, 15, 30, 60}
 
 
 async def _load() -> DeskConfig:
@@ -72,6 +81,26 @@ async def set_script_length(body: ScriptLengthUpdate):
     cfg.script_length = body.value
     await _save(cfg)
     return cfg
+
+
+@router.post("/settings/auto-lock", response_model=DeskConfig)
+async def set_auto_lock(body: AutoLockUpdate):
+    if body.minutes not in _VALID_LOCK:
+        raise HTTPException(status_code=422, detail="Minutes must be one of 0, 5, 15, 30, 60")
+    cfg = await _load()
+    cfg.auto_lock_minutes = body.minutes
+    await _save(cfg)
+    return cfg
+
+
+@router.post("/settings/passcode")
+async def change_passcode(body: PasscodeChange):
+    if not await auth.passcode_matches(body.current):
+        raise HTTPException(status_code=401, detail="Current passcode is incorrect")
+    if len(body.new.strip()) < 6:
+        raise HTTPException(status_code=422, detail="New passcode must be at least 6 characters")
+    await auth.set_passcode(body.new.strip())
+    return {"ok": True}
 
 
 @router.post("/settings/send-digest")

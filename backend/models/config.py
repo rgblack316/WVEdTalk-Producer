@@ -1,6 +1,7 @@
-"""Desk configuration: email digest recipients, watchlist terms, script-length preference.
+"""Desk configuration: recipients, watchlist, script length, auto-lock, passcode.
 
-Mirrored in frontend/src/lib/types.ts. Stored as a single singleton document.
+DeskConfig is the client-visible shape. The passcode hash is stored in the same
+document but is NOT part of this model, so it is never returned to the frontend.
 """
 
 from typing import List
@@ -12,6 +13,7 @@ class DeskConfig(BaseModel):
     recipients: List[str] = []
     watch_terms: List[str] = []
     script_length: str = "standard"  # concise | standard | full
+    auto_lock_minutes: int = 0  # 0 = off
 
 
 class RecipientCreate(BaseModel):
@@ -24,3 +26,12 @@ class WatchTermCreate(BaseModel):
 
 class ScriptLengthUpdate(BaseModel):
     value: str  # concise | standard | full
+
+
+class AutoLockUpdate(BaseModel):
+    minutes: int
+
+
+class PasscodeChange(BaseModel):
+    current: str
+    new: str

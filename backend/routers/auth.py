@@ -21,12 +21,12 @@ async def me(
     wv_desk_session: str | None = Cookie(default=None),
     x_desk_passcode: str | None = Header(default=None),
 ):
-    return AuthState(authenticated=auth.is_authenticated(wv_desk_session, x_desk_passcode))
+    return AuthState(authenticated=await auth.is_authenticated(wv_desk_session, x_desk_passcode))
 
 
 @router.post("/auth/login", response_model=AuthState)
 async def login(body: LoginRequest, response: Response):
-    if not auth.passcode_matches(body.passcode):
+    if not await auth.passcode_matches(body.passcode):
         raise HTTPException(status_code=401, detail="Incorrect passcode")
     response.set_cookie(
         key=auth.COOKIE_NAME,

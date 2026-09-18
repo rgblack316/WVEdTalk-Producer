@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Mail, Eye, Trash2, Send, Gauge } from "lucide-react";
+import { Mail, Eye, Trash2, Send, Gauge, ShieldCheck, Timer } from "lucide-react";
 import DeskLayout from "@/components/DeskLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,6 +19,9 @@ export default function Settings() {
   const qc = useQueryClient();
   const [email, setEmail] = useState("");
   const [term, setTerm] = useState("");
+  const [current, setCurrent] = useState("");
+  const [newPass, setNewPass] = useState("");
+  const [confirm, setConfirm] = useState("");
 
   const { data, isLoading } = useQuery({
     queryKey: ["config"],
@@ -74,15 +77,44 @@ export default function Settings() {
     onError: (e) => toast.error(errMsg(e)),
   });
 
+  const setAutoLock = useMutation({
+    mutationFn: (minutes: number) => apiPost<DeskConfig>("/settings/auto-lock", { minutes }),
+    onSuccess: (cfg) => {
+      invalidate(cfg);
+      toast.success("Auto-lock preference saved");
+    },
+    onError: (e) => toast.error(errMsg(e)),
+  });
+
+  const changePasscode = useMutation({
+    mutationFn: () => apiPost<{ ok: boolean }>("/settings/passcode", { current, new: newPass }),
+    onSuccess: () => {
+      setCurrent("");
+      setNewPass("");
+      setConfirm("");
+      toast.success("Passcode changed. Existing sessions stay signed in.");
+    },
+    onError: (e) => toast.error(errMsg(e)),
+  });
+
   const recipients = data?.recipients ?? [];
   const terms = data?.watch_terms ?? [];
   const length = data?.script_length ?? "standard";
+  const autoLock = data?.auto_lock_minutes ?? 0;
 
   const LENGTHS: { id: string; label: string; hint: string }[] = [
     { id: "concise", label: "Concise", hint: "~10–13 min" },
     { id: "standard", label: "Standard", hint: "~15–20 min" },
     { id: "full", label: "Full", hint: "~20–26 min" },
   ];
+  const LOCK_OPTIONS: { minutes: number; label: string }[] = [
+    { minutes: 0, label: "Off" },
+    { minutes: 5, label: "5 min" },
+    { minutes: 15, label: "15 min" },
+    { minutes: 30, label: "30 min" },
+    { minutes: 60, label: "60 min" },
+  ];
+  const passcodeValid = current.trim() && newPass.trim().length >= 6 && newPass === confirm;
 
   return (
     <DeskLayout>
@@ -99,6 +131,94 @@ export default function Settings() {
         <div className="py-16 text-center text-muted-foreground">Loading settings…</div>
       ) : (
         <div className="grid gap-8 md:grid-cols-2">
+          {/* Security: passcode + auto-lock */}
+          <section
+            className="rounded-md border border-border bg-card p-5 md:col-span-2"
+            data-testid="security-panel"
+          >
+            <h3 className="flex items-center gap-2 font-heading text-lg font-bold">
+              <ShieldCheck className="size-4 text-primary" /> Security
+            </h3>
+            <div className="mt-4 grid gap-6 md:grid-cols-2">
+              {/* Change passcode */}
+              <div>
+                <p className="text-sm font-semibold">Change passcode</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Rotate the shared passcode without editing any files. Anyone already signed in stays
+                  signed in.
+                </p>
+                <form
+                  className="mt-3 space-y-2"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    if (passcodeValid) changePasscode.mutate();
+                  }}
+                >
+                  <Input
+                    type="password"
+                    placeholder="Current passcode"
+                    value={current}
+                    onChange={(e) => setCurrent(e.target.value)}
+                    data-testid="current-passcode-input"
+                  />
+                  <Input
+                    type="password"
+                    placeholder="New passcode (min 6 characters)"
+                    value={newPass}
+                    onChange={(e) => setNewPass(e.target.value)}
+                    data-testid="new-passcode-input"
+                  />
+                  <Input
+                    type="password"
+                    placeholder="Confirm new passcode"
+                    value={confirm}
+                    onChange={(e) => setConfirm(e.target.value)}
+                    data-testid="confirm-passcode-input"
+                  />
+                  {confirm && newPass !== confirm && (
+                    <p className="text-xs text-destructive">Passcodes don't match.</p>
+                  )}
+                  <Button
+                    type="submit"
+                    size="sm"
+                    disabled={!passcodeValid || changePasscode.isPending}
+                    data-testid="change-passcode-button"
+                  >
+                    Update passcode
+                  </Button>
+                </form>
+              </div>
+
+              {/* Auto-lock */}
+              <div>
+                <p className="flex items-center gap-1.5 text-sm font-semibold">
+                  <Timer className="size-4 text-accent" /> Auto-lock on inactivity
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Sign this browser out automatically after a period with no activity — useful on
+                  shared machines.
+                </p>
+                <div className="mt-3 flex flex-wrap gap-2" data-testid="auto-lock-options">
+                  {LOCK_OPTIONS.map((o) => (
+                    <button
+                      key={o.minutes}
+                      onClick={() => setAutoLock.mutate(o.minutes)}
+                      disabled={setAutoLock.isPending}
+                      data-testid={`auto-lock-${o.minutes}`}
+                      className={`rounded-sm border px-3 py-1.5 text-sm transition-colors duration-150 ${
+                        autoLock === o.minutes
+                          ? "border-primary bg-primary text-primary-foreground"
+                          : "border-border bg-background hover:border-primary/50"
+                      }`}
+                    >
+                      {o.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </section>
+
           {/* Weekly script length */}
           <section
             className="rounded-md border border-border bg-card p-5 md:col-span-2"

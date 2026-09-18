@@ -86,6 +86,7 @@ export interface DeskConfig {
   recipients: string[];
   watch_terms: string[];
   script_length: string;
+  auto_lock_minutes: number;
 }
 
 export interface EpisodeStory {

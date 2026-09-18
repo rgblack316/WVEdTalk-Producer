@@ -1,11 +1,12 @@
 import { Link, useLocation } from "react-router-dom";
+import { useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Loader2, RefreshCw, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { apiGet, apiPost, ApiError } from "@/lib/api";
 import { endSession } from "@/lib/session";
-import type { RunStatus } from "@/lib/types";
+import type { DeskConfig, RunStatus } from "@/lib/types";
 
 const NAV = [
   { to: "/", label: "Today's Briefing" },
@@ -24,6 +25,33 @@ export default function DeskLayout({ children }: { children: React.ReactNode }) 
     queryFn: () => apiGet<RunStatus>("/run-status"),
     refetchInterval: (q) => (q.state.data?.running ? 5000 : 30000),
   });
+
+  const { data: config } = useQuery({
+    queryKey: ["config"],
+    queryFn: () => apiGet<DeskConfig>("/settings"),
+    staleTime: 60000,
+  });
+
+  // Auto-lock after a period of inactivity (0 = off). Any interaction resets the timer.
+  const lockMinutes = config?.auto_lock_minutes ?? 0;
+  useEffect(() => {
+    if (!lockMinutes) return;
+    let timer: ReturnType<typeof setTimeout>;
+    const reset = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        toast.message("Locked due to inactivity");
+        endSession();
+      }, lockMinutes * 60 * 1000);
+    };
+    const events = ["mousemove", "mousedown", "keydown", "scroll", "touchstart"];
+    events.forEach((e) => window.addEventListener(e, reset, { passive: true }));
+    reset();
+    return () => {
+      clearTimeout(timer);
+      events.forEach((e) => window.removeEventListener(e, reset));
+    };
+  }, [lockMinutes]);
 
   const run = useMutation({
     mutationFn: () => apiPost<RunStatus>("/run"),
