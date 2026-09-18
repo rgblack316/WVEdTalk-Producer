@@ -1,0 +1,101 @@
+// Hand-mirrored from backend/models/briefing.py — keep both in sync in one edit.
+
+export interface SourceLink {
+  title: string;
+  url: string;
+  outlet: string;
+}
+
+export interface Story {
+  id: string;
+  section: string;
+  rank: number | null;
+  headline: string;
+  location: string;
+  classification: string[];
+  importance: number | null;
+  podcast_potential: number | null;
+  what_happened: string;
+  why_it_matters: string;
+  podcast_angle: string;
+  questions: string[];
+  original_date: string;
+  what_is_new: string;
+  previously_known: string;
+  unresolved: string;
+  watch_next: string;
+  sources: SourceLink[];
+  is_candidate: boolean;
+  notes: string;
+}
+
+export interface Trend {
+  title: string;
+  why_it_matters: string;
+  evidence: string[];
+  missing_evidence: string[];
+  watch_next: string;
+}
+
+export interface PodcastIdea {
+  working_title: string;
+  central_question: string;
+  why_worth_exploring: string;
+  supporting_stories: string[];
+  research_needed: string[];
+  potential_guests: string[];
+}
+
+export interface Briefing {
+  id: string;
+  date: string;
+  generated_at: string;
+  status: string;
+  model: string;
+  editor_note: string;
+  stories: Story[];
+  trends: Trend[];
+  podcast_ideas: PodcastIdea[];
+  source_log: SourceLink[];
+  error: string;
+}
+
+export interface BriefingSummary {
+  date: string;
+  generated_at: string;
+  status: string;
+  story_count: number;
+  big_three: string[];
+}
+
+export interface RunStatus {
+  running: boolean;
+  date: string;
+  started_at: string | null;
+  finished_at: string | null;
+  message: string;
+  last_error: string;
+}
+
+export interface CandidateStory {
+  date: string;
+  story: Story;
+}
+
+export const SECTION_LABELS: Record<string, string> = {
+  big_three: "The Big Three",
+  other: "Other Significant Stories",
+  developing: "Developing Stories",
+  state_policy: "State Policy & Politics",
+  k12: "K–12 Education",
+  higher_ed: "Higher Education",
+};
+
+export const SECTION_ORDER = [
+  "big_three",
+  "other",
+  "developing",
+  "state_policy",
+  "k12",
+  "higher_ed",
+];
