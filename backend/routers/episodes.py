@@ -7,6 +7,7 @@ from fastapi import APIRouter, HTTPException
 
 from lib import producer
 from lib.db import db
+from lib.email_digest import send_episode
 from models.episode import EpisodeSummary, ProduceStatus, WeeklyEpisode
 
 router = APIRouter(tags=["episodes"])
@@ -63,6 +64,23 @@ async def trigger_produce():
     asyncio.create_task(_bg())
     await asyncio.sleep(0.2)
     return producer.get_status()
+
+
+@router.post("/episodes/send")
+async def email_latest_episode():
+    """Email the most recent episode to configured recipients (server-side template)."""
+    cfg = await db.desk_config.find_one({"key": "singleton"}, {"_id": 0}) or {}
+    recipients = cfg.get("recipients") or []
+    if not recipients:
+        raise HTTPException(status_code=400, detail="No recipients configured")
+    doc = await db.episodes.find_one({}, sort=[("week_of", -1)])
+    if not doc:
+        raise HTTPException(status_code=404, detail="No episode available to send")
+    doc.pop("_id", None)
+    sent = await send_episode(WeeklyEpisode(**doc), recipients)
+    if sent == 0:
+        raise HTTPException(status_code=502, detail="Email delivery failed — check configuration")
+    return {"sent": sent, "recipients": len(recipients)}
 
 
 @router.get("/episodes/{week_of}", response_model=WeeklyEpisode)

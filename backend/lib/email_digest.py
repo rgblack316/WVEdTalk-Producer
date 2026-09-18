@@ -172,16 +172,73 @@ def _digest_html(briefing) -> str:
 
 
 async def send_digest(briefing, recipients: List[str]) -> int:
-    """Send the digest to each recipient. Best-effort; returns how many succeeded."""
+    """Send the daily digest to each recipient. Best-effort; returns how many succeeded."""
     if not recipients:
         return 0
     subject = f"WV Education News Desk — Daily Briefing, {briefing.date}"
     html = _digest_html(briefing)
+    return await _fan_out(subject, html, recipients)
+
+
+def _episode_html(episode) -> str:
+    """Build the WVEdTalk weekly-episode email from the episode (server-side template)."""
+    url = f"{APP_URL}/episodes/{episode.week_of}"
+    span = f"{escape(episode.week_start)} – {escape(episode.week_end)}"
+    summary = escape(episode.editorial_summary) if episode.editorial_summary else ""
+
+    items = []
+    for s in episode.selected_stories:
+        loc = f' <span style="color:#8a6a3b">· {escape(s.location)}</span>' if s.location else ""
+        items.append(
+            f'<li style="font-family:Georgia,serif;font-size:16px;color:#1f3a2e;margin:8px 0">'
+            f'{escape(s.story)}{loc}</li>'
+        )
+    words = len((episode.recording_script or "").split())
+    minutes = max(1, round(words / 150))
+
+    return (
+        '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
+        'style="max-width:640px;margin:0 auto;background:#fbfaf5"><tr><td style="padding:28px 24px">'
+        '<div style="font-family:Georgia,serif;font-size:24px;font-weight:bold;color:#1f3a2e">'
+        'WVEdTalk — Weekly Episode Script</div>'
+        f'<div style="font-family:Arial,sans-serif;font-size:12px;letter-spacing:.14em;'
+        f'text-transform:uppercase;color:#8a6a3b;margin-top:4px">Week of {span}</div>'
+        + (
+            f'<p style="font-family:Arial,sans-serif;font-size:14px;color:#555;line-height:1.6;'
+            f'border-left:3px solid #b5652e;padding-left:12px;margin-top:16px">{summary}</p>'
+            if summary else ""
+        )
+        + '<div style="font-family:Georgia,serif;font-size:16px;font-weight:bold;color:#1f3a2e;'
+        'margin:22px 0 4px;border-bottom:2px solid #1f3a2e;padding-bottom:4px">This week\u2019s stories</div>'
+        f'<ul style="padding-left:20px;margin:8px 0">{"".join(items)}</ul>'
+        f'<p style="font-family:Arial,sans-serif;font-size:13px;color:#666">'
+        f'Recording script: ~{words} words · about {minutes} minutes of audio.</p>'
+        f'<p style="margin-top:20px"><a href="{url}" '
+        'style="display:inline-block;background:#1f3a2e;color:#fff;text-decoration:none;'
+        'font-family:Arial,sans-serif;font-size:14px;padding:11px 20px;border-radius:4px">'
+        'Open the full script</a></p>'
+        '<p style="font-family:Arial,sans-serif;font-size:12px;color:#999;margin-top:28px;'
+        'border-top:1px solid #e5e2d8;padding-top:14px">'
+        'Sent by WV Education News Desk for WVEdTalk. We never ask for passwords or payment details by email.</p>'
+        "</td></tr></table>"
+    )
+
+
+async def send_episode(episode, recipients: List[str]) -> int:
+    """Send the weekly episode script email. Best-effort; returns how many succeeded."""
+    if not recipients:
+        return 0
+    subject = f"WVEdTalk Weekly Script — Week of {episode.week_end}"
+    html = _episode_html(episode)
+    return await _fan_out(subject, html, recipients)
+
+
+async def _fan_out(subject: str, html: str, recipients: List[str]) -> int:
     sent = 0
     for to in recipients:
         try:
             await _send_email(to=to, subject=subject, html=html)
             sent += 1
         except Exception as exc:
-            logger.error("digest send to %s failed: %s", to, exc)
+            logger.error("email to %s failed: %s", to, exc)
     return sent

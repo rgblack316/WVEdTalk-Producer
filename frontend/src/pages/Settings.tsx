@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Mail, Eye, Trash2, Send } from "lucide-react";
+import { Mail, Eye, Trash2, Send, Gauge } from "lucide-react";
 import DeskLayout from "@/components/DeskLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -65,8 +65,24 @@ export default function Settings() {
     onError: (e) => toast.error(errMsg(e)),
   });
 
+  const setLength = useMutation({
+    mutationFn: (value: string) => apiPost<DeskConfig>("/settings/script-length", { value }),
+    onSuccess: (cfg) => {
+      invalidate(cfg);
+      toast.success("Script length preference saved");
+    },
+    onError: (e) => toast.error(errMsg(e)),
+  });
+
   const recipients = data?.recipients ?? [];
   const terms = data?.watch_terms ?? [];
+  const length = data?.script_length ?? "standard";
+
+  const LENGTHS: { id: string; label: string; hint: string }[] = [
+    { id: "concise", label: "Concise", hint: "~10–13 min" },
+    { id: "standard", label: "Standard", hint: "~15–20 min" },
+    { id: "full", label: "Full", hint: "~20–26 min" },
+  ];
 
   return (
     <DeskLayout>
@@ -83,6 +99,40 @@ export default function Settings() {
         <div className="py-16 text-center text-muted-foreground">Loading settings…</div>
       ) : (
         <div className="grid gap-8 md:grid-cols-2">
+          {/* Weekly script length */}
+          <section
+            className="rounded-md border border-border bg-card p-5 md:col-span-2"
+            data-testid="script-length-panel"
+          >
+            <h3 className="flex items-center gap-2 font-heading text-lg font-bold">
+              <Gauge className="size-4 text-primary" /> WVEdTalk script length
+            </h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Nudge the weekly episode toward a shorter or fuller target. It's only a target — a quiet
+              week still yields a shorter episode, and no important story is cut to hit a length.
+            </p>
+            <div className="mt-4 flex flex-wrap gap-2" data-testid="script-length-options">
+              {LENGTHS.map((l) => (
+                <button
+                  key={l.id}
+                  onClick={() => setLength.mutate(l.id)}
+                  disabled={setLength.isPending}
+                  data-testid={`script-length-${l.id}`}
+                  className={`rounded-sm border px-4 py-2 text-left transition-colors duration-150 ${
+                    length === l.id
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "border-border bg-background hover:border-primary/50"
+                  }`}
+                >
+                  <span className="block text-sm font-semibold">{l.label}</span>
+                  <span className={`block text-xs ${length === l.id ? "text-primary-foreground/80" : "text-muted-foreground"}`}>
+                    {l.hint}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </section>
+
           {/* Email digest recipients */}
           <section className="rounded-md border border-border bg-card p-5" data-testid="recipients-panel">
             <h3 className="flex items-center gap-2 font-heading text-lg font-bold">

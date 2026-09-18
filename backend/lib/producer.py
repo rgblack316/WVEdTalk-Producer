@@ -90,6 +90,7 @@ OUTPUT: respond with a SINGLE valid JSON object and nothing else (no markdown fe
       "classification": ["NEWS"],
       "importance": 8,
       "podcast_potential": 7,
+      "estimated_minutes": 3.5,
       "why_it_made_the_cut": "",
       "what_happened_during_week": "",
       "what_remains_unresolved": "",
@@ -109,10 +110,21 @@ The "not_selected" array (STORIES CONSIDERED BUT NOT SELECTED) is REQUIRED and m
 )
 
 
-def _user_prompt(week_start: str, week_end: str, briefings: List[Dict[str, Any]]) -> str:
+LENGTH_GUIDANCE = {
+    "concise": "LENGTH PREFERENCE: keep it tight this week — aim for roughly 1,400-1,900 spoken words (about 10-13 minutes), covering only the strongest stories.",
+    "standard": "LENGTH PREFERENCE: aim for roughly 2,200-3,000 spoken words (about 15-20 minutes).",
+    "full": "LENGTH PREFERENCE: the host wants a fuller episode this week — aim for roughly 3,000-3,800 spoken words (about 20-26 minutes), giving the major stories room to breathe with more context and discussion.",
+}
+
+
+def _user_prompt(
+    week_start: str, week_end: str, briefings: List[Dict[str, Any]], script_length: str
+) -> str:
     lines = [
         f"Produce the WVEdTalk weekly episode covering West Virginia education news for the week of {week_start} through {week_end} (America/New_York).",
         "Independently research the full week with live web search — do not merely restate the daily briefings below.",
+        LENGTH_GUIDANCE.get(script_length, LENGTH_GUIDANCE["standard"]),
+        "The length preference is a target, not a mandate: never pad a quiet week to reach it, and never omit a genuinely important story to stay under it.",
     ]
     if briefings:
         lines.append(
@@ -127,7 +139,9 @@ def _user_prompt(week_start: str, week_end: str, briefings: List[Dict[str, Any]]
     return "\n".join(lines)
 
 
-async def _call_model(week_start: str, week_end: str, briefings: List[Dict[str, Any]]) -> Dict[str, Any]:
+async def _call_model(
+    week_start: str, week_end: str, briefings: List[Dict[str, Any]], script_length: str
+) -> Dict[str, Any]:
     import os
 
     from emergentintegrations.llm.chat import LlmChat, UserMessage
@@ -141,7 +155,9 @@ async def _call_model(week_start: str, week_end: str, briefings: List[Dict[str, 
         .with_model(MODEL_PROVIDER, MODEL_NAME)
         .with_tools([{"googleSearch": {}}])
     )
-    resp = await chat.send_message_with_tools(UserMessage(text=_user_prompt(week_start, week_end, briefings)))
+    resp = await chat.send_message_with_tools(
+        UserMessage(text=_user_prompt(week_start, week_end, briefings, script_length))
+    )
     content = resp.content if isinstance(resp.content, str) else str(resp.content or "")
     data = desk._parse_json(content)
 
@@ -187,7 +203,9 @@ async def produce_episode(week_of: Optional[str] = None) -> WeeklyEpisode:
                 .sort("date", 1)
                 .to_list(14)
             )
-            data = await _call_model(week_start, week_end, briefings)
+            cfg = await db.desk_config.find_one({"key": "singleton"}, {"_id": 0}) or {}
+            script_length = cfg.get("script_length", "standard")
+            data = await _call_model(week_start, week_end, briefings, script_length)
 
             selected: List[EpisodeStory] = []
             for raw in data.get("selected_stories") or []:
@@ -237,6 +255,7 @@ async def produce_episode(week_of: Optional[str] = None) -> WeeklyEpisode:
 
             await db.episodes.replace_one({"week_of": week_of}, episode.model_dump(), upsert=True)
             _status.message = f"WVEdTalk episode for week of {week_of} is ready ({len(selected)} stories)."
+            await _email_episode_safe(episode)
             return episode
         except Exception as exc:
             logger.exception("weekly episode production failed")
@@ -246,6 +265,21 @@ async def produce_episode(week_of: Optional[str] = None) -> WeeklyEpisode:
         finally:
             _status.running = False
             _status.finished_at = datetime.utcnow()
+
+
+async def _email_episode_safe(episode: WeeklyEpisode) -> None:
+    """Email the finished episode to digest recipients — never fail production on this."""
+    try:
+        from lib import email_digest
+
+        cfg = await db.desk_config.find_one({"key": "singleton"}, {"_id": 0})
+        recipients = (cfg or {}).get("recipients") or []
+        if recipients:
+            _status.message = "Emailing the episode script to recipients…"
+            sent = await email_digest.send_episode(episode, recipients)
+            logger.info("episode emailed to %d/%d recipients", sent, len(recipients))
+    except Exception:
+        logger.exception("episode email step failed (non-fatal)")
 
 
 async def scheduler_loop() -> None:

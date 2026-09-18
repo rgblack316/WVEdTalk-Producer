@@ -1,7 +1,7 @@
 import { useParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ArrowLeft, Copy, Download, ExternalLink } from "lucide-react";
+import { ArrowLeft, Copy, Download, ExternalLink, Clock } from "lucide-react";
 import DeskLayout from "@/components/DeskLayout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -26,6 +26,21 @@ function SectionHeading({ children }: { children: React.ReactNode }) {
     <h2 className="mb-4 border-b-2 border-foreground/80 pb-1 font-heading text-xl font-bold tracking-tight">
       {children}
     </h2>
+  );
+}
+
+function totalRuntime(script: string): number {
+  return Math.max(1, Math.round(script.trim().split(/\s+/).filter(Boolean).length / 150));
+}
+
+function StoryTimer({ minutes }: { minutes: number | null }) {
+  if (minutes === null || minutes === undefined) return null;
+  const m = Math.round(minutes * 10) / 10;
+  return (
+    <span className="inline-flex items-center gap-1 rounded-sm border border-border bg-secondary/60 px-2 py-0.5 text-xs">
+      <Clock className="size-3 text-muted-foreground" />
+      <span className="font-semibold tabular-nums">~{m} min</span>
+    </span>
   );
 }
 
@@ -76,7 +91,10 @@ export default function EpisodePage() {
             <h3 className="font-heading text-2xl font-bold" data-testid="episode-week">
               WVEdTalk — Week of {fmt(episode.week_start)} – {fmt(episode.week_end)}
             </h3>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="mr-2 flex items-center gap-1.5 text-sm text-muted-foreground">
+                <Clock className="size-3.5" /> ~{totalRuntime(episode.recording_script)} min
+              </span>
               <Button variant="outline" size="sm" onClick={copyScript} data-testid="copy-script-button">
                 <Copy className="size-4" /> Copy script
               </Button>
@@ -109,6 +127,7 @@ export default function EpisodePage() {
                     <div className="mt-2 flex flex-wrap gap-2">
                       <ScoreChip label="Importance" value={s.importance} />
                       <ScoreChip label="Podcast" value={s.podcast_potential} />
+                      <StoryTimer minutes={s.estimated_minutes} />
                     </div>
                     {s.why_it_made_the_cut && (
                       <p className="mt-3 text-sm leading-relaxed">

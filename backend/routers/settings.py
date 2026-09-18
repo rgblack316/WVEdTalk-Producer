@@ -4,11 +4,12 @@ from fastapi import APIRouter, HTTPException
 
 from lib import email_digest
 from lib.db import db
-from models.config import DeskConfig, RecipientCreate, WatchTermCreate
+from models.config import DeskConfig, RecipientCreate, ScriptLengthUpdate, WatchTermCreate
 
 router = APIRouter(tags=["settings"])
 
 _KEY = {"key": "singleton"}
+_VALID_LENGTHS = {"concise", "standard", "full"}
 
 
 async def _load() -> DeskConfig:
@@ -59,6 +60,16 @@ async def add_watch_term(body: WatchTermCreate):
 async def remove_watch_term(term: str):
     cfg = await _load()
     cfg.watch_terms = [t for t in cfg.watch_terms if t.lower() != term.lower()]
+    await _save(cfg)
+    return cfg
+
+
+@router.post("/settings/script-length", response_model=DeskConfig)
+async def set_script_length(body: ScriptLengthUpdate):
+    if body.value not in _VALID_LENGTHS:
+        raise HTTPException(status_code=422, detail="Length must be concise, standard, or full")
+    cfg = await _load()
+    cfg.script_length = body.value
     await _save(cfg)
     return cfg
 

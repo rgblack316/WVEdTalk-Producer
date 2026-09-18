@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
-import { Loader2, Mic, Copy, Download, ExternalLink } from "lucide-react";
+import { Loader2, Mic, Copy, Download, ExternalLink, Clock, Mail } from "lucide-react";
 import DeskLayout from "@/components/DeskLayout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -29,6 +29,25 @@ function SectionHeading({ children }: { children: React.ReactNode }) {
   );
 }
 
+// ~150 words per spoken minute is a common podcast pacing estimate.
+function totalRuntime(script: string): number {
+  return Math.max(1, Math.round(script.trim().split(/\s+/).filter(Boolean).length / 150));
+}
+
+function StoryTimer({ minutes }: { minutes: number | null }) {
+  if (minutes === null || minutes === undefined) return null;
+  const m = Math.round(minutes * 10) / 10;
+  return (
+    <span
+      className="inline-flex items-center gap-1 rounded-sm border border-border bg-secondary/60 px-2 py-0.5 text-xs"
+      data-testid="story-timer"
+    >
+      <Clock className="size-3 text-muted-foreground" />
+      <span className="font-semibold tabular-nums">~{m} min</span>
+    </span>
+  );
+}
+
 export default function Episodes() {
   const qc = useQueryClient();
 
@@ -53,6 +72,15 @@ export default function Episodes() {
       toast.success("Producing this week's WVEdTalk episode — this takes a few minutes.");
       qc.invalidateQueries({ queryKey: ["produce-status"] });
     },
+    onError: (e) => {
+      const msg = e instanceof ApiError ? String((e.body as { detail?: string })?.detail ?? e.message) : String(e);
+      toast.error(msg);
+    },
+  });
+
+  const emailEpisode = useMutation({
+    mutationFn: () => apiPost<{ sent: number }>("/episodes/send"),
+    onSuccess: (r) => toast.success(`Episode emailed to ${r.sent} recipient${r.sent === 1 ? "" : "s"}`),
     onError: (e) => {
       const msg = e instanceof ApiError ? String((e.body as { detail?: string })?.detail ?? e.message) : String(e);
       toast.error(msg);
@@ -114,15 +142,29 @@ export default function Episodes() {
       ) : episode ? (
         <div data-testid="episode-view">
           <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-            <h3 className="font-heading text-2xl font-bold" data-testid="episode-week">
-              Week of {fmt(episode.week_start)} – {fmt(episode.week_end)}
-            </h3>
-            <div className="flex gap-2">
+            <div>
+              <h3 className="font-heading text-2xl font-bold" data-testid="episode-week">
+                Week of {fmt(episode.week_start)} – {fmt(episode.week_end)}
+              </h3>
+              <p className="mt-1 flex items-center gap-1.5 text-sm text-muted-foreground" data-testid="episode-runtime">
+                <Clock className="size-3.5" /> Full script runs about {totalRuntime(episode.recording_script)} minutes of audio
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
               <Button variant="outline" size="sm" onClick={copyScript} data-testid="copy-script-button">
                 <Copy className="size-4" /> Copy script
               </Button>
               <Button variant="outline" size="sm" onClick={downloadDoc} data-testid="download-episode-button">
                 <Download className="size-4" /> Download document
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={emailEpisode.isPending}
+                onClick={() => emailEpisode.mutate()}
+                data-testid="email-episode-button"
+              >
+                <Mail className="size-4" /> Email episode
               </Button>
             </div>
           </div>
@@ -150,6 +192,7 @@ export default function Episodes() {
                     <div className="mt-2 flex flex-wrap gap-2">
                       <ScoreChip label="Importance" value={s.importance} />
                       <ScoreChip label="Podcast" value={s.podcast_potential} />
+                      <StoryTimer minutes={s.estimated_minutes} />
                     </div>
                     {s.why_it_made_the_cut && (
                       <p className="mt-3 text-sm leading-relaxed">

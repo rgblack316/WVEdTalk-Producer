@@ -19,6 +19,7 @@ class EpisodeStory(BaseModel):
     classification: List[str] = Field(default_factory=list)
     importance: Optional[int] = None
     podcast_potential: Optional[int] = None
+    estimated_minutes: Optional[float] = None  # model's estimate of spoken time for this story
     why_it_made_the_cut: str = ""
     what_happened_during_week: str = ""
     what_remains_unresolved: str = ""

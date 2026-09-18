@@ -76,3 +76,15 @@ None seeded. First real briefing generated for 2026-09-18. Demo watch terms ("co
 - **Frontend**: `/episodes` (Weekly Script — latest episode, producer notes, not-selected audit,
   look-ahead, full recording script, copy/download, past-episode list) and `/episodes/:week`
   (past episode detail). Nav item "Weekly Script".
+
+## Weekly enhancements (post-feature)
+- **Script Length Dial** (`desk_config.script_length`: concise | standard | full, default standard):
+  set via POST /api/settings/script-length; injected into the producer prompt as a soft target
+  (never pads a quiet week / never cuts an important story). Chosen on the Settings page.
+- **Segment Timers**: each EpisodeStory carries `estimated_minutes` (model-provided); the frontend
+  shows a per-story `~X min` badge and a total episode runtime computed from the script word count
+  (~150 wpm). Older episodes produced before this field show only the total runtime.
+- **Email The Script**: `email_digest.send_episode()` builds a weekly-episode email (server-side
+  template, passes the `_assert_safe_email` guardrail) and is auto-sent to recipients right after
+  each production run (`_email_episode_safe`, non-fatal). Manual send via POST /api/episodes/send
+  and the "Email episode" button on the weekly page.

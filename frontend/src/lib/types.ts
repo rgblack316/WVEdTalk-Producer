@@ -85,6 +85,7 @@ export interface CandidateStory {
 export interface DeskConfig {
   recipients: string[];
   watch_terms: string[];
+  script_length: string;
 }
 
 export interface EpisodeStory {
@@ -93,6 +94,7 @@ export interface EpisodeStory {
   classification: string[];
   importance: number | null;
   podcast_potential: number | null;
+  estimated_minutes: number | null;
   why_it_made_the_cut: string;
   what_happened_during_week: string;
   what_remains_unresolved: string;
