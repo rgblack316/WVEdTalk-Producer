@@ -259,8 +259,8 @@ async def produce_episode(week_of: Optional[str] = None) -> WeeklyEpisode:
             return episode
         except Exception as exc:
             logger.exception("weekly episode production failed")
-            _status.last_error = str(exc)
-            _status.message = f"Production failed: {exc}"
+            _status.last_error = "Production failed — see server logs."
+            _status.message = "Production failed — see server logs."
             raise
         finally:
             _status.running = False

@@ -1,11 +1,27 @@
 """Auth routes for the single shared passcode. Open (not behind require_auth)."""
 
-from fastapi import APIRouter, Cookie, Header, HTTPException, Response
+import time
+
+from fastapi import APIRouter, Cookie, Header, HTTPException, Request, Response
 from pydantic import BaseModel
 
 from lib import auth
 
 router = APIRouter(tags=["auth"])
+
+# Simple in-memory brute-force throttle for the shared-passcode login.
+_ATTEMPTS: dict[str, list[float]] = {}
+_WINDOW = 300  # seconds
+_MAX_ATTEMPTS = 10
+
+
+def _throttle(ip: str) -> None:
+    now = time.time()
+    hits = [t for t in _ATTEMPTS.get(ip, []) if now - t < _WINDOW]
+    if len(hits) >= _MAX_ATTEMPTS:
+        raise HTTPException(status_code=429, detail="Too many attempts. Try again in a few minutes.")
+    hits.append(now)
+    _ATTEMPTS[ip] = hits
 
 
 class LoginRequest(BaseModel):
@@ -25,12 +41,13 @@ async def me(
 
 
 @router.post("/auth/login", response_model=AuthState)
-async def login(body: LoginRequest, response: Response):
+async def login(body: LoginRequest, request: Request, response: Response):
+    _throttle(request.client.host if request.client else "unknown")
     if not await auth.passcode_matches(body.passcode):
         raise HTTPException(status_code=401, detail="Incorrect passcode")
     response.set_cookie(
         key=auth.COOKIE_NAME,
-        value=auth.make_token(),
+        value=await auth.make_token(),
         max_age=auth.MAX_AGE,
         httponly=True,
         samesite="lax",

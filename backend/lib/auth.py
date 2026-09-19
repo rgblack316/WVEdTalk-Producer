@@ -24,7 +24,13 @@ MAX_AGE = 60 * 60 * 24 * 30  # 30 days
 _CONFIG_KEY = {"key": "singleton"}
 
 _ENV_PASSCODE = os.environ.get("APP_PASSCODE", "")
-_SECRET = os.environ.get("SESSION_SECRET", "") or "insecure-dev-secret-change-me"
+_SECRET = os.environ.get("SESSION_SECRET", "")
+if not _SECRET:
+    # Fail closed: never fall back to a public/default signing key.
+    raise RuntimeError(
+        "SESSION_SECRET is not set. Generate one (python -c 'import secrets;print(secrets.token_hex(32))') "
+        "and add it to backend/.env before starting the server."
+    )
 
 
 def _sign(msg: str) -> str:
@@ -37,17 +43,25 @@ def hash_passcode(passcode: str) -> str:
 
 # ---- session token (cookie) --------------------------------------------------
 
-def make_token() -> str:
-    """token = issued_at.signature — proves the passcode was entered, no server state."""
+async def _session_key() -> str:
+    """Signing key component that changes when the passcode is rotated, so rotation
+    (and thus a compromised or shared token) is invalidated server-side."""
+    return (await _current_hash())[:16]
+
+
+async def make_token() -> str:
+    """token = issued_at.signature — proves the passcode was entered; bound to the
+    current passcode so rotating the passcode invalidates all existing sessions."""
     issued = str(int(time.time()))
-    return f"{issued}.{_sign(issued)}"
+    return f"{issued}.{_sign(issued + ':' + await _session_key())}"
 
 
-def _token_valid(token: str | None) -> bool:
+async def _token_valid(token: str | None) -> bool:
     if not token or "." not in token:
         return False
     issued, sig = token.rsplit(".", 1)
-    if not hmac.compare_digest(sig, _sign(issued)):
+    expected = _sign(issued + ":" + await _session_key())
+    if not hmac.compare_digest(sig, expected):
         return False
     try:
         return (int(time.time()) - int(issued)) <= MAX_AGE
@@ -81,7 +95,7 @@ async def set_passcode(new_passcode: str) -> None:
 # ---- guards ------------------------------------------------------------------
 
 async def is_authenticated(cookie_token: str | None, header_passcode: str | None) -> bool:
-    if _token_valid(cookie_token):
+    if await _token_valid(cookie_token):
         return True
     if header_passcode and await passcode_matches(header_passcode):
         return True

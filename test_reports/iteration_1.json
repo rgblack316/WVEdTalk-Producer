@@ -1,0 +1,81 @@
+{
+  "iteration": 1,
+  "summary": "All 8 acceptance criteria verified: 4 backend test files (6 tests) + 5 browser checks. All passed.",
+  "passed": 9,
+  "failed": 0,
+  "flaky": 0,
+  "blocked": 0,
+  "test_error": 0,
+  "retest_needed": false,
+  "bugs": [],
+  "action_items": [],
+  "checks": [
+    {
+      "criterion": "Unauthenticated visitors are gated",
+      "name": "auth-gate-blocks-unauthenticated",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Visiting / while logged out shows data-testid=auth-gate; briefing-view count is 0."
+    },
+    {
+      "criterion": "Wrong passcode rejected",
+      "name": "wrong-passcode-rejected",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Submitting an incorrect passcode surfaces data-testid=passcode-error ('Incorrect passcode. Please try again.') and briefing-view stays absent. Console shows expected 401 from /api/auth/login."
+    },
+    {
+      "criterion": "Correct passcode unlocks",
+      "name": "correct-passcode-unlocks-briefing",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Entering WVEdTalk-Desk-2026 unlocks and data-testid=briefing-view becomes visible."
+    },
+    {
+      "criterion": "Lock returns to gate and persists",
+      "name": "lock-returns-to-gate-and-persists",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Clicking data-testid=lock-desk-button returns to auth-gate; page.reload() after lock keeps auth-gate visible and briefing-view absent."
+    },
+    {
+      "criterion": "Protected API requires auth",
+      "name": "test_tscheck_protected_api_requires_auth.py",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "GET /api/briefings (no auth) -> 401 {\"detail\":\"Passcode required\"}; GET /api/ -> 200. 2 tests passed."
+    },
+    {
+      "criterion": "Removed demo endpoints are gone",
+      "name": "test_tscheck_removed_demo_endpoints.py",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "GET /api/status -> 404 {\"detail\":\"Not Found\"}; POST /api/status -> 404. Confirmed absent from /openapi.json paths. 2 tests passed."
+    },
+    {
+      "criterion": "Programmatic header auth works",
+      "name": "test_tscheck_header_auth_works.py",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "GET /api/briefings with header X-Desk-Passcode: WVEdTalk-Desk-2026 -> 200, list body with 2026-09-18 and 2026-09-19 briefings. 1 test passed."
+    },
+    {
+      "criterion": "Settings security controls work",
+      "name": "test_tscheck_settings_auto_lock_persists.py",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "POST /api/settings/auto-lock {minutes:15} -> 200; GET /api/settings reflects auto_lock_minutes=15; original value (0) restored via same endpoint at test teardown. 1 test passed."
+    },
+    {
+      "criterion": "Settings security controls work",
+      "name": "settings-security-panel-autolock-persists",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "On /settings, data-testid=security-panel shows change-passcode form (current/new/confirm inputs) and auto-lock-options (Off/5/15/30/60). Clicking auto-lock-5 highlights it and survives page reload (GET /api/settings backed). Restored to auto-lock-0 (Off) at end; passcode was NOT changed during this run so no restoration needed there. Final GET /api/settings confirms auto_lock_minutes=0."
+    }
+  ],
+  "notes": [
+    "Passcode was never changed during testing (only auto-lock minutes, toggled and restored to 0/Off). No restoration action needed for APP_PASSCODE; verified still WVEdTalk-Desk-2026 by successful unlock in later checks.",
+    "8 acceptance criteria in briefing; 'Settings security controls work' produced both a backend and a browser artifact per the API-backed UI rule, yielding 9 total check entries."
+  ]
+}

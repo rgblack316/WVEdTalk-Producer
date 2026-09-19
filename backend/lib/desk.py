@@ -168,8 +168,31 @@ def _domain(url: str) -> str:
         return ""
 
 
+def _is_private_host(host: str) -> bool:
+    """Block loopback/link-local/private/metadata targets (SSRF guard)."""
+    import ipaddress
+    import socket
+
+    host = (host or "").lower().strip("[]")
+    if not host or host in ("localhost", "metadata.google.internal"):
+        return True
+    try:
+        infos = socket.getaddrinfo(host, None)
+    except Exception:
+        return True  # unresolvable -> treat as unsafe
+    for info in infos:
+        ip = info[4][0].split("%")[0]
+        try:
+            addr = ipaddress.ip_address(ip)
+        except ValueError:
+            return True
+        if addr.is_private or addr.is_loopback or addr.is_link_local or addr.is_reserved:
+            return True
+    return False
+
+
 async def _resolve_one(client, url: str, cache: Dict[str, str]) -> str:
-    """Follow a Google grounding redirect to the publisher's direct URL."""
+    """Follow a Google grounding redirect to the publisher's direct URL (SSRF-guarded)."""
     if not url or "vertexaisearch.cloud.google.com" not in url:
         return url
     if url in cache:
@@ -177,8 +200,10 @@ async def _resolve_one(client, url: str, cache: Dict[str, str]) -> str:
     final = url
     try:
         r = await client.get(url)
-        if r.url and "vertexaisearch" not in str(r.url):
-            final = str(r.url)
+        candidate = str(r.url)
+        host = urllib.parse.urlparse(candidate).hostname or ""
+        if candidate and "vertexaisearch" not in candidate and not _is_private_host(host):
+            final = candidate
     except Exception:
         pass
     cache[url] = final
@@ -194,7 +219,10 @@ async def resolve_links(links: List[SourceLink]) -> None:
         return
     cache: Dict[str, str] = {}
     async with httpx.AsyncClient(
-        follow_redirects=True, timeout=8.0, headers={"User-Agent": "Mozilla/5.0 (WV-Desk)"}
+        follow_redirects=True,
+        max_redirects=5,
+        timeout=8.0,
+        headers={"User-Agent": "Mozilla/5.0 (WV-Desk)"},
     ) as client:
         async def fix(link):
             resolved = await _resolve_one(client, link.url, cache)
@@ -288,8 +316,8 @@ async def run_briefing(date_str: Optional[str] = None) -> Briefing:
             return briefing
         except Exception as exc:
             logger.exception("briefing run failed")
-            _run_status.last_error = str(exc)
-            _run_status.message = f"Run failed: {exc}"
+            _run_status.last_error = "Run failed — see server logs."
+            _run_status.message = "Run failed — see server logs."
             raise
         finally:
             _run_status.running = False

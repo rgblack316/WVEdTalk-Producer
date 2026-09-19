@@ -51,7 +51,17 @@ Single shared passcode gating the whole desk (added on request).
   and clears the react-query cache. CORS tightened to the app origin.
 - Passcode is in memory/test_credentials.md.
 
-## Security enhancements (in-app)
+## Security audit remediations
+- Removed the unauthenticated demo `/api/status` GET/POST routes (were public writes). Only
+  `GET /api/` (health) and `/api/auth/*` are open; all else requires the passcode.
+- `SESSION_SECRET` is now required at startup (no insecure default) — server refuses to boot without it.
+- Session cookie token is bound to the current passcode hash (`_session_key`), so rotating the
+  passcode invalidates all existing sessions. Old-format cookies are rejected.
+- CORS never combines wildcard origin with credentials; credentials only enabled for explicit origins.
+- Login (`/api/auth/login`) throttled: 10 attempts / 5 min per IP → 429.
+- Redirect resolver (`lib/desk.py`) blocks private/loopback/link-local/metadata hosts (SSRF) and
+  caps redirects at 5.
+- Run/produce failure messages are generic ("see server logs"); full errors only in logs.
 - **Change passcode in-app**: passcode is DB-backed (`desk_config.passcode_hash`, HMAC-SHA256 with
   SESSION_SECRET); until one is set there the env `APP_PASSCODE` is used. POST /api/settings/passcode
   {current,new} verifies the current passcode and requires new length >= 6. `passcode_hash` is stored
