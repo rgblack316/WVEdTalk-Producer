@@ -52,7 +52,7 @@ export default function Archive() {
               {b.big_three.length > 0 && (
                 <ul className="mt-3 space-y-1 text-sm text-muted-foreground">
                   {b.big_three.map((h, i) => (
-                    <li key={i} className="flex gap-2">
+                    <li key={h} className="flex gap-2">
                       <span className="font-heading font-bold text-accent">{i + 1}</span>
                       <span>{h}</span>
                     </li>

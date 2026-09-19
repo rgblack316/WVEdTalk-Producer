@@ -37,7 +37,7 @@ export default function StoryDetail() {
   const [notes, setNotes] = useState("");
   useEffect(() => {
     if (story) setNotes(story.notes);
-  }, [story]);
+  }, [story, setNotes]);
 
   const update = useMutation({
     mutationFn: (body: { is_candidate?: boolean; notes?: string }) =>
@@ -103,8 +103,8 @@ export default function StoryDetail() {
           {story.questions?.length > 0 && (
             <Field label="Questions to Investigate">
               <ul className="list-disc space-y-1 pl-5">
-                {story.questions.map((q, i) => (
-                  <li key={i}>{q}</li>
+                {story.questions.map((q) => (
+                  <li key={q}>{q}</li>
                 ))}
               </ul>
             </Field>

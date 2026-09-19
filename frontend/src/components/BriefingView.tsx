@@ -196,7 +196,7 @@ export default function BriefingView({ briefing }: { briefing: Briefing }) {
           <SectionHeading>Trends Worth Watching</SectionHeading>
           <div className="space-y-4">
             {briefing.trends.map((t, i) => (
-              <div key={i} className="rounded-md border border-border bg-card p-5">
+              <div key={t.title || i} className="rounded-md border border-border bg-card p-5">
                 <h3 className="font-heading text-lg font-bold">{t.title}</h3>
                 {t.why_it_matters && <p className="mt-2 text-sm leading-relaxed">{t.why_it_matters}</p>}
                 {t.evidence?.length > 0 && (
@@ -205,8 +205,8 @@ export default function BriefingView({ briefing }: { briefing: Briefing }) {
                       Supporting developments
                     </p>
                     <ul className="mt-1 list-disc space-y-1 pl-5 text-sm">
-                      {t.evidence.map((e, j) => (
-                        <li key={j}>{e}</li>
+                      {t.evidence.map((e) => (
+                        <li key={e}>{e}</li>
                       ))}
                     </ul>
                   </div>
@@ -217,8 +217,8 @@ export default function BriefingView({ briefing }: { briefing: Briefing }) {
                       Evidence still missing
                     </p>
                     <ul className="mt-1 list-disc space-y-1 pl-5 text-sm text-muted-foreground">
-                      {t.missing_evidence.map((e, j) => (
-                        <li key={j}>{e}</li>
+                      {t.missing_evidence.map((e) => (
+                        <li key={e}>{e}</li>
                       ))}
                     </ul>
                   </div>
@@ -240,7 +240,7 @@ export default function BriefingView({ briefing }: { briefing: Briefing }) {
           <SectionHeading>Podcast Opportunities</SectionHeading>
           <div className="grid gap-4 md:grid-cols-2">
             {briefing.podcast_ideas.map((p, i) => (
-              <div key={i} className="rounded-md border border-border bg-secondary/40 p-5">
+              <div key={p.working_title || i} className="rounded-md border border-border bg-secondary/40 p-5">
                 <h3 className="font-heading text-lg font-bold">{p.working_title}</h3>
                 {p.central_question && <p className="mt-2 text-sm italic">{p.central_question}</p>}
                 {p.why_worth_exploring && (

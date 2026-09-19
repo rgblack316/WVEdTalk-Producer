@@ -177,7 +177,7 @@ export default function Episodes() {
               </p>
               <div className="space-y-4">
                 {episode.selected_stories.map((s, i) => (
-                  <article key={i} className="rounded-md border border-border bg-card p-5" data-testid={`episode-story-${i}`}>
+                  <article key={s.story || i} className="rounded-md border border-border bg-card p-5" data-testid={`episode-story-${i}`}>
                     <div className="mb-1 flex flex-wrap items-center gap-2 text-xs">
                       {s.location && (
                         <span className="tracking-[0.14em] text-muted-foreground uppercase">{s.location}</span>
@@ -221,7 +221,7 @@ export default function Episodes() {
                     {s.sources.length > 0 && (
                       <ul className="mt-3 space-y-1 border-t border-border pt-3">
                         {s.sources.map((src, j) => (
-                          <li key={j} className="text-sm">
+                          <li key={src.url || j} className="text-sm">
                             <a href={src.url} target="_blank" rel="noreferrer" className="inline-flex items-start gap-1.5 text-primary hover:underline">
                               <ExternalLink className="mt-1 size-3 shrink-0" />
                               <span>
@@ -244,7 +244,7 @@ export default function Episodes() {
               <SectionHeading>Stories Considered But Not Selected</SectionHeading>
               <div className="grid gap-3 md:grid-cols-2">
                 {episode.not_selected.map((n, i) => (
-                  <div key={i} className="rounded-md border border-dashed border-border bg-muted/40 p-4">
+                  <div key={n.story || i} className="rounded-md border border-dashed border-border bg-muted/40 p-4">
                     <h4 className="font-heading font-bold">{n.story}</h4>
                     {n.location && (
                       <p className="text-xs tracking-[0.14em] text-muted-foreground uppercase">{n.location}</p>
@@ -272,7 +272,7 @@ export default function Episodes() {
               <SectionHeading>Look Ahead</SectionHeading>
               <ul className="space-y-1.5">
                 {episode.look_ahead.map((i, idx) => (
-                  <li key={idx} className="flex gap-2 text-sm">
+                  <li key={i.label || idx} className="flex gap-2 text-sm">
                     <span className="font-semibold text-accent">›</span>
                     <span>
                       {i.label}

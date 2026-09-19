@@ -282,20 +282,23 @@ async def _email_episode_safe(episode: WeeklyEpisode) -> None:
         logger.exception("episode email step failed (non-fatal)")
 
 
+async def _maybe_produce_weekly() -> None:
+    now = datetime.now(desk.EASTERN)
+    if now.weekday() != SCHEDULE_DOW_ET or now.hour < SCHEDULE_HOUR_ET or _status.running:
+        return
+    week_of = current_week_of()
+    if await db.episodes.find_one({"week_of": week_of, "status": "complete"}):
+        return
+    logger.info("weekly scheduler: producing WVEdTalk episode for %s", week_of)
+    await produce_episode(week_of)
+
+
 async def scheduler_loop() -> None:
     """Produce the weekly episode at 2:00 PM ET on Fridays if it doesn't exist yet."""
     while True:
         try:
-            now = datetime.now(desk.EASTERN)
-            if now.weekday() == SCHEDULE_DOW_ET and now.hour >= SCHEDULE_HOUR_ET and not _status.running:
-                week_of = current_week_of()
-                existing = await db.episodes.find_one({"week_of": week_of, "status": "complete"})
-                if not existing:
-                    logger.info("weekly scheduler: producing WVEdTalk episode for %s", week_of)
-                    try:
-                        await produce_episode(week_of)
-                    except Exception:
-                        await asyncio.sleep(1800)
+            await _maybe_produce_weekly()
         except Exception:
             logger.exception("weekly scheduler loop error")
+            await asyncio.sleep(1800)
         await asyncio.sleep(300)

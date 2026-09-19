@@ -339,21 +339,23 @@ async def _send_digest_safe(briefing: Briefing) -> None:
         logger.exception("digest email step failed (non-fatal)")
 
 
+async def _maybe_run_daily() -> None:
+    now = datetime.now(EASTERN)
+    date_str = now.strftime("%Y-%m-%d")
+    if now.hour < SCHEDULE_HOUR_ET or _run_status.running:
+        return
+    if await db.briefings.find_one({"date": date_str, "status": "complete"}):
+        return
+    logger.info("scheduler: generating briefing for %s", date_str)
+    await run_briefing(date_str)
+
+
 async def scheduler_loop() -> None:
-    """Fire the daily edition at 6:00 AM Eastern if that date has no briefing yet."""
     """Fire the daily edition at 6:00 AM Eastern if that date has no briefing yet."""
     while True:
         try:
-            now = datetime.now(EASTERN)
-            date_str = now.strftime("%Y-%m-%d")
-            if now.hour >= SCHEDULE_HOUR_ET and not _run_status.running:
-                existing = await db.briefings.find_one({"date": date_str, "status": "complete"})
-                if not existing:
-                    logger.info("scheduler: generating briefing for %s", date_str)
-                    try:
-                        await run_briefing(date_str)
-                    except Exception:
-                        await asyncio.sleep(1800)  # back off after a failure
+            await _maybe_run_daily()
         except Exception:
             logger.exception("scheduler loop error")
+            await asyncio.sleep(1800)  # back off after a failure
         await asyncio.sleep(300)
