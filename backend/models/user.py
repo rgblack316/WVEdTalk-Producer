@@ -8,7 +8,7 @@ from typing import Optional
 
 from pydantic import BaseModel, EmailStr, Field
 
-ROLES = {"admin", "editor"}
+ROLES = {"admin", "editor", "viewer"}
 
 
 def _now() -> datetime:

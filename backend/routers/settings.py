@@ -36,7 +36,7 @@ async def get_settings():
 
 
 @router.post("/settings/recipients", response_model=DeskConfig)
-async def add_recipient(body: RecipientCreate):
+async def add_recipient(body: RecipientCreate, _edit=Depends(auth.require_editor)):
     cfg = await _load()
     email = str(body.email).lower()
     if email not in [r.lower() for r in cfg.recipients]:
@@ -46,7 +46,7 @@ async def add_recipient(body: RecipientCreate):
 
 
 @router.delete("/settings/recipients/{email}", response_model=DeskConfig)
-async def remove_recipient(email: str):
+async def remove_recipient(email: str, _edit=Depends(auth.require_editor)):
     cfg = await _load()
     cfg.recipients = [r for r in cfg.recipients if r.lower() != email.lower()]
     await _save(cfg)
@@ -54,7 +54,7 @@ async def remove_recipient(email: str):
 
 
 @router.post("/settings/watch-terms", response_model=DeskConfig)
-async def add_watch_term(body: WatchTermCreate):
+async def add_watch_term(body: WatchTermCreate, _edit=Depends(auth.require_editor)):
     term = body.term.strip()
     if not term:
         raise HTTPException(status_code=422, detail="Watch term cannot be empty")
@@ -66,7 +66,7 @@ async def add_watch_term(body: WatchTermCreate):
 
 
 @router.delete("/settings/watch-terms/{term}", response_model=DeskConfig)
-async def remove_watch_term(term: str):
+async def remove_watch_term(term: str, _edit=Depends(auth.require_editor)):
     cfg = await _load()
     cfg.watch_terms = [t for t in cfg.watch_terms if t.lower() != term.lower()]
     await _save(cfg)
@@ -74,7 +74,7 @@ async def remove_watch_term(term: str):
 
 
 @router.post("/settings/script-length", response_model=DeskConfig)
-async def set_script_length(body: ScriptLengthUpdate):
+async def set_script_length(body: ScriptLengthUpdate, _edit=Depends(auth.require_editor)):
     if body.value not in _VALID_LENGTHS:
         raise HTTPException(status_code=422, detail="Length must be concise, standard, or full")
     cfg = await _load()
@@ -84,7 +84,7 @@ async def set_script_length(body: ScriptLengthUpdate):
 
 
 @router.post("/settings/auto-lock", response_model=DeskConfig)
-async def set_auto_lock(body: AutoLockUpdate):
+async def set_auto_lock(body: AutoLockUpdate, _edit=Depends(auth.require_editor)):
     if body.minutes not in _VALID_LOCK:
         raise HTTPException(status_code=422, detail="Minutes must be one of 0, 5, 15, 30, 60")
     cfg = await _load()
@@ -106,7 +106,7 @@ async def change_password(body: PasswordChange, user=Depends(auth.get_current_us
 
 
 @router.post("/settings/send-digest")
-async def send_latest_digest():
+async def send_latest_digest(_edit=Depends(auth.require_editor)):
     """Send the most recent briefing to all configured recipients (server-side template)."""
     cfg = await _load()
     if not cfg.recipients:

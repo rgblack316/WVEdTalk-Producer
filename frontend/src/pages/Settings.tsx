@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { apiGet, apiPost, apiDelete, ApiError } from "@/lib/api";
+import { useAuth } from "@/lib/useAuth";
 import type { AuthState, DeskConfig } from "@/lib/types";
 
 function errMsg(e: unknown) {
@@ -17,6 +18,7 @@ function errMsg(e: unknown) {
 
 export default function Settings() {
   const qc = useQueryClient();
+  const { canEdit } = useAuth();
   const [email, setEmail] = useState("");
   const [term, setTerm] = useState("");
   const [current, setCurrent] = useState("");
@@ -209,7 +211,8 @@ export default function Settings() {
                 </form>
               </div>
 
-              {/* Auto-lock */}
+              {/* Auto-lock (shared config — editors only) */}
+              {canEdit && (
               <div>
                 <p className="flex items-center gap-1.5 text-sm font-semibold">
                   <Timer className="size-4 text-accent" /> Auto-lock on inactivity
@@ -236,10 +239,12 @@ export default function Settings() {
                   ))}
                 </div>
               </div>
+              )}
             </div>
           </section>
 
           {/* Weekly script length */}
+          {canEdit && (
           <section
             className="rounded-md border border-border bg-card p-5 md:col-span-2"
             data-testid="script-length-panel"
@@ -272,8 +277,10 @@ export default function Settings() {
               ))}
             </div>
           </section>
+          )}
 
           {/* Email digest recipients */}
+          {canEdit && (
           <section className="rounded-md border border-border bg-card p-5" data-testid="recipients-panel">
             <h3 className="flex items-center gap-2 font-heading text-lg font-bold">
               <Mail className="size-4 text-primary" /> Email digest
@@ -334,8 +341,10 @@ export default function Settings() {
               <Send className="size-4" /> Send latest briefing now
             </Button>
           </section>
+          )}
 
           {/* Watchlist terms */}
+          {canEdit && (
           <section className="rounded-md border border-border bg-card p-5" data-testid="watchlist-panel">
             <h3 className="flex items-center gap-2 font-heading text-lg font-bold">
               <Eye className="size-4 text-accent" /> Watchlist
@@ -385,6 +394,7 @@ export default function Settings() {
               ))}
             </div>
           </section>
+          )}
         </div>
       )}
     </DeskLayout>

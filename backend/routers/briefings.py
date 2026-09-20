@@ -3,9 +3,10 @@
 import asyncio
 from typing import List, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
 from lib import desk
+from lib.auth import require_editor
 from lib.db import db
 from models.briefing import (
     Briefing,
@@ -64,7 +65,7 @@ async def run_status():
 
 
 @router.post("/run", response_model=RunStatus)
-async def trigger_run():
+async def trigger_run(_edit=Depends(require_editor)):
     status = desk.get_run_status()
     if status.running:
         raise HTTPException(status_code=409, detail="A research run is already in progress")
@@ -89,7 +90,7 @@ async def get_briefing(date: str):
 
 
 @router.patch("/briefings/{date}/stories/{story_id}", response_model=Briefing)
-async def update_story(date: str, story_id: str, update: StoryUpdate):
+async def update_story(date: str, story_id: str, update: StoryUpdate, _edit=Depends(require_editor)):
     doc = await db.briefings.find_one({"date": date})
     if not doc:
         raise HTTPException(status_code=404, detail=f"No briefing for {date}")

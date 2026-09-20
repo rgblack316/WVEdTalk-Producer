@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { apiGet, apiPatch } from "@/lib/api";
+import { useAuth } from "@/lib/useAuth";
 import type { Briefing, Story } from "@/lib/types";
 import { SECTION_LABELS } from "@/lib/types";
 
@@ -27,6 +28,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 export default function StoryDetail() {
   const { date = "", storyId = "" } = useParams();
   const qc = useQueryClient();
+  const { canEdit } = useAuth();
   const { data, isLoading } = useQuery({
     queryKey: ["briefing", date],
     queryFn: () => apiGet<Briefing>(`/briefings/${date}`),
@@ -116,6 +118,7 @@ export default function StoryDetail() {
             </Field>
           )}
 
+          {canEdit ? (
           <div className="mt-8 rounded-md border border-border bg-secondary/40 p-5" data-testid="podcast-prep-panel">
             <div className="flex items-center justify-between">
               <h3 className="font-heading text-lg font-bold">Podcast prep</h3>
@@ -154,6 +157,24 @@ export default function StoryDetail() {
               Save notes
             </Button>
           </div>
+          ) : (story.is_candidate || story.notes) ? (
+            <div
+              className="mt-8 rounded-md border border-border bg-secondary/40 p-5"
+              data-testid="podcast-prep-readonly"
+            >
+              <h3 className="font-heading text-lg font-bold">Podcast prep</h3>
+              {story.is_candidate && (
+                <Badge variant="outline" className="mt-2 gap-1">
+                  <Star className="size-3 fill-current" /> Episode candidate
+                </Badge>
+              )}
+              {story.notes && (
+                <p className="mt-3 border-l-2 border-accent pl-3 text-sm text-muted-foreground">
+                  {story.notes}
+                </p>
+              )}
+            </div>
+          ) : null}
         </article>
       ) : (
         <div className="py-16 text-center" data-testid="story-not-found">

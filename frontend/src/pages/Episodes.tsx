@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScoreChip } from "@/components/StoryCard";
 import { apiGet, apiPost, ApiError } from "@/lib/api";
+import { useAuth } from "@/lib/useAuth";
 import { episodeToMarkdown } from "@/lib/episode";
 import type { EpisodeSummary, ProduceStatus, WeeklyEpisode } from "@/lib/types";
 
@@ -50,6 +51,7 @@ function StoryTimer({ minutes }: { minutes: number | null }) {
 
 export default function Episodes() {
   const qc = useQueryClient();
+  const { canEdit } = useAuth();
 
   const { data: episode, isLoading } = useQuery({
     queryKey: ["episode", "latest"],
@@ -121,6 +123,7 @@ export default function Episodes() {
             full week fresh, and writes a recording-ready WVEdTalk script for Randy Black.
           </p>
         </div>
+        {canEdit && (
         <Button
           disabled={running || produce.isPending}
           onClick={() => produce.mutate()}
@@ -129,6 +132,7 @@ export default function Episodes() {
           {running ? <Loader2 className="size-4 animate-spin" /> : <Mic className="size-4" />}
           {running ? "Producing…" : "Produce this week"}
         </Button>
+        )}
       </div>
 
       {running && (
@@ -157,6 +161,7 @@ export default function Episodes() {
               <Button variant="outline" size="sm" onClick={downloadDoc} data-testid="download-episode-button">
                 <Download className="size-4" /> Download document
               </Button>
+              {canEdit && (
               <Button
                 variant="outline"
                 size="sm"
@@ -166,6 +171,7 @@ export default function Episodes() {
               >
                 <Mail className="size-4" /> Email episode
               </Button>
+              )}
             </div>
           </div>
 

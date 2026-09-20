@@ -39,8 +39,10 @@ story can be flagged as a podcast episode candidate with free-text prep notes.
   `/briefings/:date` (full edition), `/briefings/:date/stories/:storyId` (detail + prep panel).
 
 ## Auth (multi-user)
-Email + password accounts with two roles: **admin** (all features + user management) and
-**editor** (all features except user management). Replaced the earlier single shared passcode.
+Email + password accounts with three roles: **admin** (all features + user management),
+**editor** (all features except user management), and **viewer** (read-only — can view every
+briefing/episode/candidate but cannot run research, produce episodes, tag/flag stories, edit notes,
+send emails, or change any shared setting). Replaced the earlier single shared passcode.
 - Passwords stored salted PBKDF2-HMAC-SHA256 (stdlib) in the `users` collection
   (`{id,email,role,created_at,password_hash}`, unique index on email). `password_hash` is never
   in the public `User` model.
@@ -55,6 +57,11 @@ Email + password accounts with two roles: **admin** (all features + user managem
   POST /api/users {email,role} → returns one-time temp_password, POST /api/users/{id}/role,
   POST /api/users/{id}/reset-password → new temp_password, DELETE /api/users/{id}. Guards prevent
   deleting yourself and removing/demoting the last admin.
+- **Role enforcement**: write endpoints (POST /run, PATCH story, POST /produce, POST /episodes/send,
+  all POST/DELETE settings except /settings/password) are guarded by `auth.require_editor` → 403 for
+  viewers. GET endpoints allow any authenticated user. Frontend hides write controls for viewers via
+  `lib/useAuth.ts` (canEdit): Run-now, produce/email-episode buttons, story flag/notes panel (shown
+  read-only instead), and the recipients/watchlist/script-length/auto-lock Settings panels.
 - Own password: POST /api/settings/password {current_password,new_password} (min 8).
 - Programmatic/downstream service access unchanged in spirit: header `X-Desk-Passcode: <APP_PASSCODE>`
   (backend/.env) resolves as a synthetic admin identity for the weekly agent reading

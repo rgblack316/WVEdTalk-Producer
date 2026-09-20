@@ -39,6 +39,7 @@ export default function DeskLayout({ children }: { children: React.ReactNode }) 
   });
 
   const isAdmin = auth?.user?.role === "admin";
+  const canEdit = auth?.user?.role === "admin" || auth?.user?.role === "editor";
   const nav = isAdmin ? [...BASE_NAV, { to: "/users", label: "Users" }] : BASE_NAV;
 
   // Auto-lock after a period of inactivity (0 = off). Any interaction resets the timer.
@@ -110,6 +111,7 @@ export default function DeskLayout({ children }: { children: React.ReactNode }) 
                 );
               })}
             </nav>
+            {canEdit && (
             <Button
               size="sm"
               variant="outline"
@@ -124,6 +126,7 @@ export default function DeskLayout({ children }: { children: React.ReactNode }) 
               )}
               {running ? "Researching…" : "Run now"}
             </Button>
+            )}
             {auth?.user && (
               <span
                 className="hidden text-xs text-muted-foreground lg:inline"

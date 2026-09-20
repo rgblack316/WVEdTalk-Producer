@@ -92,7 +92,7 @@ async def create_user(email: str, role: str, password: str) -> dict:
     email = email.lower().strip()
     if await get_user_by_email(email):
         raise HTTPException(status_code=409, detail="A user with that email already exists")
-    user = User(email=email, role=role if role in {"admin", "editor"} else "editor")
+    user = User(email=email, role=role if role in {"admin", "editor", "viewer"} else "editor")
     doc = user.model_dump()
     doc["password_hash"] = hash_password(password)
     await db.users.insert_one(doc)
@@ -179,4 +179,15 @@ async def require_admin(
     user = await get_current_user(wv_desk_session, x_desk_passcode)
     if user.get("role") != "admin":
         raise HTTPException(status_code=403, detail="Administrator access required")
+    return user
+
+
+async def require_editor(
+    wv_desk_session: str | None = Cookie(default=None),
+    x_desk_passcode: str | None = Header(default=None),
+) -> dict:
+    """Guards write actions: admins and editors may write; viewers are read-only."""
+    user = await get_current_user(wv_desk_session, x_desk_passcode)
+    if user.get("role") not in {"admin", "editor"}:
+        raise HTTPException(status_code=403, detail="This action requires editor access — your account is view-only")
     return user

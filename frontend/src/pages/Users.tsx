@@ -103,8 +103,8 @@ export default function Users() {
         <p className="text-xs tracking-[0.2em] text-accent uppercase">Access Control</p>
         <h2 className="font-heading text-3xl font-bold tracking-tight">Users</h2>
         <p className="mt-2 text-sm text-muted-foreground">
-          Manage who can sign in to the desk. Admins can manage users; editors get every feature
-          except user management.
+          Manage who can sign in to the desk. Admins manage users; editors get every feature except
+          user management; viewers can only read the work — no runs, no tagging, no changes.
         </p>
       </div>
 
@@ -170,6 +170,7 @@ export default function Users() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="editor">Editor</SelectItem>
+                <SelectItem value="viewer">Viewer</SelectItem>
                 <SelectItem value="admin">Admin</SelectItem>
               </SelectContent>
             </Select>
@@ -233,6 +234,7 @@ export default function Users() {
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="editor">Editor</SelectItem>
+                          <SelectItem value="viewer">Viewer</SelectItem>
                           <SelectItem value="admin">Admin</SelectItem>
                         </SelectContent>
                       </Select>

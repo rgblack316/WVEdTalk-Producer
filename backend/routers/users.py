@@ -23,7 +23,7 @@ async def list_users():
 
 @router.post("/users", response_model=CreatedUser)
 async def add_user(body: UserCreate):
-    role = body.role if body.role in {"admin", "editor"} else "editor"
+    role = body.role if body.role in {"admin", "editor", "viewer"} else "editor"
     temp = auth.generate_temp_password()
     doc = await auth.create_user(str(body.email), role, temp)
     return CreatedUser(user=User(**{k: doc[k] for k in ("id", "email", "role", "created_at")}), temp_password=temp)
@@ -31,8 +31,8 @@ async def add_user(body: UserCreate):
 
 @router.post("/users/{user_id}/role", response_model=User)
 async def update_role(user_id: str, body: RoleUpdate):
-    if body.role not in {"admin", "editor"}:
-        raise HTTPException(status_code=422, detail="Role must be admin or editor")
+    if body.role not in {"admin", "editor", "viewer"}:
+        raise HTTPException(status_code=422, detail="Role must be admin, editor, or viewer")
     user = await auth.get_user_by_id(user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")

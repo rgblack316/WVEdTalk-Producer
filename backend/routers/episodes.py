@@ -3,9 +3,10 @@
 import asyncio
 from typing import List, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
 from lib import producer
+from lib.auth import require_editor
 from lib.db import db
 from lib.email_digest import send_episode
 from models.episode import EpisodeSummary, ProduceStatus, WeeklyEpisode
@@ -50,7 +51,7 @@ async def produce_status():
 
 
 @router.post("/produce", response_model=ProduceStatus)
-async def trigger_produce():
+async def trigger_produce(_edit=Depends(require_editor)):
     status = producer.get_status()
     if status.running:
         raise HTTPException(status_code=409, detail="An episode is already being produced")
@@ -67,7 +68,7 @@ async def trigger_produce():
 
 
 @router.post("/episodes/send")
-async def email_latest_episode():
+async def email_latest_episode(_edit=Depends(require_editor)):
     """Email the most recent episode to configured recipients (server-side template)."""
     cfg = await db.desk_config.find_one({"key": "singleton"}, {"_id": 0}) or {}
     recipients = cfg.get("recipients") or []
