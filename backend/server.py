@@ -14,19 +14,21 @@ load_dotenv(ROOT_DIR / '.env')
 # MongoDB connection
 from lib.db import client, db, ensure_indexes
 from fastapi import Depends
-from lib.auth import require_auth
+from lib.auth import require_auth, require_admin, ensure_seed_admin
 from lib.desk import scheduler_loop
 from lib.producer import scheduler_loop as weekly_scheduler_loop
 from routers.auth import router as auth_router
 from routers.briefings import router as briefings_router
 from routers.episodes import router as episodes_router
 from routers.settings import router as settings_router
+from routers.users import router as users_router
 
 
 # Startup runs before the yield, shutdown after it. Add your own setup/teardown here.
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     app.state.index_task = asyncio.create_task(ensure_indexes())  # background: a big index build must not block boot
+    await ensure_seed_admin()  # create the bootstrap admin the first time the app starts
     app.state.scheduler_task = asyncio.create_task(scheduler_loop())  # daily 6:00 AM ET edition
     app.state.weekly_task = asyncio.create_task(weekly_scheduler_loop())  # Friday 2:00 PM ET WVEdTalk episode
     yield
@@ -53,6 +55,7 @@ _guard = [Depends(require_auth)]
 api_router.include_router(briefings_router, dependencies=_guard)
 api_router.include_router(settings_router, dependencies=_guard)
 api_router.include_router(episodes_router, dependencies=_guard)
+api_router.include_router(users_router, dependencies=[Depends(require_admin)])
 
 # Include the router in the main app
 app.include_router(api_router)

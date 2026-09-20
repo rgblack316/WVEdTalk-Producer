@@ -1,9 +1,13 @@
-"""Single shared-passcode auth: a stateless HMAC-signed httpOnly cookie.
+"""Multi-user auth: email + password accounts with two roles (admin | editor).
 
-The passcode itself is stored (hashed) in desk_config so it can be rotated in-app;
-until one is set there, the APP_PASSCODE env value is used. Programmatic clients
-(e.g. the downstream weekly agent) may send the passcode in the X-Desk-Passcode
-header instead of the cookie. Both are checked by require_auth.
+Sessions are a stateless HMAC-signed httpOnly cookie bound to the user's id and current
+password hash, so rotating a user's password (or an admin resetting it) invalidates that
+user's existing sessions. Passwords are stored as salted PBKDF2-HMAC-SHA256 (stdlib only).
+
+Programmatic/service clients (e.g. the downstream weekly agent that reads
+/api/briefings/{date}) may still authenticate with the X-Desk-Passcode header matching the
+APP_PASSCODE service token in backend/.env — this is a machine credential, separate from the
+human email/password login.
 """
 
 import hashlib
@@ -12,6 +16,7 @@ import logging
 import os
 import secrets
 import time
+from typing import Optional
 
 from fastapi import Cookie, Header, HTTPException
 
@@ -21,9 +26,14 @@ logger = logging.getLogger(__name__)
 
 COOKIE_NAME = "wv_desk_session"
 MAX_AGE = 60 * 60 * 24 * 30  # 30 days
-_CONFIG_KEY = {"key": "singleton"}
+_PBKDF2_ROUNDS = 200_000
 
-_ENV_PASSCODE = os.environ.get("APP_PASSCODE", "")
+# Bootstrap admin — seeded once if the users collection is empty.
+SEED_ADMIN_EMAIL = "admin@johnscreekstudios.com"
+SEED_ADMIN_PASSWORD = "WVEd!Desk-Admin2026"
+
+# Service token for programmatic/downstream access (header X-Desk-Passcode).
+_SERVICE_PASSCODE = os.environ.get("APP_PASSCODE", "")
 _SECRET = os.environ.get("SESSION_SECRET", "")
 if not _SECRET:
     # Fail closed: never fall back to a public/default signing key.
@@ -37,79 +47,136 @@ def _sign(msg: str) -> str:
     return hmac.new(_SECRET.encode(), msg.encode(), hashlib.sha256).hexdigest()
 
 
-def hash_passcode(passcode: str) -> str:
-    return _sign(f"passcode:{passcode}")
+def new_secret() -> str:
+    return secrets.token_hex(32)
+
+
+# ---- password hashing (stdlib PBKDF2) ----------------------------------------
+
+def hash_password(password: str, salt: Optional[str] = None) -> str:
+    salt = salt or secrets.token_hex(16)
+    dk = hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), _PBKDF2_ROUNDS)
+    return f"{salt}${dk.hex()}"
+
+
+def verify_password(password: str, stored: str) -> bool:
+    if not stored or "$" not in stored:
+        return False
+    salt, _ = stored.split("$", 1)
+    return hmac.compare_digest(hash_password(password, salt), stored)
+
+
+def generate_temp_password() -> str:
+    """A readable one-time password an admin can relay to a new user."""
+    return secrets.token_urlsafe(9)
+
+
+# ---- user store --------------------------------------------------------------
+
+def _public(doc: dict) -> dict:
+    return {"id": doc["id"], "email": doc["email"], "role": doc.get("role", "editor"),
+            "created_at": doc.get("created_at")}
+
+
+async def get_user_by_email(email: str) -> Optional[dict]:
+    return await db.users.find_one({"email": email.lower().strip()}, {"_id": 0})
+
+
+async def get_user_by_id(user_id: str) -> Optional[dict]:
+    return await db.users.find_one({"id": user_id}, {"_id": 0})
+
+
+async def create_user(email: str, role: str, password: str) -> dict:
+    from models.user import User
+
+    email = email.lower().strip()
+    if await get_user_by_email(email):
+        raise HTTPException(status_code=409, detail="A user with that email already exists")
+    user = User(email=email, role=role if role in {"admin", "editor"} else "editor")
+    doc = user.model_dump()
+    doc["password_hash"] = hash_password(password)
+    await db.users.insert_one(doc)
+    return doc
+
+
+async def set_password(user_id: str, new_password: str) -> None:
+    await db.users.update_one({"id": user_id}, {"$set": {"password_hash": hash_password(new_password)}})
+
+
+async def ensure_seed_admin() -> None:
+    """Create the bootstrap admin the first time the app starts with no users."""
+    if await db.users.count_documents({}) > 0:
+        return
+    await create_user(SEED_ADMIN_EMAIL, "admin", SEED_ADMIN_PASSWORD)
+    logger.info("seeded bootstrap admin %s", SEED_ADMIN_EMAIL)
 
 
 # ---- session token (cookie) --------------------------------------------------
 
-async def _session_key() -> str:
-    """Signing key component that changes when the passcode is rotated, so rotation
-    (and thus a compromised or shared token) is invalidated server-side."""
-    return (await _current_hash())[:16]
-
-
-async def make_token() -> str:
-    """token = issued_at.signature — proves the passcode was entered; bound to the
-    current passcode so rotating the passcode invalidates all existing sessions."""
+def make_token(user: dict) -> str:
+    """token = user_id.issued.signature — bound to the user's current password hash,
+    so a password change/reset invalidates all of that user's sessions."""
     issued = str(int(time.time()))
-    return f"{issued}.{_sign(issued + ':' + await _session_key())}"
+    sig = _sign(f"{user['id']}:{issued}:{user['password_hash'][:16]}")
+    return f"{user['id']}.{issued}.{sig}"
 
 
-async def _token_valid(token: str | None) -> bool:
-    if not token or "." not in token:
-        return False
-    issued, sig = token.rsplit(".", 1)
-    expected = _sign(issued + ":" + await _session_key())
+async def _user_from_token(token: Optional[str]) -> Optional[dict]:
+    if not token or token.count(".") != 2:
+        return None
+    user_id, issued, sig = token.split(".")
+    user = await get_user_by_id(user_id)
+    if not user:
+        return None
+    expected = _sign(f"{user_id}:{issued}:{user['password_hash'][:16]}")
     if not hmac.compare_digest(sig, expected):
-        return False
+        return None
     try:
-        return (int(time.time()) - int(issued)) <= MAX_AGE
+        if (int(time.time()) - int(issued)) > MAX_AGE:
+            return None
     except ValueError:
-        return False
+        return None
+    return user
 
 
-# ---- passcode (DB-backed, env fallback) --------------------------------------
-
-async def _current_hash() -> str:
-    doc = await db.desk_config.find_one(_CONFIG_KEY, {"_id": 0, "passcode_hash": 1})
-    stored = (doc or {}).get("passcode_hash")
-    if stored:
-        return stored
-    return hash_passcode(_ENV_PASSCODE) if _ENV_PASSCODE else ""
-
-
-async def passcode_matches(candidate: str | None) -> bool:
-    current = await _current_hash()
-    if not current or not candidate:
-        return False
-    return hmac.compare_digest(hash_passcode(candidate), current)
-
-
-async def set_passcode(new_passcode: str) -> None:
-    await db.desk_config.update_one(
-        _CONFIG_KEY, {"$set": {"passcode_hash": hash_passcode(new_passcode)}}, upsert=True
+def _service_ok(header_passcode: Optional[str]) -> bool:
+    return bool(_SERVICE_PASSCODE) and bool(header_passcode) and hmac.compare_digest(
+        header_passcode, _SERVICE_PASSCODE
     )
 
 
 # ---- guards ------------------------------------------------------------------
 
-async def is_authenticated(cookie_token: str | None, header_passcode: str | None) -> bool:
-    if await _token_valid(cookie_token):
-        return True
-    if header_passcode and await passcode_matches(header_passcode):
-        return True
-    return False
+async def resolve_user(cookie_token: Optional[str], header_passcode: Optional[str]) -> Optional[dict]:
+    user = await _user_from_token(cookie_token)
+    if user:
+        return user
+    if _service_ok(header_passcode):
+        # A synthetic admin identity for machine/downstream access.
+        return {"id": "service", "email": "service@wv-desk", "role": "admin", "password_hash": ""}
+    return None
 
 
-async def require_auth(
+async def get_current_user(
     wv_desk_session: str | None = Cookie(default=None),
     x_desk_passcode: str | None = Header(default=None),
-) -> None:
-    """FastAPI dependency guarding protected routers."""
-    if not await is_authenticated(wv_desk_session, x_desk_passcode):
-        raise HTTPException(status_code=401, detail="Passcode required")
+) -> dict:
+    """FastAPI dependency guarding protected routers; returns the authenticated user."""
+    user = await resolve_user(wv_desk_session, x_desk_passcode)
+    if not user:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    return user
 
 
-def new_secret() -> str:
-    return secrets.token_hex(32)
+# Router-level guard alias (return value ignored when used in `dependencies=[...]`).
+require_auth = get_current_user
+
+
+async def require_admin(
+    wv_desk_session: str | None = Cookie(default=None),
+    x_desk_passcode: str | None = Header(default=None),
+) -> dict:
+    user = await get_current_user(wv_desk_session, x_desk_passcode)
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Administrator access required")
+    return user

@@ -2,13 +2,13 @@ import { Link, useLocation } from "react-router-dom";
 import { useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Loader2, RefreshCw, Lock } from "lucide-react";
+import { Loader2, RefreshCw, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { apiGet, apiPost, ApiError } from "@/lib/api";
 import { endSession } from "@/lib/session";
-import type { DeskConfig, RunStatus } from "@/lib/types";
+import type { AuthState, DeskConfig, RunStatus } from "@/lib/types";
 
-const NAV = [
+const BASE_NAV = [
   { to: "/", label: "Today's Briefing" },
   { to: "/archive", label: "Archive" },
   { to: "/episodes", label: "Weekly Script" },
@@ -19,6 +19,12 @@ const NAV = [
 export default function DeskLayout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   const qc = useQueryClient();
+
+  const { data: auth } = useQuery({
+    queryKey: ["auth", "me"],
+    queryFn: () => apiGet<AuthState>("/auth/me"),
+    staleTime: 5 * 60 * 1000,
+  });
 
   const { data: status } = useQuery({
     queryKey: ["run-status"],
@@ -32,6 +38,9 @@ export default function DeskLayout({ children }: { children: React.ReactNode }) 
     staleTime: 60000,
   });
 
+  const isAdmin = auth?.user?.role === "admin";
+  const nav = isAdmin ? [...BASE_NAV, { to: "/users", label: "Users" }] : BASE_NAV;
+
   // Auto-lock after a period of inactivity (0 = off). Any interaction resets the timer.
   const lockMinutes = config?.auto_lock_minutes ?? 0;
   useEffect(() => {
@@ -40,7 +49,7 @@ export default function DeskLayout({ children }: { children: React.ReactNode }) 
     const reset = () => {
       clearTimeout(timer);
       timer = setTimeout(() => {
-        toast.message("Locked due to inactivity");
+        toast.message("Signed out due to inactivity");
         endSession();
       }, lockMinutes * 60 * 1000);
     };
@@ -82,8 +91,8 @@ export default function DeskLayout({ children }: { children: React.ReactNode }) 
             </p>
           </div>
           <div className="flex items-center gap-3">
-            <nav className="flex gap-1" data-testid="desk-nav">
-              {NAV.map((n) => {
+            <nav className="flex flex-wrap gap-1" data-testid="desk-nav">
+              {nav.map((n) => {
                 const active = location.pathname === n.to;
                 return (
                   <Link
@@ -115,15 +124,23 @@ export default function DeskLayout({ children }: { children: React.ReactNode }) 
               )}
               {running ? "Researching…" : "Run now"}
             </Button>
+            {auth?.user && (
+              <span
+                className="hidden text-xs text-muted-foreground lg:inline"
+                data-testid="current-user-email"
+              >
+                {auth.user.email}
+              </span>
+            )}
             <Button
               size="icon-sm"
               variant="ghost"
               onClick={() => endSession()}
-              aria-label="Lock desk"
-              title="Lock desk"
-              data-testid="lock-desk-button"
+              aria-label="Sign out"
+              title="Sign out"
+              data-testid="logout-button"
             >
-              <Lock className="size-4" />
+              <LogOut className="size-4" />
             </Button>
           </div>
         </div>

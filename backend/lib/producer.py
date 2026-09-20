@@ -118,7 +118,11 @@ LENGTH_GUIDANCE = {
 
 
 def _user_prompt(
-    week_start: str, week_end: str, briefings: List[Dict[str, Any]], script_length: str
+    week_start: str,
+    week_end: str,
+    briefings: List[Dict[str, Any]],
+    script_length: str,
+    candidates: List[Dict[str, Any]],
 ) -> str:
     lines = [
         f"Produce the WVEdTalk weekly episode covering West Virginia education news for the week of {week_start} through {week_end} (America/New_York).",
@@ -126,6 +130,20 @@ def _user_prompt(
         LENGTH_GUIDANCE.get(script_length, LENGTH_GUIDANCE["standard"]),
         "The length preference is a target, not a mandate: never pad a quiet week to reach it, and never omit a genuinely important story to stay under it.",
     ]
+    if candidates:
+        lines.append(
+            "\nHOST-FLAGGED PODCAST PREP CANDIDATES — the host has personally tagged the following stories for this podcast. "
+            "Treat these as strong editorial priorities: give them meaningful weight and strongly favor covering them in the episode, "
+            "verifying and updating each with fresh independent research (they may have developed since being flagged). "
+            "Weigh them alongside your own independent findings for the week. "
+            "If you judge that a flagged candidate genuinely does not merit inclusion this week (e.g. it faded, was resolved, or a stronger story crowds it out), "
+            "you MAY set it aside — but you MUST then list it in \"not_selected\" with a clear, specific reason so the host sees why their pick was dropped. "
+            "Honor the host's notes where provided:"
+        )
+        for c in candidates:
+            note = f" — host note: {c['notes']}" if c.get("notes") else ""
+            loc = f" [{c['location']}]" if c.get("location") else ""
+            lines.append(f"- ({c.get('date','')}) {c.get('headline','')}{loc}{note}")
     if briefings:
         lines.append(
             "\nFor reference only, the WV Education News Desk daily briefings from this week reported these stories. Use them to orient your research and to track what developed, but reassess everything independently:"
@@ -139,8 +157,30 @@ def _user_prompt(
     return "\n".join(lines)
 
 
+async def _gather_candidates() -> List[Dict[str, Any]]:
+    """Flagged Podcast Prep stories the host wants considered for the weekly episode."""
+    docs = await db.briefings.find({"stories.is_candidate": True}).sort("date", -1).to_list(200)
+    out: List[Dict[str, Any]] = []
+    for d in docs:
+        for s in d.get("stories", []):
+            if s.get("is_candidate"):
+                out.append(
+                    {
+                        "date": d.get("date", ""),
+                        "headline": s.get("headline", ""),
+                        "location": s.get("location", ""),
+                        "notes": s.get("notes", ""),
+                    }
+                )
+    return out
+
+
 async def _call_model(
-    week_start: str, week_end: str, briefings: List[Dict[str, Any]], script_length: str
+    week_start: str,
+    week_end: str,
+    briefings: List[Dict[str, Any]],
+    script_length: str,
+    candidates: List[Dict[str, Any]],
 ) -> Dict[str, Any]:
     import os
 
@@ -156,7 +196,7 @@ async def _call_model(
         .with_tools([{"googleSearch": {}}])
     )
     resp = await chat.send_message_with_tools(
-        UserMessage(text=_user_prompt(week_start, week_end, briefings, script_length))
+        UserMessage(text=_user_prompt(week_start, week_end, briefings, script_length, candidates))
     )
     content = resp.content if isinstance(resp.content, str) else str(resp.content or "")
     data = desk._parse_json(content)
@@ -205,7 +245,10 @@ async def produce_episode(week_of: Optional[str] = None) -> WeeklyEpisode:
             )
             cfg = await db.desk_config.find_one({"key": "singleton"}, {"_id": 0}) or {}
             script_length = cfg.get("script_length", "standard")
-            data = await _call_model(week_start, week_end, briefings, script_length)
+            candidates = await _gather_candidates()
+            if candidates:
+                _status.message = f"Reviewing the week with {len(candidates)} host-flagged candidate(s) prioritized…"
+            data = await _call_model(week_start, week_end, briefings, script_length, candidates)
 
             selected: List[EpisodeStory] = []
             for raw in data.get("selected_stories") or []:

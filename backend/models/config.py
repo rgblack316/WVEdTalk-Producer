@@ -30,8 +30,3 @@ class ScriptLengthUpdate(BaseModel):
 
 class AutoLockUpdate(BaseModel):
     minutes: int
-
-
-class PasscodeChange(BaseModel):
-    current: str
-    new: str

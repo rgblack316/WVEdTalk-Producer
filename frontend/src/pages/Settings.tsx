@@ -1,13 +1,13 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Mail, Eye, Trash2, Send, Gauge, ShieldCheck, Timer } from "lucide-react";
+import { Mail, Eye, Trash2, Send, Gauge, ShieldCheck, Timer, KeyRound } from "lucide-react";
 import DeskLayout from "@/components/DeskLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { apiGet, apiPost, apiDelete, ApiError } from "@/lib/api";
-import type { DeskConfig } from "@/lib/types";
+import type { AuthState, DeskConfig } from "@/lib/types";
 
 function errMsg(e: unknown) {
   return e instanceof ApiError
@@ -26,6 +26,12 @@ export default function Settings() {
   const { data, isLoading } = useQuery({
     queryKey: ["config"],
     queryFn: () => apiGet<DeskConfig>("/settings"),
+  });
+
+  const { data: auth } = useQuery({
+    queryKey: ["auth", "me"],
+    queryFn: () => apiGet<AuthState>("/auth/me"),
+    staleTime: 5 * 60 * 1000,
   });
 
   const invalidate = (cfg: DeskConfig) => qc.setQueryData(["config"], cfg);
@@ -86,13 +92,17 @@ export default function Settings() {
     onError: (e) => toast.error(errMsg(e)),
   });
 
-  const changePasscode = useMutation({
-    mutationFn: () => apiPost<{ ok: boolean }>("/settings/passcode", { current, new: newPass }),
+  const changePassword = useMutation({
+    mutationFn: () =>
+      apiPost<{ ok: boolean }>("/settings/password", {
+        current_password: current,
+        new_password: newPass,
+      }),
     onSuccess: () => {
       setCurrent("");
       setNewPass("");
       setConfirm("");
-      toast.success("Passcode changed. Existing sessions stay signed in.");
+      toast.success("Password changed.");
     },
     onError: (e) => toast.error(errMsg(e)),
   });
@@ -114,7 +124,7 @@ export default function Settings() {
     { minutes: 30, label: "30 min" },
     { minutes: 60, label: "60 min" },
   ];
-  const passcodeValid = current.trim() && newPass.trim().length >= 6 && newPass === confirm;
+  const passwordValid = current.trim() && newPass.trim().length >= 8 && newPass === confirm;
 
   return (
     <DeskLayout>
@@ -131,60 +141,70 @@ export default function Settings() {
         <div className="py-16 text-center text-muted-foreground">Loading settings…</div>
       ) : (
         <div className="grid gap-8 md:grid-cols-2">
-          {/* Security: passcode + auto-lock */}
+          {/* Account: my password + auto-lock */}
           <section
             className="rounded-md border border-border bg-card p-5 md:col-span-2"
             data-testid="security-panel"
           >
             <h3 className="flex items-center gap-2 font-heading text-lg font-bold">
-              <ShieldCheck className="size-4 text-primary" /> Security
+              <ShieldCheck className="size-4 text-primary" /> My account
             </h3>
+            {auth?.user && (
+              <p className="mt-1 text-xs text-muted-foreground" data-testid="account-identity">
+                Signed in as <span className="font-medium text-foreground">{auth.user.email}</span> ·{" "}
+                <Badge variant="secondary">{auth.user.role}</Badge>
+              </p>
+            )}
             <div className="mt-4 grid gap-6 md:grid-cols-2">
-              {/* Change passcode */}
+              {/* Change password */}
               <div>
-                <p className="text-sm font-semibold">Change passcode</p>
+                <p className="flex items-center gap-1.5 text-sm font-semibold">
+                  <KeyRound className="size-4 text-primary" /> Change password
+                </p>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Rotate the shared passcode without editing any files. Anyone already signed in stays
-                  signed in.
+                  Update your own password. You'll stay signed in on this browser.
                 </p>
                 <form
                   className="mt-3 space-y-2"
                   onSubmit={(e) => {
                     e.preventDefault();
-                    if (passcodeValid) changePasscode.mutate();
+                    if (passwordValid) changePassword.mutate();
                   }}
                 >
                   <Input
                     type="password"
-                    placeholder="Current passcode"
+                    autoComplete="current-password"
+                    placeholder="Current password"
                     value={current}
                     onChange={(e) => setCurrent(e.target.value)}
-                    data-testid="current-passcode-input"
+                    data-testid="current-password-input"
                   />
                   <Input
                     type="password"
-                    placeholder="New passcode (min 6 characters)"
+                    autoComplete="new-password"
+                    placeholder="New password (min 8 characters)"
                     value={newPass}
                     onChange={(e) => setNewPass(e.target.value)}
-                    data-testid="new-passcode-input"
+                    data-testid="new-password-input"
                   />
                   <Input
                     type="password"
-                    placeholder="Confirm new passcode"
+                    autoComplete="new-password"
+                    placeholder="Confirm new password"
                     value={confirm}
                     onChange={(e) => setConfirm(e.target.value)}
-                    data-testid="confirm-passcode-input"
+                    data-testid="confirm-password-input"
                   />
                   {confirm && newPass !== confirm && (
-                    <p className="text-xs text-destructive">Passcodes don't match.</p>
+                    <p className="text-xs text-destructive">Passwords don't match.</p>
                   )}
                   <Button
                     type="submit"
                     size="sm"
-                    disabled={!passcodeValid || changePasscode.isPending}
-                    data-testid="change-passcode-button"
+                    disabled={!passwordValid || changePassword.isPending}
+                    data-testid="change-password-button"
                   >
-                    Update passcode
+                    Update password
                   </Button>
                 </form>
               </div>

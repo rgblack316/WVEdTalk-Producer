@@ -1,6 +1,6 @@
 """Desk configuration routes — recipients and watchlist terms. Mounted under /api."""
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
 from lib import email_digest
 from lib import auth
@@ -8,11 +8,11 @@ from lib.db import db
 from models.config import (
     AutoLockUpdate,
     DeskConfig,
-    PasscodeChange,
     RecipientCreate,
     ScriptLengthUpdate,
     WatchTermCreate,
 )
+from models.user import PasswordChange
 
 router = APIRouter(tags=["settings"])
 
@@ -93,13 +93,15 @@ async def set_auto_lock(body: AutoLockUpdate):
     return cfg
 
 
-@router.post("/settings/passcode")
-async def change_passcode(body: PasscodeChange):
-    if not await auth.passcode_matches(body.current):
-        raise HTTPException(status_code=401, detail="Current passcode is incorrect")
-    if len(body.new.strip()) < 6:
-        raise HTTPException(status_code=422, detail="New passcode must be at least 6 characters")
-    await auth.set_passcode(body.new.strip())
+@router.post("/settings/password")
+async def change_password(body: PasswordChange, user=Depends(auth.get_current_user)):
+    if user.get("id") == "service":
+        raise HTTPException(status_code=403, detail="Service accounts cannot change a password")
+    if not auth.verify_password(body.current_password, user.get("password_hash", "")):
+        raise HTTPException(status_code=401, detail="Current password is incorrect")
+    if len(body.new_password.strip()) < 8:
+        raise HTTPException(status_code=422, detail="New password must be at least 8 characters")
+    await auth.set_password(user["id"], body.new_password.strip())
     return {"ok": True}
 
 

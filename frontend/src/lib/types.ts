@@ -89,6 +89,23 @@ export interface DeskConfig {
   auto_lock_minutes: number;
 }
 
+export interface User {
+  id: string;
+  email: string;
+  role: string;
+  created_at: string;
+}
+
+export interface AuthState {
+  authenticated: boolean;
+  user: User | null;
+}
+
+export interface CreatedUser {
+  user: User;
+  temp_password: string;
+}
+
 export interface EpisodeStory {
   story: string;
   location: string;

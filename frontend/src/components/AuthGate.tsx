@@ -1,18 +1,16 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Lock, Loader2 } from "lucide-react";
+import { Lock, Loader2, Mail, KeyRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { apiGet, apiPost, ApiError } from "@/lib/api";
 import { beginSession } from "@/lib/session";
-
-interface AuthState {
-  authenticated: boolean;
-}
+import type { AuthState } from "@/lib/types";
 
 export default function AuthGate({ children }: { children: React.ReactNode }) {
   const qc = useQueryClient();
-  const [passcode, setPasscode] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
 
   const { data, isLoading } = useQuery({
@@ -23,16 +21,17 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
   });
 
   const login = useMutation({
-    mutationFn: (code: string) => apiPost<AuthState>("/auth/login", { passcode: code }),
+    mutationFn: (creds: { email: string; password: string }) =>
+      apiPost<AuthState>("/auth/login", creds),
     onSuccess: async () => {
       setError("");
-      setPasscode("");
+      setPassword("");
       await beginSession(qc);
     },
     onError: (e) => {
       setError(
-        e instanceof ApiError && e.status === 401
-          ? "Incorrect passcode. Please try again."
+        e instanceof ApiError && (e.status === 401 || e.status === 429)
+          ? String((e.body as { detail?: string })?.detail ?? "Incorrect email or password.")
           : "Could not reach the desk. Check your connection and try again.",
       );
     },
@@ -63,38 +62,56 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
         <div className="rounded-md border border-border bg-card p-6 shadow-sm">
           <div className="mb-4 flex items-center gap-2">
             <Lock className="size-4 text-primary" />
-            <h2 className="font-heading text-lg font-bold">Enter passcode</h2>
+            <h2 className="font-heading text-lg font-bold">Sign in</h2>
           </div>
           <p className="mb-4 text-sm text-muted-foreground">
-            This desk is private. Enter the shared passcode to continue.
+            This desk is private. Sign in with your account to continue.
           </p>
           <form
+            className="space-y-3"
             onSubmit={(e) => {
               e.preventDefault();
-              if (passcode.trim()) login.mutate(passcode.trim());
+              if (email.trim() && password) login.mutate({ email: email.trim(), password });
             }}
           >
-            <Input
-              type="password"
-              autoFocus
-              placeholder="Passcode"
-              value={passcode}
-              onChange={(e) => setPasscode(e.target.value)}
-              data-testid="passcode-input"
-            />
+            <div className="relative">
+              <Mail className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                type="email"
+                autoFocus
+                autoComplete="email"
+                placeholder="you@example.com"
+                className="pl-9"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                data-testid="login-email-input"
+              />
+            </div>
+            <div className="relative">
+              <KeyRound className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                type="password"
+                autoComplete="current-password"
+                placeholder="Password"
+                className="pl-9"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                data-testid="login-password-input"
+              />
+            </div>
             {error && (
-              <p className="mt-2 text-sm text-destructive" data-testid="passcode-error">
+              <p className="text-sm text-destructive" data-testid="login-error">
                 {error}
               </p>
             )}
             <Button
               type="submit"
-              className="mt-4 w-full"
-              disabled={login.isPending || !passcode.trim()}
-              data-testid="passcode-submit"
+              className="w-full"
+              disabled={login.isPending || !email.trim() || !password}
+              data-testid="login-submit"
             >
               {login.isPending ? <Loader2 className="size-4 animate-spin" /> : <Lock className="size-4" />}
-              Unlock desk
+              Sign in
             </Button>
           </form>
         </div>

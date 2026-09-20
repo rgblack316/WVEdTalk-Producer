@@ -7,6 +7,7 @@ import BriefingPage from "@/pages/BriefingPage";
 import StoryDetail from "@/pages/StoryDetail";
 import Candidates from "@/pages/Candidates";
 import Settings from "@/pages/Settings";
+import Users from "@/pages/Users";
 import Episodes from "@/pages/Episodes";
 import EpisodePage from "@/pages/EpisodePage";
 
@@ -22,6 +23,7 @@ export default function App() {
           <Route path="/episodes" element={<Episodes />} />
           <Route path="/episodes/:week" element={<EpisodePage />} />
           <Route path="/settings" element={<Settings />} />
+          <Route path="/users" element={<Users />} />
           <Route path="/briefings/:date" element={<BriefingPage />} />
           <Route path="/briefings/:date/stories/:storyId" element={<StoryDetail />} />
         </Routes>

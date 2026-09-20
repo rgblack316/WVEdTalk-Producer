@@ -38,18 +38,30 @@ story can be flagged as a podcast episode candidate with free-text prep notes.
 - `/` Today (latest briefing), `/archive`, `/candidates` (podcast prep board),
   `/briefings/:date` (full edition), `/briefings/:date/stories/:storyId` (detail + prep panel).
 
-## Auth
-Single shared passcode gating the whole desk (added on request).
-- Stateless HMAC-signed httpOnly cookie (`lib/auth.py`, cookie `wv_desk_session`, 30-day expiry,
-  `secure`+`samesite=lax`). `SESSION_SECRET` + `APP_PASSCODE` in backend/.env.
-- Auth routes open (`routers/auth.py`): POST /api/auth/login {passcode}, POST /api/auth/logout,
-  GET /api/auth/me. All other routers mounted with `Depends(require_auth)` → 401 without auth.
-- Programmatic clients (the downstream weekly agent reading /api/briefings/{date} or
-  /api/episodes/{week}) authenticate with header `X-Desk-Passcode: <passcode>` instead of a cookie.
-- Frontend: `components/AuthGate.tsx` wraps all routes — shows a passcode screen until
-  authenticated; `lib/session.ts` beginSession/endSession; a Lock button in the header signs out
-  and clears the react-query cache. CORS tightened to the app origin.
-- Passcode is in memory/test_credentials.md.
+## Auth (multi-user)
+Email + password accounts with two roles: **admin** (all features + user management) and
+**editor** (all features except user management). Replaced the earlier single shared passcode.
+- Passwords stored salted PBKDF2-HMAC-SHA256 (stdlib) in the `users` collection
+  (`{id,email,role,created_at,password_hash}`, unique index on email). `password_hash` is never
+  in the public `User` model.
+- Session = stateless HMAC-signed httpOnly cookie (`lib/auth.py`, cookie `wv_desk_session`, 30-day
+  expiry, `secure`+`samesite=lax`) bound to the user's id + current password-hash prefix, so a
+  password change/reset revokes that user's sessions. `SESSION_SECRET` in backend/.env.
+- Bootstrap admin seeded on first startup if `users` is empty (`ensure_seed_admin`):
+  admin@johnscreekstudios.com (see memory/test_credentials.md).
+- Auth routes open (`routers/auth.py`): POST /api/auth/login {email,password}, POST /api/auth/logout,
+  GET /api/auth/me → {authenticated, user}. Login throttled 10/5min per IP → 429.
+- User management (`routers/users.py`, admin-guarded via `require_admin`): GET /api/users,
+  POST /api/users {email,role} → returns one-time temp_password, POST /api/users/{id}/role,
+  POST /api/users/{id}/reset-password → new temp_password, DELETE /api/users/{id}. Guards prevent
+  deleting yourself and removing/demoting the last admin.
+- Own password: POST /api/settings/password {current_password,new_password} (min 8).
+- Programmatic/downstream service access unchanged in spirit: header `X-Desk-Passcode: <APP_PASSCODE>`
+  (backend/.env) resolves as a synthetic admin identity for the weekly agent reading
+  /api/briefings/{date} and /api/episodes/{week}.
+- Frontend: `components/AuthGate.tsx` (email+password sign-in), `pages/Users.tsx` (admin-only Users
+  nav, shown only when role==admin), Settings → "My account" (change own password + auto-lock).
+  `lib/session.ts` beginSession/endSession; header Sign-out button.
 
 ## Security audit remediations
 - Removed the unauthenticated demo `/api/status` GET/POST routes (were public writes). Only
@@ -95,6 +107,11 @@ None seeded. First real briefing generated for 2026-09-18. Demo watch terms ("co
   WVEdTalk episode. Adapts the user's full producer brief (`lib/producer.py` PRODUCER_BRIEF).
 - **Model**: Gemini 3.1 Pro + googleSearch grounding; fresh research, does not merely restate the
   daily briefings (they are passed as reference context only).
+- **Hybrid candidate injection**: flagged Podcast Prep stories (`stories.is_candidate==True`, with
+  the host's notes) are gathered by `producer._gather_candidates()` and injected into the producer
+  prompt as strong editorial priorities the model must strongly favor covering (verified with fresh
+  research and weighed alongside its own findings). If it drops a flagged candidate it MUST record it
+  in `not_selected` with a reason, giving the host a visible audit trail of their pick being set aside.
 - **Data model** (collection `episodes`, one doc per `week_of` = the Friday date, unique index):
   WeeklyEpisode {week_of, week_start, week_end, editorial_summary, selected_stories[EpisodeStory],
   not_selected[NotSelectedStory], look_ahead[LookAheadItem], recording_script (str), source_log[]}.
