@@ -39,6 +39,7 @@ export default function DeskLayout({ children }: { children: React.ReactNode }) 
   });
 
   const isAdmin = auth?.user?.role === "admin";
+  const isViewer = auth?.user?.role === "viewer";
   const canEdit = auth?.user?.role === "admin" || auth?.user?.role === "editor";
   const nav = isAdmin ? [...BASE_NAV, { to: "/users", label: "Users" }] : BASE_NAV;
 
@@ -158,6 +159,15 @@ export default function DeskLayout({ children }: { children: React.ReactNode }) 
           </div>
         )}
       </header>
+      {isViewer && (
+        <div
+          className="border-b border-border bg-secondary/60 px-5 py-1.5 text-center text-xs text-muted-foreground"
+          data-testid="view-only-banner"
+        >
+          View-only access — you can read everything the desk has produced, but editing, tagging and
+          running research are turned off for your account.
+        </div>
+      )}
       <main className="mx-auto max-w-6xl px-5 py-8">{children}</main>
       <footer className="border-t border-border px-5 py-6 text-center text-xs text-muted-foreground">
         Scheduled daily at 6:00 AM Eastern · Editorial judgment, scores and rankings are produced by

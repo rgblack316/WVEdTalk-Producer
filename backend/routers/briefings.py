@@ -6,7 +6,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException
 
 from lib import desk
-from lib.auth import require_editor
+from lib.auth import require_editor, make_share_token
 from lib.db import db
 from models.briefing import (
     Briefing,
@@ -79,6 +79,17 @@ async def trigger_run(_edit=Depends(require_editor)):
     asyncio.create_task(_bg())
     await asyncio.sleep(0.2)
     return desk.get_run_status()
+
+
+@router.get("/briefings/{date}/share")
+async def briefing_share_link(date: str):
+    """Return a public share token/path for this briefing. Readable by any signed-in
+    user (including viewers) so they can copy a link to send to people without accounts."""
+    doc = await db.briefings.find_one({"date": date}, {"_id": 1})
+    if not doc:
+        raise HTTPException(status_code=404, detail=f"No briefing for {date}")
+    token = make_share_token(date)
+    return {"date": date, "token": token, "path": f"/share/briefing/{date}?t={token}"}
 
 
 @router.get("/briefings/{date}", response_model=Briefing)

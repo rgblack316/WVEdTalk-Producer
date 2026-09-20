@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Copy, Download, Eye } from "lucide-react";
+import { Copy, Download, Eye, Share2 } from "lucide-react";
 import { StoryCard, SourceList } from "@/components/StoryCard";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -37,7 +37,13 @@ export function SectionHeading({ children }: { children: React.ReactNode }) {
   );
 }
 
-export default function BriefingView({ briefing }: { briefing: Briefing }) {
+export default function BriefingView({
+  briefing,
+  isPublic = false,
+}: {
+  briefing: Briefing;
+  isPublic?: boolean;
+}) {
   const [region, setRegion] = useState<string>("");
   const [query, setQuery] = useState<string>("");
 
@@ -45,6 +51,7 @@ export default function BriefingView({ briefing }: { briefing: Briefing }) {
     queryKey: ["config"],
     queryFn: () => apiGet<DeskConfig>("/settings"),
     staleTime: 60000,
+    enabled: !isPublic, // /settings is authed — skip it on the public share view
   });
   const watchTerms = config?.watch_terms ?? [];
 
@@ -86,6 +93,17 @@ export default function BriefingView({ briefing }: { briefing: Briefing }) {
     toast.success("Markdown downloaded");
   };
 
+  const copyShareLink = async () => {
+    try {
+      const res = await apiGet<{ path: string }>(`/briefings/${briefing.date}/share`);
+      const url = `${window.location.origin}${res.path}`;
+      await navigator.clipboard.writeText(url);
+      toast.success("Public share link copied — anyone with the link can read this briefing");
+    } catch {
+      toast.error("Could not create a share link — try again.");
+    }
+  };
+
   return (
     <div data-testid="briefing-view">
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
@@ -96,6 +114,11 @@ export default function BriefingView({ briefing }: { briefing: Briefing }) {
           </h2>
         </div>
         <div className="flex gap-2">
+          {!isPublic && (
+            <Button variant="outline" size="sm" onClick={copyShareLink} data-testid="copy-share-link-button">
+              <Share2 className="size-4" /> Copy share link
+            </Button>
+          )}
           <Button variant="outline" size="sm" onClick={copyMarkdown} data-testid="copy-markdown-button">
             <Copy className="size-4" /> Copy Markdown
           </Button>
@@ -184,7 +207,7 @@ export default function BriefingView({ briefing }: { briefing: Briefing }) {
             <SectionHeading>{SECTION_LABELS[section]}</SectionHeading>
             <div className={featured ? "space-y-5" : "grid gap-4 md:grid-cols-2"}>
               {stories.map((story) => (
-                <StoryCard key={story.id} story={story} date={briefing.date} featured={featured} />
+                <StoryCard key={story.id} story={story} date={briefing.date} featured={featured} isPublic={isPublic} />
               ))}
             </div>
           </section>
@@ -273,10 +296,15 @@ export default function BriefingView({ briefing }: { briefing: Briefing }) {
 
       <p className="mt-10 border-t border-border pt-4 text-xs text-muted-foreground">
         Researched with {briefing.model || "the desk model"} using live web search · generated{" "}
-        {new Date(briefing.generated_at).toLocaleString("en-US")} · machine-readable edition:{" "}
-        <a className="text-primary hover:underline" href={`/api/briefings/${briefing.date}`}>
-          /api/briefings/{briefing.date}
-        </a>
+        {new Date(briefing.generated_at).toLocaleString("en-US")}
+        {!isPublic && (
+          <>
+            {" "}· machine-readable edition:{" "}
+            <a className="text-primary hover:underline" href={`/api/briefings/${briefing.date}`}>
+              /api/briefings/{briefing.date}
+            </a>
+          </>
+        )}
       </p>
     </div>
   );

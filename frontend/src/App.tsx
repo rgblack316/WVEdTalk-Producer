@@ -1,4 +1,4 @@
-import { Routes, Route } from "react-router-dom";
+import { Routes, Route, Outlet } from "react-router-dom";
 import { Toaster } from "@/components/ui/sonner";
 import AuthGate from "@/components/AuthGate";
 import Home from "@/pages/Home";
@@ -10,13 +10,24 @@ import Settings from "@/pages/Settings";
 import Users from "@/pages/Users";
 import Episodes from "@/pages/Episodes";
 import EpisodePage from "@/pages/EpisodePage";
+import SharedBriefing from "@/pages/SharedBriefing";
+
+// Everything under ProtectedLayout sits behind the login gate; /share/* is public.
+function ProtectedLayout() {
+  return (
+    <AuthGate>
+      <Outlet />
+    </AuthGate>
+  );
+}
 
 // One <Route> per page in src/pages; BrowserRouter already wraps this in main.tsx.
 export default function App() {
   return (
     <>
-      <AuthGate>
-        <Routes>
+      <Routes>
+        <Route path="/share/briefing/:date" element={<SharedBriefing />} />
+        <Route element={<ProtectedLayout />}>
           <Route path="/" element={<Home />} />
           <Route path="/archive" element={<Archive />} />
           <Route path="/candidates" element={<Candidates />} />
@@ -26,8 +37,8 @@ export default function App() {
           <Route path="/users" element={<Users />} />
           <Route path="/briefings/:date" element={<BriefingPage />} />
           <Route path="/briefings/:date/stories/:storyId" element={<StoryDetail />} />
-        </Routes>
-      </AuthGate>
+        </Route>
+      </Routes>
       <Toaster />
     </>
   );

@@ -41,10 +41,12 @@ export function StoryCard({
   story,
   date,
   featured = false,
+  isPublic = false,
 }: {
   story: Story;
   date: string;
   featured?: boolean;
+  isPublic?: boolean;
 }) {
   return (
     <article
@@ -74,19 +76,28 @@ export function StoryCard({
         )}
       </div>
 
-      <Link
-        to={`/briefings/${date}/stories/${story.id}`}
-        className="block"
-        data-testid={`story-link-${story.id}`}
-      >
+      {isPublic ? (
         <h3
-          className={`font-heading font-bold tracking-tight transition-colors duration-150 hover:text-primary ${
-            featured ? "text-2xl" : "text-lg"
-          }`}
+          className={`font-heading font-bold tracking-tight ${featured ? "text-2xl" : "text-lg"}`}
+          data-testid={`story-heading-${story.id}`}
         >
           {story.headline}
         </h3>
-      </Link>
+      ) : (
+        <Link
+          to={`/briefings/${date}/stories/${story.id}`}
+          className="block"
+          data-testid={`story-link-${story.id}`}
+        >
+          <h3
+            className={`font-heading font-bold tracking-tight transition-colors duration-150 hover:text-primary ${
+              featured ? "text-2xl" : "text-lg"
+            }`}
+          >
+            {story.headline}
+          </h3>
+        </Link>
+      )}
 
       <div className="mt-2 flex flex-wrap gap-2">
         <ScoreChip label="Importance" value={story.importance} />

@@ -91,6 +91,14 @@ send emails, or change any shared setting). Replaced the earlier single shared p
   a hard redirect to the lock screen — when it elapses. Set on the Settings "Security" panel.
 
 ## Added features (post-MVP)
+- **Public share link** (backend `routers/public.py` + `auth.make_share_token`/`verify_share_token`,
+  frontend `pages/SharedBriefing.tsx`): any signed-in user (incl. viewers) copies a link via
+  GET /api/briefings/{date}/share → `/share/briefing/{date}?t=<hmac>`. The `/share/*` route is
+  OUTSIDE AuthGate (App.tsx uses a `ProtectedLayout` outlet); it fetches the open, token-validated
+  GET /api/public/briefings/{date}?token=… (403 on bad token). BriefingView takes an `isPublic` prop
+  that skips the authed /settings query, hides the share button + machine-readable link, and renders
+  story headlines as plain text (no authed detail links). Rotate SESSION_SECRET to revoke all links.
+- **View-only banner**: DeskLayout shows a subtle ribbon for viewers explaining editing is off.
 - **Region filter + search** (frontend, `lib/regions.ts`): 8 WV region quick-filters (county->region
   map) plus a county/keyword search box on any briefing. Filtering hides trends/ideas/source-log.
 - **Markdown export** (frontend): Copy-to-clipboard and Download `.md` of the full edition.

@@ -22,6 +22,7 @@ from routers.briefings import router as briefings_router
 from routers.episodes import router as episodes_router
 from routers.settings import router as settings_router
 from routers.users import router as users_router
+from routers.public import router as public_router
 
 
 # Startup runs before the yield, shutdown after it. Add your own setup/teardown here.
@@ -51,6 +52,7 @@ async def root():
 
 # Auth routes are open; everything else requires the shared passcode (cookie or header).
 api_router.include_router(auth_router)
+api_router.include_router(public_router)  # open, but each route validates a share token
 _guard = [Depends(require_auth)]
 api_router.include_router(briefings_router, dependencies=_guard)
 api_router.include_router(settings_router, dependencies=_guard)
