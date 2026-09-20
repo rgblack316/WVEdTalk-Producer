@@ -1,14 +1,14 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Mail, Eye, Trash2, Send, Gauge, ShieldCheck, Timer, KeyRound } from "lucide-react";
+import { Mail, Eye, Trash2, Send, Gauge, ShieldCheck, Timer, KeyRound, Users, Link2 } from "lucide-react";
 import DeskLayout from "@/components/DeskLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { apiGet, apiPost, apiDelete, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/useAuth";
-import type { AuthState, DeskConfig } from "@/lib/types";
+import type { AuthState, DeskConfig, Subscriber } from "@/lib/types";
 
 function errMsg(e: unknown) {
   return e instanceof ApiError
@@ -35,6 +35,25 @@ export default function Settings() {
     queryFn: () => apiGet<AuthState>("/auth/me"),
     staleTime: 5 * 60 * 1000,
   });
+
+  const { data: subscribers } = useQuery({
+    queryKey: ["subscribers"],
+    queryFn: () => apiGet<Subscriber[]>("/subscribers"),
+  });
+
+  const removeSubscriber = useMutation({
+    mutationFn: (e: string) => apiDelete<{ ok: boolean }>(`/subscribers/${encodeURIComponent(e)}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["subscribers"] });
+      toast.success("Subscriber removed");
+    },
+    onError: (e) => toast.error(errMsg(e)),
+  });
+
+  const copySignupLink = () => {
+    navigator.clipboard.writeText(`${window.location.origin}/subscribe`);
+    toast.success("Public signup link copied");
+  };
 
   const invalidate = (cfg: DeskConfig) => qc.setQueryData(["config"], cfg);
 
@@ -395,6 +414,65 @@ export default function Settings() {
             </div>
           </section>
           )}
+
+          {/* Public subscribers (self sign-up) — visible to all, managed by editors */}
+          <section
+            className="rounded-md border border-border bg-card p-5 md:col-span-2"
+            data-testid="subscribers-panel"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="flex items-center gap-2 font-heading text-lg font-bold">
+                <Users className="size-4 text-primary" /> Public subscribers
+              </h3>
+              {canEdit && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={copySignupLink}
+                  data-testid="copy-signup-link-button"
+                >
+                  <Link2 className="size-4" /> Copy signup link
+                </Button>
+              )}
+            </div>
+            <p className="mt-1 text-sm text-muted-foreground">
+              People who sign up on the public page also receive the daily briefing — each email is
+              sent individually so addresses stay private, with a one-click unsubscribe link. The
+              weekly WVEdTalk script stays internal; subscribers never receive it.
+            </p>
+            <ul className="mt-4 space-y-2" data-testid="subscribers-list">
+              {subscribers && subscribers.length > 0 ? (
+                subscribers.map((s) => (
+                  <li
+                    key={s.email}
+                    className="flex items-center justify-between rounded-sm border border-border bg-background px-3 py-2 text-sm"
+                    data-testid={`subscriber-${s.email}`}
+                  >
+                    <span className={s.active ? "" : "text-muted-foreground line-through"}>
+                      {s.email}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      {!s.active && <Badge variant="outline">unsubscribed</Badge>}
+                      {canEdit && (
+                        <button
+                          onClick={() => removeSubscriber.mutate(s.email)}
+                          className="text-muted-foreground transition-colors hover:text-destructive"
+                          data-testid={`remove-subscriber-${s.email}`}
+                          aria-label={`Remove ${s.email}`}
+                        >
+                          <Trash2 className="size-4" />
+                        </button>
+                      )}
+                    </div>
+                  </li>
+                ))
+              ) : (
+                <li className="text-sm text-muted-foreground">
+                  No public subscribers yet. Share the signup link to get started.
+                </li>
+              )}
+            </ul>
+          </section>
         </div>
       )}
     </DeskLayout>

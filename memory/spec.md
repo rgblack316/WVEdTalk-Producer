@@ -99,6 +99,16 @@ send emails, or change any shared setting). Replaced the earlier single shared p
   that skips the authed /settings query, hides the share button + machine-readable link, and renders
   story headlines as plain text (no authed detail links). Rotate SESSION_SECRET to revoke all links.
 - **View-only banner**: DeskLayout shows a subtle ribbon for viewers explaining editing is off.
+- **Public newsletter subscribers** (backend `models/subscriber.py`, collection `subscribers`
+  {email, active, subscribed_at}, unique email index; `routers/public.py`): a public `/subscribe`
+  page (POST /api/public/subscribe {email}, idempotent, IP-throttled) lets anyone opt in. Kept
+  SEPARATE from admin `recipients`. The **daily briefing** now sends to admin recipients AND active
+  subscribers — each sent individually (the managed Resend proxy has no BCC field, so per-recipient
+  sends are how addresses stay hidden from each other) with a per-subscriber one-click unsubscribe
+  link (`auth.make_unsub_token`, verified at POST /api/public/unsubscribe → `/unsubscribe?email=&t=`).
+  The **weekly WVEdTalk episode email is unchanged — admin recipients only, never subscribers.**
+  Admins/editors see and manage subscribers on the Settings "Public subscribers" panel
+  (GET /api/subscribers any signed-in user; DELETE /api/subscribers/{email} editors only).
 - **Region filter + search** (frontend, `lib/regions.ts`): 8 WV region quick-filters (county->region
   map) plus a county/keyword search box on any briefing. Filtering hides trends/ideas/source-log.
 - **Markdown export** (frontend): Copy-to-clipboard and Download `.md` of the full edition.

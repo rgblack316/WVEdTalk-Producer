@@ -11,9 +11,12 @@ import re
 from html import escape
 from html.parser import HTMLParser
 from typing import List, Optional
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 
 import httpx
+
+from lib.auth import make_unsub_token
+from lib.db import db
 
 logger = logging.getLogger(__name__)
 
@@ -113,7 +116,7 @@ async def _send_email(*, to: str, subject: str, html: str) -> Optional[str]:
     return resp.json().get("id")
 
 
-def _digest_html(briefing) -> str:
+def _digest_html(briefing, unsubscribe_url: Optional[str] = None) -> str:
     """Build the HTML digest from the briefing (server-side template, no caller input)."""
     date = escape(briefing.date)
     big_three = [s for s in briefing.stories if s.section == "big_three"]
@@ -167,17 +170,41 @@ def _digest_html(briefing) -> str:
         'border-top:1px solid #e5e2d8;padding-top:14px">'
         'Sent by WV Education News Desk, your statewide education research briefing. '
         'We never ask for passwords or payment details by email.</p>'
-        "</td></tr></table>"
+        + (
+            '<p style="font-family:Arial,sans-serif;font-size:12px;color:#999;margin-top:10px">'
+            'You are receiving this because you subscribed to the daily briefing. '
+            f'<a href="{unsubscribe_url}" style="color:#8a6a3b">Unsubscribe</a>.</p>'
+            if unsubscribe_url else ""
+        )
+        + "</td></tr></table>"
     )
 
 
 async def send_digest(briefing, recipients: List[str]) -> int:
-    """Send the daily digest to each recipient. Best-effort; returns how many succeeded."""
-    if not recipients:
-        return 0
+    """Send the daily digest — individually to each admin recipient AND each active public
+    subscriber. Individual sends (never a group To/CC) keep every address hidden from the
+    others, and each subscriber gets a personalized one-click unsubscribe link. Best-effort;
+    returns how many succeeded."""
     subject = f"WV Education News Desk — Daily Briefing, {briefing.date}"
-    html = _digest_html(briefing)
-    return await _fan_out(subject, html, recipients)
+    admin = list(recipients or [])
+    admin_set = {r.lower() for r in admin}
+
+    docs = await db.subscribers.find({"active": True}, {"_id": 0, "email": 1}).to_list(5000)
+    sub_emails = [
+        d["email"] for d in docs if d.get("email") and d["email"].lower() not in admin_set
+    ]
+
+    sent = 0
+    if admin:
+        sent += await _fan_out(subject, _digest_html(briefing), admin)
+    for email in sub_emails:
+        unsub = f"{APP_URL}/unsubscribe?email={quote(email)}&t={make_unsub_token(email)}"
+        try:
+            await _send_email(to=email, subject=subject, html=_digest_html(briefing, unsubscribe_url=unsub))
+            sent += 1
+        except Exception as exc:
+            logger.error("digest to subscriber %s failed: %s", email, exc)
+    return sent
 
 
 def _episode_html(episode) -> str:

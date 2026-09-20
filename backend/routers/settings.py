@@ -1,5 +1,7 @@
 """Desk configuration routes — recipients and watchlist terms. Mounted under /api."""
 
+from typing import List
+
 from fastapi import APIRouter, Depends, HTTPException
 
 from lib import email_digest
@@ -12,6 +14,7 @@ from models.config import (
     ScriptLengthUpdate,
     WatchTermCreate,
 )
+from models.subscriber import Subscriber
 from models.user import PasswordChange
 
 router = APIRouter(tags=["settings"])
@@ -109,8 +112,9 @@ async def change_password(body: PasswordChange, user=Depends(auth.get_current_us
 async def send_latest_digest(_edit=Depends(auth.require_editor)):
     """Send the most recent briefing to all configured recipients (server-side template)."""
     cfg = await _load()
-    if not cfg.recipients:
-        raise HTTPException(status_code=400, detail="No recipients configured")
+    sub_count = await db.subscribers.count_documents({"active": True})
+    if not cfg.recipients and sub_count == 0:
+        raise HTTPException(status_code=400, detail="No recipients or subscribers configured")
     doc = await db.briefings.find_one({}, sort=[("date", -1)])
     if not doc:
         raise HTTPException(status_code=404, detail="No briefing available to send")
@@ -121,3 +125,15 @@ async def send_latest_digest(_edit=Depends(auth.require_editor)):
     if sent == 0:
         raise HTTPException(status_code=502, detail="Email delivery failed — check configuration")
     return {"sent": sent, "recipients": len(cfg.recipients)}
+
+
+@router.get("/subscribers", response_model=List[Subscriber])
+async def list_subscribers():
+    docs = await db.subscribers.find({}, {"_id": 0}).sort("subscribed_at", -1).to_list(5000)
+    return [Subscriber(**d) for d in docs]
+
+
+@router.delete("/subscribers/{email}")
+async def remove_subscriber(email: str, _edit=Depends(auth.require_editor)):
+    await db.subscribers.delete_one({"email": email.lower().strip()})
+    return {"ok": True}

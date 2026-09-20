@@ -106,6 +106,12 @@ export interface CreatedUser {
   temp_password: string;
 }
 
+export interface Subscriber {
+  email: string;
+  active: boolean;
+  subscribed_at: string | null;
+}
+
 export interface EpisodeStory {
   story: string;
   location: string;

@@ -65,6 +65,19 @@ def verify_share_token(resource: str, token: str | None) -> bool:
     return hmac.compare_digest(make_share_token(resource), token)
 
 
+# ---- newsletter unsubscribe tokens -------------------------------------------
+
+def make_unsub_token(email: str) -> str:
+    """Per-subscriber one-click unsubscribe token (no DB storage needed — recomputed)."""
+    return _sign(f"unsub:{email.lower().strip()}")[:32]
+
+
+def verify_unsub_token(email: str, token: str | None) -> bool:
+    if not token:
+        return False
+    return hmac.compare_digest(make_unsub_token(email), token)
+
+
 # ---- password hashing (stdlib PBKDF2) ----------------------------------------
 
 def hash_password(password: str, salt: Optional[str] = None) -> str:

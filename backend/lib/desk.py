@@ -331,10 +331,11 @@ async def _send_digest_safe(briefing: Briefing) -> None:
 
         cfg = await db.desk_config.find_one({"key": "singleton"}, {"_id": 0})
         recipients = (cfg or {}).get("recipients") or []
-        if recipients:
-            _run_status.message = "Emailing the digest to subscribers…"
+        sub_count = await db.subscribers.count_documents({"active": True})
+        if recipients or sub_count:
+            _run_status.message = "Emailing the digest to recipients and subscribers…"
             sent = await email_digest.send_digest(briefing, recipients)
-            logger.info("digest emailed to %d/%d recipients", sent, len(recipients))
+            logger.info("digest emailed to %d recipients/subscribers", sent)
     except Exception:
         logger.exception("digest email step failed (non-fatal)")
 
