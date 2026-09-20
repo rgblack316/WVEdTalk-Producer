@@ -23,7 +23,8 @@ logger = logging.getLogger(__name__)
 # Managed email proxy — a CONSTANT, never read from env, so it survives deployment.
 EMAIL_BASE_URL = "https://integrations.emergentagent.com"
 EMAIL_KEY = os.environ.get("EMERGENT_EMAIL_KEY", "")
-EMAIL_FROM_NAME = os.environ.get("EMAIL_FROM_NAME", "WV Education News Desk")
+EMAIL_FROM_NAME = os.environ.get("EMAIL_FROM_NAME", "WVEdTalk News Desk")
+EMAIL_REPLY_TO = os.environ.get("EMAIL_REPLY_TO")  # maps to Reply-To (contact_email)
 APP_URL = os.environ.get("APP_URL", "https://mountain-school-news.preview.emergentagent.com").rstrip("/")
 
 _SHORTENERS = ("bit.ly", "tinyurl.com", "t.co", "is.gd", "cutt.ly", "goo.gl", "rebrand.ly")
@@ -106,6 +107,8 @@ async def _send_email(*, to: str, subject: str, html: str) -> Optional[str]:
     if not EMAIL_KEY:
         raise RuntimeError("EMERGENT_EMAIL_KEY is not configured")
     payload = {"to": [to], "subject": subject, "html": html, "from_name": EMAIL_FROM_NAME}
+    if EMAIL_REPLY_TO:
+        payload["contact_email"] = EMAIL_REPLY_TO
     async with httpx.AsyncClient(timeout=30) as client:
         resp = await client.post(
             f"{EMAIL_BASE_URL}/api/v1/email/send",
@@ -147,7 +150,7 @@ def _digest_html(briefing, unsubscribe_url: Optional[str] = None) -> str:
         '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
         'style="max-width:640px;margin:0 auto;background:#fbfaf5"><tr><td style="padding:28px 24px">'
         '<div style="font-family:Georgia,serif;font-size:24px;font-weight:bold;color:#1f3a2e">'
-        'WV Education News Desk</div>'
+        'WVEdTalk News Desk</div>'
         f'<div style="font-family:Arial,sans-serif;font-size:12px;letter-spacing:.14em;'
         f'text-transform:uppercase;color:#8a6a3b;margin-top:4px">Daily Briefing · {date}</div>'
         + (
@@ -168,7 +171,7 @@ def _digest_html(briefing, unsubscribe_url: Optional[str] = None) -> str:
         'Read the full briefing</a></p>'
         '<p style="font-family:Arial,sans-serif;font-size:12px;color:#999;margin-top:28px;'
         'border-top:1px solid #e5e2d8;padding-top:14px">'
-        'Sent by WV Education News Desk, your statewide education research briefing. '
+        'Sent by WVEdTalk News Desk, your statewide education research briefing. '
         'We never ask for passwords or payment details by email.</p>'
         + (
             '<p style="font-family:Arial,sans-serif;font-size:12px;color:#999;margin-top:10px">'
@@ -185,7 +188,7 @@ async def send_digest(briefing, recipients: List[str]) -> int:
     subscriber. Individual sends (never a group To/CC) keep every address hidden from the
     others, and each subscriber gets a personalized one-click unsubscribe link. Best-effort;
     returns how many succeeded."""
-    subject = f"WV Education News Desk — Daily Briefing, {briefing.date}"
+    subject = f"WVEdTalk News Desk — Daily Briefing, {briefing.date}"
     admin = list(recipients or [])
     admin_set = {r.lower() for r in admin}
 
@@ -246,7 +249,7 @@ def _episode_html(episode) -> str:
         'Open the full script</a></p>'
         '<p style="font-family:Arial,sans-serif;font-size:12px;color:#999;margin-top:28px;'
         'border-top:1px solid #e5e2d8;padding-top:14px">'
-        'Sent by WV Education News Desk for WVEdTalk. We never ask for passwords or payment details by email.</p>'
+        'Sent by WVEdTalk News Desk. We never ask for passwords or payment details by email.</p>'
         "</td></tr></table>"
     )
 

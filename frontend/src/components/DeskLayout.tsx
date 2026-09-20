@@ -85,7 +85,7 @@ export default function DeskLayout({ children }: { children: React.ReactNode }) 
           <div>
             <Link to="/" className="block" data-testid="desk-masthead-link">
               <h1 className="font-heading text-2xl leading-none font-bold tracking-tight md:text-3xl">
-                WV Education News Desk
+                WVEdTalk News Desk
               </h1>
             </Link>
             <p className="mt-1 text-xs tracking-[0.18em] text-muted-foreground uppercase">

@@ -24,7 +24,7 @@ export default function SharedBriefing() {
       <header className="border-b border-border bg-card/70 backdrop-blur">
         <div className="mx-auto max-w-6xl px-5 py-4">
           <h1 className="font-heading text-2xl leading-none font-bold tracking-tight md:text-3xl">
-            WV Education News Desk
+            WVEdTalk News Desk
           </h1>
           <p className="mt-1 text-xs tracking-[0.18em] text-muted-foreground uppercase">
             Shared briefing · West Virginia

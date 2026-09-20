@@ -53,7 +53,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
           <h1 className="font-heading text-3xl leading-tight font-bold tracking-tight">
-            WV Education News Desk
+            WVEdTalk News Desk
           </h1>
           <p className="mt-1 text-xs tracking-[0.18em] text-muted-foreground uppercase">
             Statewide research &amp; editorial briefing
