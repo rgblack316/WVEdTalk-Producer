@@ -89,6 +89,9 @@ android-sdk/
 .env
 .env.*
 *.env
+# ...but DO commit the example templates (real .env stays ignored above)
+!.env.example
+!**/.env.example
 credentials.json
 *.key
 .credentials
