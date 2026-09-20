@@ -229,6 +229,74 @@ def _extract_chapters(script: str) -> List[str]:
     return [m.group(1).strip() for m in re.finditer(r"(?m)^\s*##\s+(.+?)\s*$", script or "") if m.group(1).strip()]
 
 
+async def _chapterize_call(script: str) -> Dict[str, Any]:
+    """Ask the model to insert chapter headers into an EXISTING script without rewriting it."""
+    import os
+
+    from emergentintegrations.llm.chat import LlmChat, UserMessage
+
+    key = os.environ.get("EMERGENT_LLM_KEY", "")
+    if not key:
+        raise RuntimeError("EMERGENT_LLM_KEY is not configured")
+
+    system = (
+        "You format existing podcast scripts by inserting chapter headers. You never change, add, "
+        "remove, reword, or reorder any spoken words — you only insert '## Chapter Title' header "
+        "lines. Return only a single JSON object."
+    )
+    prompt = (
+        "Insert chapter headers into this WVEdTalk recording script so it can be navigated by "
+        "chapter, WITHOUT altering any spoken words.\n"
+        "Rules:\n"
+        "- Do NOT change, add, remove, reword, or reorder any existing text. Only insert header lines.\n"
+        "- Before each distinct story or segment, insert a line formatted EXACTLY as '## Chapter Title' "
+        "(a short, descriptive 3-7 word title suitable as a podcast chapter title).\n"
+        "- Use '## Introduction' for the opening and '## Closing' for the sign-off.\n"
+        "- Each header on its own line, with a blank line before and after it. Keep any header that already exists.\n\n"
+        'Return ONLY this JSON: {"recording_script": "the full script with ## headers, \\n\\n between paragraphs", '
+        '"chapters": ["ordered chapter titles without the ## prefix"]}\n\n'
+        "SCRIPT:\n" + script
+    )
+    chat = LlmChat(api_key=key, session_id="wvedtalk-chapterize", system_message=system).with_model(
+        MODEL_PROVIDER, MODEL_NAME
+    )
+    resp = await chat.send_message(UserMessage(text=prompt))
+    if isinstance(resp, str):
+        content = resp
+    else:
+        raw = getattr(resp, "content", resp)
+        content = raw if isinstance(raw, str) else str(raw or "")
+    return desk._parse_json(content)
+
+
+async def chapterize_episode(week_of: str) -> Dict[str, Any]:
+    """Backfill chapter headers on an already-produced episode. Raises ValueError('not_found'
+    / 'empty_script') for the router to translate into HTTP errors."""
+    doc = await db.episodes.find_one({"week_of": week_of})
+    if not doc:
+        raise ValueError("not_found")
+    script = str(doc.get("recording_script") or "").strip()
+    if not script:
+        raise ValueError("empty_script")
+
+    data = await _chapterize_call(script)
+    # Backfill must NOT add spoken content — only insert headers. Never prepend the intro here
+    # (that belongs to fresh production); use the model's returned script, or the original if empty.
+    new_script = str(data.get("recording_script") or "").strip() or script
+    chapters = [c.strip() for c in (data.get("chapters") or []) if isinstance(c, str) and c.strip()]
+    if not chapters:
+        chapters = _extract_chapters(new_script)
+
+    await db.episodes.update_one(
+        {"week_of": week_of},
+        {"$set": {"recording_script": new_script, "chapters": chapters}},
+    )
+    doc["recording_script"] = new_script
+    doc["chapters"] = chapters
+    doc.pop("_id", None)
+    return doc
+
+
 async def produce_episode(week_of: Optional[str] = None) -> WeeklyEpisode:
     week_of = week_of or current_week_of()
     week_end_dt = datetime.strptime(week_of, "%Y-%m-%d")

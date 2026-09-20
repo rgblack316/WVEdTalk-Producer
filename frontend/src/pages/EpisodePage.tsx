@@ -1,13 +1,14 @@
 import { useParams, Link } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ArrowLeft, Copy, Download, ExternalLink, Clock } from "lucide-react";
+import { ArrowLeft, Copy, Download, ExternalLink, Clock, Loader2, ListTree } from "lucide-react";
 import DeskLayout from "@/components/DeskLayout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScoreChip } from "@/components/StoryCard";
 import { ScriptView } from "@/components/ScriptView";
-import { apiGet, ApiError } from "@/lib/api";
+import { apiGet, apiPost, ApiError } from "@/lib/api";
+import { useAuth } from "@/lib/useAuth";
 import { episodeToMarkdown } from "@/lib/episode";
 import type { WeeklyEpisode } from "@/lib/types";
 
@@ -47,10 +48,22 @@ function StoryTimer({ minutes }: { minutes: number | null }) {
 
 export default function EpisodePage() {
   const { week = "" } = useParams();
+  const qc = useQueryClient();
+  const { canEdit } = useAuth();
   const { data: episode, isLoading, error } = useQuery({
     queryKey: ["episode", week],
     queryFn: () => apiGet<WeeklyEpisode>(`/episodes/${week}`),
     retry: false,
+  });
+
+  const chapterize = useMutation({
+    mutationFn: () => apiPost<WeeklyEpisode>(`/episodes/${week}/chapterize`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["episode", week] });
+      toast.success("Chapter headers added");
+    },
+    onError: (e) =>
+      toast.error(e instanceof ApiError ? String((e.body as { detail?: string })?.detail ?? e.message) : String(e)),
   });
 
   const copyScript = async () => {
@@ -198,7 +211,21 @@ export default function EpisodePage() {
           )}
 
           <section className="mb-10">
-            <SectionHeading>Recording Script</SectionHeading>
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-2 border-b-2 border-foreground/80 pb-1">
+              <h2 className="font-heading text-xl font-bold tracking-tight">Recording Script</h2>
+              {canEdit && (!episode.chapters || episode.chapters.length === 0) && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={chapterize.isPending}
+                  onClick={() => chapterize.mutate()}
+                  data-testid="chapterize-button"
+                >
+                  {chapterize.isPending ? <Loader2 className="size-4 animate-spin" /> : <ListTree className="size-4" />}
+                  {chapterize.isPending ? "Adding chapters…" : "Add chapter headers"}
+                </Button>
+              )}
+            </div>
             <ScriptView script={episode.recording_script} chapters={episode.chapters} />
           </section>
         </div>

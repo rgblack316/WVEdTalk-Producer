@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
-import { Loader2, Mic, Copy, Download, ExternalLink, Clock, Mail } from "lucide-react";
+import { Loader2, Mic, Copy, Download, ExternalLink, Clock, Mail, ListTree } from "lucide-react";
 import DeskLayout from "@/components/DeskLayout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -84,6 +84,18 @@ export default function Episodes() {
   const emailEpisode = useMutation({
     mutationFn: () => apiPost<{ sent: number }>("/episodes/send"),
     onSuccess: (r) => toast.success(`Episode emailed to ${r.sent} recipient${r.sent === 1 ? "" : "s"}`),
+    onError: (e) => {
+      const msg = e instanceof ApiError ? String((e.body as { detail?: string })?.detail ?? e.message) : String(e);
+      toast.error(msg);
+    },
+  });
+
+  const chapterize = useMutation({
+    mutationFn: () => apiPost<WeeklyEpisode>(`/episodes/${episode?.week_of}/chapterize`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["episode", "latest"] });
+      toast.success("Chapter headers added");
+    },
     onError: (e) => {
       const msg = e instanceof ApiError ? String((e.body as { detail?: string })?.detail ?? e.message) : String(e);
       toast.error(msg);
@@ -292,7 +304,21 @@ export default function Episodes() {
           )}
 
           <section className="mb-10" data-testid="episode-script">
-            <SectionHeading>Recording Script</SectionHeading>
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-2 border-b-2 border-foreground/80 pb-1">
+              <h2 className="font-heading text-xl font-bold tracking-tight">Recording Script</h2>
+              {canEdit && (!episode.chapters || episode.chapters.length === 0) && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={chapterize.isPending}
+                  onClick={() => chapterize.mutate()}
+                  data-testid="chapterize-button"
+                >
+                  {chapterize.isPending ? <Loader2 className="size-4 animate-spin" /> : <ListTree className="size-4" />}
+                  {chapterize.isPending ? "Adding chapters…" : "Add chapter headers"}
+                </Button>
+              )}
+            </div>
             <ScriptView script={episode.recording_script} chapters={episode.chapters} />
           </section>
 

@@ -84,6 +84,20 @@ async def email_latest_episode(_edit=Depends(require_editor)):
     return {"sent": sent, "recipients": len(recipients)}
 
 
+@router.post("/episodes/{week_of}/chapterize", response_model=WeeklyEpisode)
+async def chapterize(week_of: str, _edit=Depends(require_editor)):
+    """Backfill chapter headers on an existing episode (inserts headers without rewriting)."""
+    try:
+        doc = await producer.chapterize_episode(week_of)
+    except ValueError as exc:
+        if str(exc) == "not_found":
+            raise HTTPException(status_code=404, detail=f"No episode for week of {week_of}")
+        raise HTTPException(status_code=400, detail="This episode has no script to chapterize")
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Could not add chapters: {exc}")
+    return WeeklyEpisode(**doc)
+
+
 @router.get("/episodes/{week_of}", response_model=WeeklyEpisode)
 async def get_episode(week_of: str):
     doc = await db.episodes.find_one({"week_of": week_of})

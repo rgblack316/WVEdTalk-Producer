@@ -151,6 +151,12 @@ None seeded. First real briefing generated for 2026-09-18. Demo watch terms ("co
   omits the array). Frontend `components/ScriptView.tsx` renders `## ` lines as styled chapter
   headings + a numbered "Chapters" list (Episodes + EpisodePage); markdown export lists a CHAPTERS
   section. These double as podcast chapter titles.
+- **Backfill chapters** (older episodes): `POST /api/episodes/{week_of}/chapterize` (editor-guarded,
+  `producer.chapterize_episode`) runs a lightweight no-web-search LLM pass that inserts `## ` headers
+  into the EXISTING script without rewriting/adding spoken content (does NOT call `_ensure_intro`, so
+  no intro duplication), then stores recording_script + chapters. Frontend shows a one-click
+  "Add chapter headers" button on the Recording Script section (Episodes + EpisodePage) only when
+  `canEdit` and the episode has no chapters yet.
 - **Scheduler**: `lib/producer.scheduler_loop` fires Friday >=14:00 ET if no episode for the week.
 - **Endpoints**: GET /api/episodes, /api/episodes/latest, /api/episodes/{week_of},
   GET /api/produce-status, POST /api/produce (background trigger, 409 if running).
