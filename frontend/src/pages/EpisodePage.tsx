@@ -6,6 +6,7 @@ import DeskLayout from "@/components/DeskLayout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScoreChip } from "@/components/StoryCard";
+import { ScriptView } from "@/components/ScriptView";
 import { apiGet, ApiError } from "@/lib/api";
 import { episodeToMarkdown } from "@/lib/episode";
 import type { WeeklyEpisode } from "@/lib/types";
@@ -198,11 +199,7 @@ export default function EpisodePage() {
 
           <section className="mb-10">
             <SectionHeading>Recording Script</SectionHeading>
-            <div className="rounded-md border border-border bg-card p-6">
-              <pre className="font-sans text-[15px] leading-7 whitespace-pre-wrap text-foreground/90">
-                {episode.recording_script}
-              </pre>
-            </div>
+            <ScriptView script={episode.recording_script} chapters={episode.chapters} />
           </section>
         </div>
       ) : (

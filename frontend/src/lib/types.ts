@@ -151,6 +151,7 @@ export interface WeeklyEpisode {
   not_selected: NotSelectedStory[];
   look_ahead: LookAheadItem[];
   recording_script: string;
+  chapters: string[];
   source_log: SourceLink[];
   error: string;
 }

@@ -46,6 +46,12 @@ export function episodeToMarkdown(e: WeeklyEpisode): string {
     L.push(``);
   }
 
+  if (e.chapters && e.chapters.length) {
+    L.push(`## CHAPTERS`, ``);
+    e.chapters.forEach((c, i) => L.push(`${i + 1}. ${c}`));
+    L.push(``);
+  }
+
   L.push(`## RECORDING SCRIPT`, ``, e.recording_script, ``);
 
   if (e.source_log.length) {

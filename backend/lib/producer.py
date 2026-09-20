@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import re
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
@@ -72,7 +73,7 @@ DUPLICATES: multiple articles on one event are one story; consolidate; use the s
 
 EDITORIAL THEMES: find legitimate, evidence-supported connections among the week's stories (student safety, teacher workforce, funding, enrollment, closures, rural education, school choice, technology, AI, workforce development, mental health, special education, economic development, access, higher ed, state policy). Do not manufacture connections.
 
-RECORDING SCRIPT: write a polished, conversational script for a 15-20 minute episode, roughly 2,200-3,000 spoken words, but do not force a word count; substance and natural pacing matter more. It should sound like an experienced host speaking, not reading an article. Use natural transitions, conversational language, clear explanations, context, logical progression, moderate sentence lengths and spoken rhythm. Avoid sensationalism, repetition, loaded language, jargon, artificial transitions and repetitive briefing summaries. Write for audio: shorter paragraphs, explanations that make sense heard once. Do not include long URLs in the script; use brief spoken references like "According to the West Virginia Department of Education" or "West Virginia Public Broadcasting reported". Full links belong in the producer notes.
+RECORDING SCRIPT: write a polished, conversational script for a 15-20 minute episode, roughly 2,200-3,000 spoken words, but do not force a word count; substance and natural pacing matter more. It should sound like an experienced host speaking, not reading an article. Use natural transitions, conversational language, clear explanations, context, logical progression, moderate sentence lengths and spoken rhythm. Avoid sensationalism, repetition, loaded language, jargon, artificial transitions and repetitive briefing summaries. Write for audio: shorter paragraphs, explanations that make sense heard once. Do not include long URLs in the script; use brief spoken references like "According to the West Virginia Department of Education" or "West Virginia Public Broadcasting reported". Full links belong in the producer notes. CHAPTER HEADERS: divide the script into clearly titled chapters that can be used as podcast chapter markers. Begin the opening with a line "## Introduction"; begin each distinct story or segment with its own header line formatted EXACTLY as "## Chapter Title" (a short, descriptive 3-7 word title suitable as a podcast chapter title); and begin the sign-off with "## Closing". Put every header on its own line with a blank line before and after it, and never use "##" anywhere except for these chapter headers.
 
 The recording script MUST begin with the opening show identification, then IMMEDIATELY reproduce this host introduction VERBATIM (do not paraphrase, shorten, reorder, rewrite, substitute or omit any part):
 "__REQUIRED_INTRO__"
@@ -102,7 +103,8 @@ OUTPUT: respond with a SINGLE valid JSON object and nothing else (no markdown fe
     {"story": "", "location": "", "why_considered": "", "why_not_selected": ""}
   ],
   "look_ahead": [{"label": "upcoming event genuinely relevant to WV education", "date": "YYYY-MM-DD or descriptive"}],
-  "recording_script": "the full spoken script as one string, beginning with the show identification and the verbatim Randy Black introduction, using \\n\\n between paragraphs",
+  "recording_script": "the full spoken script as one string, beginning with the show identification and the verbatim Randy Black introduction, with a \\"## Chapter Title\\" header line before each story segment (and \\"## Introduction\\"/\\"## Closing\\" for the open and close), using \\n\\n between paragraphs",
+  "chapters": ["the ordered chapter titles, matching the ## headers in recording_script exactly but WITHOUT the ## prefix"],
   "source_log": [{"title": "", "url": "https://...", "outlet": ""}]
 }
 The "not_selected" array (STORIES CONSIDERED BUT NOT SELECTED) is REQUIRED and must include notable alternatives seriously considered but excluded, and stories that were prominent early but faded, forming an editorial audit trail. Every URL must be a real page you actually consulted this run. Apply the quality-control tests before answering, especially: would these still be the top stories if WVU and Marshall had published nothing this week; did K-12 and local education get appropriate weight; did you independently reassess the full week rather than lifting from daily briefings; and does the script open with Randy Black's exact required introduction.""".replace(
@@ -218,8 +220,13 @@ def _ensure_intro(script: str) -> str:
     """Guarantee the verbatim Randy Black introduction opens the script."""
     if REQUIRED_INTRO in (script or ""):
         return script
-    opener = f"Welcome to WVEdTalk, West Virginia's weekly education-news podcast.\n\n{REQUIRED_INTRO}\n\n"
+    opener = f"## Introduction\n\nWelcome to WVEdTalk, West Virginia's weekly education-news podcast.\n\n{REQUIRED_INTRO}\n\n"
     return opener + (script or "")
+
+
+def _extract_chapters(script: str) -> List[str]:
+    """Fallback: pull chapter titles from the '## ' header lines in the script."""
+    return [m.group(1).strip() for m in re.finditer(r"(?m)^\s*##\s+(.+?)\s*$", script or "") if m.group(1).strip()]
 
 
 async def produce_episode(week_of: Optional[str] = None) -> WeeklyEpisode:
@@ -277,6 +284,11 @@ async def produce_episode(week_of: Optional[str] = None) -> WeeklyEpisode:
                     source_log.append(SourceLink(url=c["url"], outlet=c.get("title", "")).model_dump())
                     have.add(c["url"])
 
+            final_script = _ensure_intro(str(data.get("recording_script") or ""))
+            chapters = [c.strip() for c in (data.get("chapters") or []) if isinstance(c, str) and c.strip()]
+            if not chapters:
+                chapters = _extract_chapters(final_script)
+
             episode = WeeklyEpisode(
                 week_of=week_of,
                 week_start=week_start,
@@ -286,7 +298,8 @@ async def produce_episode(week_of: Optional[str] = None) -> WeeklyEpisode:
                 selected_stories=selected,
                 not_selected=not_selected,
                 look_ahead=look_ahead,
-                recording_script=_ensure_intro(str(data.get("recording_script") or "")),
+                recording_script=final_script,
+                chapters=chapters,
                 source_log=source_log,
             )
 

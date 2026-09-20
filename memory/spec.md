@@ -145,6 +145,12 @@ None seeded. First real briefing generated for 2026-09-18. Demo watch terms ("co
   not_selected[NotSelectedStory], look_ahead[LookAheadItem], recording_script (str), source_log[]}.
 - **Verbatim intro**: `REQUIRED_INTRO` (Randy Black) is enforced — `_ensure_intro()` prepends the
   show ID + exact intro if the model omitted it. Sources resolved via `desk.resolve_links()`.
+- **Chapter headers**: the producer emits a `## Chapter Title` header line before each story segment
+  (plus `## Introduction`/`## Closing`) in `recording_script`, and returns the ordered titles in a
+  `chapters: List[str]` field (fallback `_extract_chapters()` parses the `## ` lines if the model
+  omits the array). Frontend `components/ScriptView.tsx` renders `## ` lines as styled chapter
+  headings + a numbered "Chapters" list (Episodes + EpisodePage); markdown export lists a CHAPTERS
+  section. These double as podcast chapter titles.
 - **Scheduler**: `lib/producer.scheduler_loop` fires Friday >=14:00 ET if no episode for the week.
 - **Endpoints**: GET /api/episodes, /api/episodes/latest, /api/episodes/{week_of},
   GET /api/produce-status, POST /api/produce (background trigger, 409 if running).
