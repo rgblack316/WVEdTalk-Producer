@@ -39,7 +39,10 @@ export default function Settings() {
   const { data: subscribers } = useQuery({
     queryKey: ["subscribers"],
     queryFn: () => apiGet<Subscriber[]>("/subscribers"),
+    refetchInterval: 30000,
+    refetchOnWindowFocus: true,
   });
+  const activeSubscribers = subscribers?.filter((s) => s.active).length ?? 0;
 
   const removeSubscriber = useMutation({
     mutationFn: (e: string) => apiDelete<{ ok: boolean }>(`/subscribers/${encodeURIComponent(e)}`),
@@ -441,6 +444,9 @@ export default function Settings() {
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h3 className="flex items-center gap-2 font-heading text-lg font-bold">
                 <Users className="size-4 text-primary" /> Public subscribers
+                <Badge variant="secondary" data-testid="active-subscriber-count">
+                  {activeSubscribers} active
+                </Badge>
               </h3>
               {canEdit && (
                 <Button
