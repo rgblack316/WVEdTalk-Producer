@@ -2,6 +2,8 @@ import type { WeeklyEpisode } from "@/lib/types";
 
 export function episodeToMarkdown(e: WeeklyEpisode): string {
   const L: string[] = [];
+  const logo = typeof window !== "undefined" ? `${window.location.origin}/wvedtalk-logo.png` : "/wvedtalk-logo.png";
+  L.push(`![WVEdTalk](${logo})`, ``);
   L.push(`# WVEdTalk — Weekly Episode`, ``, `**Week of ${e.week_start} – ${e.week_end}**`, ``, `---`, ``);
 
   L.push(`## WEEKLY RESEARCH PRODUCER NOTES`, ``);

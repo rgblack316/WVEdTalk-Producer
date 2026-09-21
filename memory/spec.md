@@ -40,9 +40,17 @@ story can be flagged as a podcast episode candidate with free-text prep notes.
 
 ## Branding
 - Logo: `frontend/public/wvedtalk-logo.png` (WVEDTALK WV license-plate art, ~700×700, optimized).
-  Displayed on the header masthead (DeskLayout, links home), the login screen (AuthGate), and the
-  public Subscribe / Unsubscribe / SharedBriefing pages. Favicons (`favicon.ico`, 16/32, apple-touch)
-  regenerated from the logo; `index.html` no longer references the old favicon.svg.
+  Shown on the header masthead (links home), login, and public Subscribe/Unsubscribe/SharedBriefing.
+  Favicons regenerated from the logo.
+- **Brand palette** (index.css): primary = navy `oklch(0.35 0.13 264)` / dark `0.7 0.12 262`;
+  accent = gold `oklch(0.62 0.14 74)` / dark `0.78 0.14 80`; accent-foreground navy for gold buttons.
+  ring/chart-1 = navy, chart-2 = gold.
+- **Email branding**: `email_digest.py` embeds the logo (`{APP_URL}/wvedtalk-logo.png`) atop both the
+  daily digest and weekly episode emails; email hexes swapped to navy `#16305e` + gold `#a67c00`/`#c8971b`.
+- **Markdown exports**: `regions.briefingToMarkdown` and `episode.episodeToMarkdown` prepend a
+  `![logo](origin/wvedtalk-logo.png)` header.
+- **Open Graph / Twitter**: `index.html` has og:/twitter: title, description, and image (logo) tags for
+  link previews (absolute URL uses the current public host).
 
 ## Auth (multi-user)
 Email + password accounts with three roles: **admin** (all features + user management),

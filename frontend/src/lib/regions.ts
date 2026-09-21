@@ -88,6 +88,8 @@ const ORDER = ["big_three", "other", "developing", "state_policy", "k12", "highe
 
 export function briefingToMarkdown(b: Briefing): string {
   const L: string[] = [];
+  const logo = typeof window !== "undefined" ? `${window.location.origin}/wvedtalk-logo.png` : "/wvedtalk-logo.png";
+  L.push(`![WVEdTalk News Desk](${logo})`, ``);
   L.push(`# WV EDUCATION NEWS DESK`, ``, `**Daily Briefing — ${fmtDate(b.date)}**`, ``);
   if (b.editor_note) L.push(`> ${b.editor_note}`, ``);
   L.push(`---`, ``);

@@ -131,9 +131,9 @@ def _digest_html(briefing, unsubscribe_url: Optional[str] = None) -> str:
         imp = f" · Importance {s.importance}/10" if s.importance is not None else ""
         rows.append(
             f'<tr><td style="padding:12px 0;border-bottom:1px solid #e5e2d8;font-family:Georgia,serif">'
-            f'<div style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#8a6a3b">'
+            f'<div style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#a67c00">'
             f'{loc}{imp}</div>'
-            f'<div style="font-size:18px;font-weight:bold;color:#1f3a2e;margin-top:2px">{escape(s.headline)}</div>'
+            f'<div style="font-size:18px;font-weight:bold;color:#16305e;margin-top:2px">{escape(s.headline)}</div>'
             f'<div style="font-family:Arial,sans-serif;font-size:14px;color:#444;margin-top:6px;line-height:1.5">'
             f'{escape(s.what_happened)}</div></td></tr>'
         )
@@ -149,24 +149,25 @@ def _digest_html(briefing, unsubscribe_url: Optional[str] = None) -> str:
     return (
         '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
         'style="max-width:640px;margin:0 auto;background:#fbfaf5"><tr><td style="padding:28px 24px">'
-        '<div style="font-family:Georgia,serif;font-size:24px;font-weight:bold;color:#1f3a2e">'
+        f'<div style="text-align:center;margin-bottom:18px"><img src="{APP_URL}/wvedtalk-logo.png" alt="WVEdTalk News Desk" width="150" style="width:150px;height:auto;display:inline-block"/></div>'
+        '<div style="font-family:Georgia,serif;font-size:24px;font-weight:bold;color:#16305e">'
         'WVEdTalk News Desk</div>'
         f'<div style="font-family:Arial,sans-serif;font-size:12px;letter-spacing:.14em;'
-        f'text-transform:uppercase;color:#8a6a3b;margin-top:4px">Daily Briefing · {date}</div>'
+        f'text-transform:uppercase;color:#a67c00;margin-top:4px">Daily Briefing · {date}</div>'
         + (
             f'<p style="font-family:Arial,sans-serif;font-size:14px;color:#555;line-height:1.6;'
-            f'border-left:3px solid #b5652e;padding-left:12px;margin-top:16px">{note}</p>'
+            f'border-left:3px solid #c8971b;padding-left:12px;margin-top:16px">{note}</p>'
             if note else ""
         )
-        + '<div style="font-family:Georgia,serif;font-size:16px;font-weight:bold;color:#1f3a2e;'
-        'margin:24px 0 4px;border-bottom:2px solid #1f3a2e;padding-bottom:4px">The Big Three</div>'
+        + '<div style="font-family:Georgia,serif;font-size:16px;font-weight:bold;color:#16305e;'
+        'margin:24px 0 4px;border-bottom:2px solid #16305e;padding-bottom:4px">The Big Three</div>'
         '<table role="presentation" width="100%" cellpadding="0" cellspacing="0">'
         + "".join(rows)
         + "</table>"
         + f'<p style="font-family:Arial,sans-serif;font-size:13px;color:#666;margin-top:20px">'
         f'Plus {other} more stories across K-12, higher education, state policy and developing coverage.</p>'
         f'<p style="margin-top:20px"><a href="{url}" '
-        'style="display:inline-block;background:#1f3a2e;color:#fff;text-decoration:none;'
+        'style="display:inline-block;background:#16305e;color:#fff;text-decoration:none;'
         'font-family:Arial,sans-serif;font-size:14px;padding:11px 20px;border-radius:4px">'
         'Read the full briefing</a></p>'
         '<p style="font-family:Arial,sans-serif;font-size:12px;color:#999;margin-top:28px;'
@@ -176,7 +177,7 @@ def _digest_html(briefing, unsubscribe_url: Optional[str] = None) -> str:
         + (
             '<p style="font-family:Arial,sans-serif;font-size:12px;color:#999;margin-top:10px">'
             'You are receiving this because you subscribed to the daily briefing. '
-            f'<a href="{unsubscribe_url}" style="color:#8a6a3b">Unsubscribe</a>.</p>'
+            f'<a href="{unsubscribe_url}" style="color:#a67c00">Unsubscribe</a>.</p>'
             if unsubscribe_url else ""
         )
         + "</td></tr></table>"
@@ -218,9 +219,9 @@ def _episode_html(episode) -> str:
 
     items = []
     for s in episode.selected_stories:
-        loc = f' <span style="color:#8a6a3b">· {escape(s.location)}</span>' if s.location else ""
+        loc = f' <span style="color:#a67c00">· {escape(s.location)}</span>' if s.location else ""
         items.append(
-            f'<li style="font-family:Georgia,serif;font-size:16px;color:#1f3a2e;margin:8px 0">'
+            f'<li style="font-family:Georgia,serif;font-size:16px;color:#16305e;margin:8px 0">'
             f'{escape(s.story)}{loc}</li>'
         )
     words = len((episode.recording_script or "").split())
@@ -229,22 +230,23 @@ def _episode_html(episode) -> str:
     return (
         '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
         'style="max-width:640px;margin:0 auto;background:#fbfaf5"><tr><td style="padding:28px 24px">'
-        '<div style="font-family:Georgia,serif;font-size:24px;font-weight:bold;color:#1f3a2e">'
+        f'<div style="text-align:center;margin-bottom:18px"><img src="{APP_URL}/wvedtalk-logo.png" alt="WVEdTalk News Desk" width="150" style="width:150px;height:auto;display:inline-block"/></div>'
+        '<div style="font-family:Georgia,serif;font-size:24px;font-weight:bold;color:#16305e">'
         'WVEdTalk — Weekly Episode Script</div>'
         f'<div style="font-family:Arial,sans-serif;font-size:12px;letter-spacing:.14em;'
-        f'text-transform:uppercase;color:#8a6a3b;margin-top:4px">Week of {span}</div>'
+        f'text-transform:uppercase;color:#a67c00;margin-top:4px">Week of {span}</div>'
         + (
             f'<p style="font-family:Arial,sans-serif;font-size:14px;color:#555;line-height:1.6;'
-            f'border-left:3px solid #b5652e;padding-left:12px;margin-top:16px">{summary}</p>'
+            f'border-left:3px solid #c8971b;padding-left:12px;margin-top:16px">{summary}</p>'
             if summary else ""
         )
-        + '<div style="font-family:Georgia,serif;font-size:16px;font-weight:bold;color:#1f3a2e;'
-        'margin:22px 0 4px;border-bottom:2px solid #1f3a2e;padding-bottom:4px">This week\u2019s stories</div>'
+        + '<div style="font-family:Georgia,serif;font-size:16px;font-weight:bold;color:#16305e;'
+        'margin:22px 0 4px;border-bottom:2px solid #16305e;padding-bottom:4px">This week\u2019s stories</div>'
         f'<ul style="padding-left:20px;margin:8px 0">{"".join(items)}</ul>'
         f'<p style="font-family:Arial,sans-serif;font-size:13px;color:#666">'
         f'Recording script: ~{words} words · about {minutes} minutes of audio.</p>'
         f'<p style="margin-top:20px"><a href="{url}" '
-        'style="display:inline-block;background:#1f3a2e;color:#fff;text-decoration:none;'
+        'style="display:inline-block;background:#16305e;color:#fff;text-decoration:none;'
         'font-family:Arial,sans-serif;font-size:14px;padding:11px 20px;border-radius:4px">'
         'Open the full script</a></p>'
         '<p style="font-family:Arial,sans-serif;font-size:12px;color:#999;margin-top:28px;'
