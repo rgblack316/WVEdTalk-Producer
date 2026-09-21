@@ -190,7 +190,8 @@ None seeded. First real briefing generated for 2026-09-18. Demo watch terms ("co
   (past episode detail). Nav item "Weekly Script".
 
 ## Configurable schedule + run history (admin)
-- **Schedule** lives in the `desk_config` singleton (ET, the desk's home timezone, fixed -5, no DST):
+- **Schedule** lives in the `desk_config` singleton (times are U.S. Eastern via a DST-aware
+  `ZoneInfo("America/New_York")` anchor — automatically correct in EST or EDT):
   `daily_hour/daily_minute` (default 22:00) and `weekly_dow`/`weekly_hour`/`weekly_minute` (default
   Fri 16:00, dow 0=Mon..6=Sun). Set via `POST /api/settings/schedule` (**admin-guarded**,
   `require_admin`). Both schedulers read it through `desk.load_schedule()` (single source of truth):

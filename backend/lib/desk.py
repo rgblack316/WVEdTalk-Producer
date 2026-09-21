@@ -8,6 +8,7 @@ import re
 import urllib.parse
 import uuid
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 from typing import Any, Dict, List, Optional
 
 from lib.db import db
@@ -15,7 +16,7 @@ from models.briefing import Briefing, RunStatus, SourceLink, Story
 
 logger = logging.getLogger(__name__)
 
-EASTERN = timezone(timedelta(hours=-5))  # pod clock is UTC; ET anchor for the daily edition
+EASTERN = ZoneInfo("America/New_York")  # DST-aware ET anchor (handles EST/EDT automatically)
 MODEL_PROVIDER = "gemini"
 MODEL_NAME = "gemini-3.1-pro-preview"
 SCHEDULE_HOUR_ET = 22
