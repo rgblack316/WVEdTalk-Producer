@@ -6,11 +6,15 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from lib import email_digest
 from lib import auth
+from lib import desk
 from lib.db import db
 from models.config import (
     AutoLockUpdate,
     DeskConfig,
+    NextRuns,
     RecipientCreate,
+    RunLogEntry,
+    ScheduleUpdate,
     ScriptLengthUpdate,
     WatchTermCreate,
 )
@@ -94,6 +98,33 @@ async def set_auto_lock(body: AutoLockUpdate, _edit=Depends(auth.require_editor)
     cfg.auto_lock_minutes = body.minutes
     await _save(cfg)
     return cfg
+
+
+@router.post("/settings/schedule", response_model=DeskConfig)
+async def set_schedule(body: ScheduleUpdate, _admin=Depends(auth.require_admin)):
+    if not (0 <= body.daily_hour <= 23 and 0 <= body.daily_minute <= 59):
+        raise HTTPException(status_code=422, detail="Daily time is out of range")
+    if not (0 <= body.weekly_dow <= 6 and 0 <= body.weekly_hour <= 23 and 0 <= body.weekly_minute <= 59):
+        raise HTTPException(status_code=422, detail="Weekly day/time is out of range")
+    cfg = await _load()
+    cfg.daily_hour = body.daily_hour
+    cfg.daily_minute = body.daily_minute
+    cfg.weekly_dow = body.weekly_dow
+    cfg.weekly_hour = body.weekly_hour
+    cfg.weekly_minute = body.weekly_minute
+    await _save(cfg)
+    return cfg
+
+
+@router.get("/schedule/next", response_model=NextRuns)
+async def schedule_next():
+    return await desk.next_runs()
+
+
+@router.get("/run-log", response_model=List[RunLogEntry])
+async def run_log():
+    docs = await db.run_log.find({}, {"_id": 0}).sort("finished_at", -1).to_list(20)
+    return [RunLogEntry(**d) for d in docs]
 
 
 @router.post("/settings/password")

@@ -3,7 +3,7 @@
 import asyncio
 import logging
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from lib import desk
@@ -45,6 +45,16 @@ def current_week_of() -> str:
     delta = (now.weekday() - SCHEDULE_DOW_ET) % 7
     friday = now - timedelta(days=delta)
     return friday.strftime("%Y-%m-%d")
+
+
+async def resolve_week_of() -> str:
+    """Anchor date (the admin-configured weekly run day) of the current ET week. Used so a
+    manual or scheduled production keys the episode to the right week even if the run day changed."""
+    s = await desk.load_schedule()
+    now = datetime.now(desk.EASTERN)
+    delta = (now.weekday() - s["weekly_dow"]) % 7
+    anchor = now - timedelta(days=delta)
+    return anchor.strftime("%Y-%m-%d")
 
 
 PRODUCER_BRIEF = """WVEdTalk WEEKLY PODCAST PRODUCER
@@ -297,8 +307,8 @@ async def chapterize_episode(week_of: str) -> Dict[str, Any]:
     return doc
 
 
-async def produce_episode(week_of: Optional[str] = None) -> WeeklyEpisode:
-    week_of = week_of or current_week_of()
+async def produce_episode(week_of: Optional[str] = None, trigger: str = "manual") -> WeeklyEpisode:
+    week_of = week_of or await resolve_week_of()
     week_end_dt = datetime.strptime(week_of, "%Y-%m-%d")
     week_start = (week_end_dt - timedelta(days=6)).strftime("%Y-%m-%d")
     week_end = week_of
@@ -310,6 +320,8 @@ async def produce_episode(week_of: Optional[str] = None) -> WeeklyEpisode:
         _status.finished_at = None
         _status.message = "Reviewing the week and researching WV education news for WVEdTalk…"
         _status.last_error = ""
+        run_ok = False
+        started = datetime.now(timezone.utc)
         try:
             briefings = (
                 await db.briefings.find(
@@ -379,6 +391,7 @@ async def produce_episode(week_of: Optional[str] = None) -> WeeklyEpisode:
 
             await db.episodes.replace_one({"week_of": week_of}, episode.model_dump(), upsert=True)
             _status.message = f"WVEdTalk episode for week of {week_of} is ready ({len(selected)} stories)."
+            run_ok = True
             await _email_episode_safe(episode)
             return episode
         except Exception as exc:
@@ -389,6 +402,13 @@ async def produce_episode(week_of: Optional[str] = None) -> WeeklyEpisode:
         finally:
             _status.running = False
             _status.finished_at = datetime.utcnow()
+            await desk.record_run(
+                kind="weekly", trigger=trigger,
+                status="complete" if run_ok else "failed",
+                label=week_of,
+                detail=_status.message if run_ok else _status.last_error,
+                started_at=started,
+            )
 
 
 async def _email_episode_safe(episode: WeeklyEpisode) -> None:
@@ -408,13 +428,18 @@ async def _email_episode_safe(episode: WeeklyEpisode) -> None:
 
 async def _maybe_produce_weekly() -> None:
     now = datetime.now(desk.EASTERN)
-    if now.weekday() != SCHEDULE_DOW_ET or now.hour < SCHEDULE_HOUR_ET or _status.running:
+    if _status.running:
         return
-    week_of = current_week_of()
+    s = await desk.load_schedule()
+    if now.weekday() != s["weekly_dow"]:
+        return
+    if (now.hour * 60 + now.minute) < (s["weekly_hour"] * 60 + s["weekly_minute"]):
+        return
+    week_of = await resolve_week_of()
     if await db.episodes.find_one({"week_of": week_of, "status": "complete"}):
         return
     logger.info("weekly scheduler: producing WVEdTalk episode for %s", week_of)
-    await produce_episode(week_of)
+    await produce_episode(week_of, trigger="scheduled")
 
 
 async def scheduler_loop() -> None:

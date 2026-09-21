@@ -6,6 +6,7 @@ import logging
 import os
 import re
 import urllib.parse
+import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
@@ -21,6 +22,58 @@ SCHEDULE_HOUR_ET = 22
 
 _run_status = RunStatus()
 _run_lock = asyncio.Lock()
+
+SCHEDULE_DEFAULTS = {
+    "daily_hour": 22, "daily_minute": 0,
+    "weekly_dow": 4, "weekly_hour": 16, "weekly_minute": 0,
+}
+
+
+async def load_schedule() -> Dict[str, int]:
+    """Admin-configured run times (ET), falling back to defaults. One source of truth shared by
+    both schedulers and the header 'next run' indicator."""
+    doc = await db.desk_config.find_one({"key": "singleton"}, {"_id": 0}) or {}
+    out: Dict[str, int] = {}
+    for k, v in SCHEDULE_DEFAULTS.items():
+        try:
+            out[k] = int(doc.get(k, v))
+        except (TypeError, ValueError):
+            out[k] = v
+    return out
+
+
+def _next_daily(now_et: datetime, hour: int, minute: int) -> datetime:
+    cand = now_et.replace(hour=hour, minute=minute, second=0, microsecond=0)
+    return cand if cand > now_et else cand + timedelta(days=1)
+
+
+def _next_weekly(now_et: datetime, dow: int, hour: int, minute: int) -> datetime:
+    days = (dow - now_et.weekday()) % 7
+    cand = (now_et + timedelta(days=days)).replace(hour=hour, minute=minute, second=0, microsecond=0)
+    return cand if cand > now_et else cand + timedelta(days=7)
+
+
+async def next_runs() -> Dict[str, str]:
+    """Next daily + weekly run as UTC ISO timestamps (browser converts to local time)."""
+    s = await load_schedule()
+    now_et = datetime.now(EASTERN)
+    d = _next_daily(now_et, s["daily_hour"], s["daily_minute"]).astimezone(timezone.utc)
+    w = _next_weekly(now_et, s["weekly_dow"], s["weekly_hour"], s["weekly_minute"]).astimezone(timezone.utc)
+    return {"daily_next": d.isoformat(), "weekly_next": w.isoformat()}
+
+
+async def record_run(*, kind: str, trigger: str, status: str, label: str,
+                     detail: str, started_at: datetime) -> None:
+    """Append one entry to the run history log. Best-effort — never raise into a run."""
+    try:
+        await db.run_log.insert_one({
+            "id": str(uuid.uuid4()), "kind": kind, "trigger": trigger, "status": status,
+            "label": label, "detail": (detail or "")[:300],
+            "started_at": started_at.isoformat(),
+            "finished_at": datetime.now(timezone.utc).isoformat(),
+        })
+    except Exception:
+        logger.exception("failed to record run history (non-fatal)")
 
 
 def today_et() -> str:
@@ -255,7 +308,7 @@ def _merge_workspace(new: Briefing, previous: Optional[Dict[str, Any]]) -> None:
             story.notes = old.get("notes", "") or ""
 
 
-async def run_briefing(date_str: Optional[str] = None) -> Briefing:
+async def run_briefing(date_str: Optional[str] = None, trigger: str = "manual") -> Briefing:
     """Research + write one edition. Serialized: only one run at a time."""
     date_str = date_str or today_et()
     async with _run_lock:
@@ -265,6 +318,8 @@ async def run_briefing(date_str: Optional[str] = None) -> Briefing:
         _run_status.finished_at = None
         _run_status.message = "Researching West Virginia education news across the state…"
         _run_status.last_error = ""
+        run_ok = False
+        started = _run_status.started_at
         try:
             recent = (
                 await db.briefings.find({"date": {"$lt": date_str}, "status": "complete"})
@@ -312,6 +367,7 @@ async def run_briefing(date_str: Optional[str] = None) -> Briefing:
                 {"date": date_str}, briefing.model_dump(), upsert=True
             )
             _run_status.message = f"Briefing for {date_str} published ({len(stories)} stories)."
+            run_ok = True
             await _send_digest_safe(briefing)
             return briefing
         except Exception as exc:
@@ -322,6 +378,13 @@ async def run_briefing(date_str: Optional[str] = None) -> Briefing:
         finally:
             _run_status.running = False
             _run_status.finished_at = datetime.now(timezone.utc)
+            await record_run(
+                kind="daily", trigger=trigger,
+                status="complete" if run_ok else "failed",
+                label=date_str,
+                detail=_run_status.message if run_ok else _run_status.last_error,
+                started_at=started,
+            )
 
 
 async def _send_digest_safe(briefing: Briefing) -> None:
@@ -343,12 +406,15 @@ async def _send_digest_safe(briefing: Briefing) -> None:
 async def _maybe_run_daily() -> None:
     now = datetime.now(EASTERN)
     date_str = now.strftime("%Y-%m-%d")
-    if now.hour < SCHEDULE_HOUR_ET or _run_status.running:
+    if _run_status.running:
+        return
+    s = await load_schedule()
+    if (now.hour * 60 + now.minute) < (s["daily_hour"] * 60 + s["daily_minute"]):
         return
     if await db.briefings.find_one({"date": date_str, "status": "complete"}):
         return
     logger.info("scheduler: generating briefing for %s", date_str)
-    await run_briefing(date_str)
+    await run_briefing(date_str, trigger="scheduled")
 
 
 async def scheduler_loop() -> None:

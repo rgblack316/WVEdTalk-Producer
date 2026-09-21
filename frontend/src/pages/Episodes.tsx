@@ -132,7 +132,7 @@ export default function Episodes() {
           <p className="text-xs tracking-[0.2em] text-accent uppercase">WVEdTalk · Weekly Producer</p>
           <h2 className="font-heading text-3xl font-bold tracking-tight">Weekly episode script</h2>
           <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-            Every Friday at 4:00 PM Eastern, the producer reviews the week's archive, researches the
+            On the weekly schedule set in Settings, the producer reviews the week's archive, researches the
             full week fresh, and writes a recording-ready WVEdTalk script for Randy Black.
           </p>
         </div>
@@ -342,7 +342,7 @@ export default function Episodes() {
         <div className="py-16 text-center" data-testid="episode-empty">
           <Mic className="mx-auto mb-4 size-10 text-muted-foreground" />
           <p className="text-sm text-muted-foreground">
-            No weekly episode yet. It runs automatically Friday at 4:00 PM Eastern — or produce this
+            No weekly episode yet. It runs automatically on the weekly schedule set in Settings — or produce this
             week's now.
           </p>
         </div>

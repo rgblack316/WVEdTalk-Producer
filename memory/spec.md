@@ -189,7 +189,23 @@ None seeded. First real briefing generated for 2026-09-18. Demo watch terms ("co
   look-ahead, full recording script, copy/download, past-episode list) and `/episodes/:week`
   (past episode detail). Nav item "Weekly Script".
 
-## Weekly enhancements (post-feature)
+## Configurable schedule + run history (admin)
+- **Schedule** lives in the `desk_config` singleton (ET, the desk's home timezone, fixed -5, no DST):
+  `daily_hour/daily_minute` (default 22:00) and `weekly_dow`/`weekly_hour`/`weekly_minute` (default
+  Fri 16:00, dow 0=Mon..6=Sun). Set via `POST /api/settings/schedule` (**admin-guarded**,
+  `require_admin`). Both schedulers read it through `desk.load_schedule()` (single source of truth):
+  `desk._maybe_run_daily` fires when ET now >= daily time; `producer._maybe_produce_weekly` fires on
+  the configured weekday at/after its time. `producer.resolve_week_of()` anchors the episode `week_of`
+  to the configured run day.
+- **Next-run indicator**: `GET /api/schedule/next` → `{daily_next, weekly_next}` as UTC ISO
+  (tz-aware); the header (`DeskLayout`) renders them in the browser's LOCAL timezone via
+  `new Date(iso).toLocaleString()`. Settings "Automatic run schedule" panel (admin only) edits times
+  with `<input type=time>` + a weekday `<select>`.
+- **Run history**: every daily/weekly run (scheduled OR manual) is appended to the `run_log`
+  collection by `desk.record_run()` in the run's `finally` (status complete|failed, trigger, label,
+  detail, started/finished as UTC-ISO strings). `GET /api/run-log` returns the last 20 (any signed-in
+  user); the Settings "Recent runs" panel lists them with local-timezone timestamps so the team can
+  confirm the schedule is firing.
 - **Script Length Dial** (`desk_config.script_length`: concise | standard | full, default standard):
   set via POST /api/settings/script-length; injected into the producer prompt as a soft target
   (never pads a quiet week / never cuts an important story). Chosen on the Settings page.

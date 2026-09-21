@@ -2,11 +2,11 @@ import { Link, useLocation } from "react-router-dom";
 import { useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Loader2, RefreshCw, LogOut } from "lucide-react";
+import { Loader2, RefreshCw, LogOut, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { apiGet, apiPost, ApiError } from "@/lib/api";
 import { endSession } from "@/lib/session";
-import type { AuthState, DeskConfig, RunStatus } from "@/lib/types";
+import type { AuthState, DeskConfig, NextRuns, RunStatus } from "@/lib/types";
 
 const BASE_NAV = [
   { to: "/", label: "Today's Briefing" },
@@ -36,6 +36,12 @@ export default function DeskLayout({ children }: { children: React.ReactNode }) 
     queryKey: ["config"],
     queryFn: () => apiGet<DeskConfig>("/settings"),
     staleTime: 60000,
+  });
+
+  const { data: nextRuns } = useQuery({
+    queryKey: ["schedule-next"],
+    queryFn: () => apiGet<NextRuns>("/schedule/next"),
+    refetchInterval: 60000,
   });
 
   const isAdmin = auth?.user?.role === "admin";
@@ -127,6 +133,21 @@ export default function DeskLayout({ children }: { children: React.ReactNode }) 
               {running ? "Researching…" : "Run now"}
             </Button>
             )}
+            {nextRuns && (
+              <span
+                className="hidden items-center gap-1 text-xs text-muted-foreground xl:inline-flex"
+                data-testid="next-run-indicator"
+                title={`Next weekly script: ${new Date(nextRuns.weekly_next).toLocaleString()}`}
+              >
+                <Clock className="size-3.5" />
+                Next briefing{" "}
+                {new Date(nextRuns.daily_next).toLocaleString(undefined, {
+                  weekday: "short",
+                  hour: "numeric",
+                  minute: "2-digit",
+                })}
+              </span>
+            )}
             {auth?.user && (
               <span
                 className="hidden text-xs text-muted-foreground lg:inline"
@@ -169,7 +190,7 @@ export default function DeskLayout({ children }: { children: React.ReactNode }) 
       )}
       <main className="mx-auto max-w-6xl px-5 py-8">{children}</main>
       <footer className="border-t border-border px-5 py-6 text-center text-xs text-muted-foreground">
-        Scheduled daily at 10:00 PM Eastern · Editorial judgment, scores and rankings are produced by
+        Runs on the schedule set in Settings · Editorial judgment, scores and rankings are produced by
         the research model and presented unaltered.
       </footer>
     </div>

@@ -1,14 +1,17 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Mail, Eye, Trash2, Send, Gauge, ShieldCheck, Timer, KeyRound, Users, Link2, Code2, Copy } from "lucide-react";
+import { Mail, Eye, Trash2, Send, Gauge, ShieldCheck, Timer, KeyRound, Users, Link2, Code2, Copy, CalendarClock, History } from "lucide-react";
 import DeskLayout from "@/components/DeskLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { apiGet, apiPost, apiDelete, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/useAuth";
-import type { AuthState, DeskConfig, Subscriber } from "@/lib/types";
+import type { AuthState, DeskConfig, RunLogEntry, Subscriber } from "@/lib/types";
+
+const DOW = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+const pad = (n: number) => String(n).padStart(2, "0");
 
 function errMsg(e: unknown) {
   return e instanceof ApiError
@@ -24,6 +27,9 @@ export default function Settings() {
   const [current, setCurrent] = useState("");
   const [newPass, setNewPass] = useState("");
   const [confirm, setConfirm] = useState("");
+  const [dailyTime, setDailyTime] = useState("22:00");
+  const [weeklyDow, setWeeklyDow] = useState(4);
+  const [weeklyTime, setWeeklyTime] = useState("16:00");
 
   const { data, isLoading } = useQuery({
     queryKey: ["config"],
@@ -35,6 +41,21 @@ export default function Settings() {
     queryFn: () => apiGet<AuthState>("/auth/me"),
     staleTime: 5 * 60 * 1000,
   });
+  const isAdmin = auth?.user?.role === "admin";
+
+  const { data: runLog } = useQuery({
+    queryKey: ["run-log"],
+    queryFn: () => apiGet<RunLogEntry[]>("/run-log"),
+    refetchInterval: 60000,
+  });
+
+  useEffect(() => {
+    if (data) {
+      setDailyTime(`${pad(data.daily_hour)}:${pad(data.daily_minute)}`);
+      setWeeklyDow(data.weekly_dow);
+      setWeeklyTime(`${pad(data.weekly_hour)}:${pad(data.weekly_minute)}`);
+    }
+  }, [data]);
 
   const { data: subscribers } = useQuery({
     queryKey: ["subscribers"],
@@ -130,6 +151,26 @@ export default function Settings() {
     onSuccess: (cfg) => {
       invalidate(cfg);
       toast.success("Auto-lock preference saved");
+    },
+    onError: (e) => toast.error(errMsg(e)),
+  });
+
+  const saveSchedule = useMutation({
+    mutationFn: () => {
+      const [dh, dm] = dailyTime.split(":").map(Number);
+      const [wh, wm] = weeklyTime.split(":").map(Number);
+      return apiPost<DeskConfig>("/settings/schedule", {
+        daily_hour: dh,
+        daily_minute: dm,
+        weekly_dow: weeklyDow,
+        weekly_hour: wh,
+        weekly_minute: wm,
+      });
+    },
+    onSuccess: (cfg) => {
+      invalidate(cfg);
+      qc.invalidateQueries({ queryKey: ["schedule-next"] });
+      toast.success("Schedule updated");
     },
     onError: (e) => toast.error(errMsg(e)),
   });
@@ -319,7 +360,122 @@ export default function Settings() {
           </section>
           )}
 
-          {/* Email digest recipients */}
+          {/* Automatic run schedule (admin only) */}
+          {isAdmin && (
+          <section
+            className="rounded-md border border-border bg-card p-5 md:col-span-2"
+            data-testid="schedule-panel"
+          >
+            <h3 className="flex items-center gap-2 font-heading text-lg font-bold">
+              <CalendarClock className="size-4 text-primary" /> Automatic run schedule
+            </h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              When the desk runs on its own. Times are U.S. Eastern (the desk's home timezone); the
+              header shows the next run converted to your local time.
+            </p>
+            <div className="mt-4 grid gap-6 md:grid-cols-2">
+              <div>
+                <label htmlFor="daily-time" className="text-sm font-semibold">
+                  Daily briefing
+                </label>
+                <p className="mt-1 text-xs text-muted-foreground">Runs every day at this Eastern time.</p>
+                <input
+                  id="daily-time"
+                  type="time"
+                  value={dailyTime}
+                  onChange={(e) => setDailyTime(e.target.value)}
+                  className="mt-2 rounded-sm border border-border bg-background px-3 py-2 text-sm"
+                  data-testid="daily-time-input"
+                />
+              </div>
+              <div>
+                <span className="text-sm font-semibold">Weekly script</span>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Runs once a week on this day and Eastern time.
+                </p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <select
+                    value={weeklyDow}
+                    onChange={(e) => setWeeklyDow(Number(e.target.value))}
+                    className="rounded-sm border border-border bg-background px-3 py-2 text-sm"
+                    data-testid="weekly-dow-select"
+                    aria-label="Weekly run day"
+                  >
+                    {DOW.map((d, i) => (
+                      <option key={d} value={i}>
+                        {d}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    type="time"
+                    value={weeklyTime}
+                    onChange={(e) => setWeeklyTime(e.target.value)}
+                    className="rounded-sm border border-border bg-background px-3 py-2 text-sm"
+                    data-testid="weekly-time-input"
+                    aria-label="Weekly run time"
+                  />
+                </div>
+              </div>
+            </div>
+            <Button
+              size="sm"
+              className="mt-4"
+              disabled={saveSchedule.isPending}
+              onClick={() => saveSchedule.mutate()}
+              data-testid="save-schedule-button"
+            >
+              Save schedule
+            </Button>
+          </section>
+          )}
+
+          {/* Recent automatic runs — visible to all signed-in users */}
+          <section
+            className="rounded-md border border-border bg-card p-5 md:col-span-2"
+            data-testid="run-history-panel"
+          >
+            <h3 className="flex items-center gap-2 font-heading text-lg font-bold">
+              <History className="size-4 text-primary" /> Recent runs
+            </h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              The last briefings and weekly scripts the desk produced — confirm the schedule is
+              firing. Times are shown in your local timezone.
+            </p>
+            <ul className="mt-4 space-y-2" data-testid="run-log-list">
+              {runLog && runLog.length > 0 ? (
+                runLog.map((r) => (
+                  <li
+                    key={r.id}
+                    className="flex flex-wrap items-center justify-between gap-2 rounded-sm border border-border bg-background px-3 py-2 text-sm"
+                    data-testid={`run-log-${r.id}`}
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge variant={r.status === "complete" ? "secondary" : "destructive"}>
+                        {r.status}
+                      </Badge>
+                      <span className="font-medium">
+                        {r.kind === "daily" ? "Daily briefing" : "Weekly script"}
+                      </span>
+                      <span className="text-muted-foreground">{r.label}</span>
+                      <Badge variant="outline">{r.trigger}</Badge>
+                    </div>
+                    <span
+                      className="text-xs text-muted-foreground"
+                      data-testid={`run-log-time-${r.id}`}
+                    >
+                      {new Date(r.finished_at).toLocaleString()}
+                    </span>
+                  </li>
+                ))
+              ) : (
+                <li className="text-sm text-muted-foreground">
+                  No runs recorded yet. They'll appear here after the next scheduled or manual run.
+                </li>
+              )}
+            </ul>
+          </section>
+
           {canEdit && (
           <section className="rounded-md border border-border bg-card p-5" data-testid="recipients-panel">
             <h3 className="flex items-center gap-2 font-heading text-lg font-bold">

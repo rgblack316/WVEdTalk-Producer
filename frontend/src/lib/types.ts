@@ -87,6 +87,27 @@ export interface DeskConfig {
   watch_terms: string[];
   script_length: string;
   auto_lock_minutes: number;
+  daily_hour: number;
+  daily_minute: number;
+  weekly_dow: number;
+  weekly_hour: number;
+  weekly_minute: number;
+}
+
+export interface RunLogEntry {
+  id: string;
+  kind: string;
+  trigger: string;
+  status: string;
+  label: string;
+  detail: string;
+  started_at: string;
+  finished_at: string;
+}
+
+export interface NextRuns {
+  daily_next: string;
+  weekly_next: string;
 }
 
 export interface User {
