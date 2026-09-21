@@ -76,10 +76,10 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
             <div className="relative">
               <Mail className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
-                type="email"
+                type="text"
                 autoFocus
-                autoComplete="email"
-                placeholder="you@example.com"
+                autoComplete="username"
+                placeholder="Username or email"
                 className="pl-9"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}

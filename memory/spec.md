@@ -64,7 +64,7 @@ send emails, or change any shared setting). Replaced the earlier single shared p
   expiry, `secure`+`samesite=lax`) bound to the user's id + current password-hash prefix, so a
   password change/reset revokes that user's sessions. `SESSION_SECRET` in backend/.env.
 - Bootstrap admin seeded on first startup if `users` is empty (`ensure_seed_admin`):
-  admin@johnscreekstudios.com (see memory/test_credentials.md).
+  username `admin` / password `admin` (fresh DBs only; change immediately — see memory/test_credentials.md).
 - Auth routes open (`routers/auth.py`): POST /api/auth/login {email,password}, POST /api/auth/logout,
   GET /api/auth/me → {authenticated, user}. Login throttled 10/5min per IP → 429.
 - User management (`routers/users.py`, admin-guarded via `require_admin`): GET /api/users,

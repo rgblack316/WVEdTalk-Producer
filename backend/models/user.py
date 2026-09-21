@@ -34,7 +34,7 @@ class RoleUpdate(BaseModel):
 
 
 class LoginRequest(BaseModel):
-    email: EmailStr
+    email: str  # accepts a username (e.g. "admin") or an email address
     password: str
 
 

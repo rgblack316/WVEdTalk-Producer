@@ -78,11 +78,13 @@ yarn dev        # http://localhost:3000  (proxies /api → http://localhost:8001
 A bootstrap admin is seeded automatically the first time the app starts with an empty
 `users` collection:
 
-- **Email:** `admin@johnscreekstudios.com`
-- **Password:** `WVEd!Desk-Admin2026`
+- **Username:** `admin`
+- **Password:** `admin`
 
-Change it after signing in (Settings → My account → Change password), then invite the rest
-of your team from the **Users** tab (each gets a one-time temporary password).
+**Change this password immediately after signing in** (Settings → My account → Change password),
+then invite the rest of your team from the **Users** tab (each gets a one-time temporary password).
+The seed only runs on an empty `users` collection, so it never overwrites accounts on an existing
+database.
 
 ## Environment variables
 

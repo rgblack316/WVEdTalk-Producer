@@ -29,8 +29,8 @@ MAX_AGE = 60 * 60 * 24 * 30  # 30 days
 _PBKDF2_ROUNDS = 200_000
 
 # Bootstrap admin — seeded once if the users collection is empty.
-SEED_ADMIN_EMAIL = "admin@johnscreekstudios.com"
-SEED_ADMIN_PASSWORD = "WVEd!Desk-Admin2026"
+SEED_ADMIN_EMAIL = "admin"
+SEED_ADMIN_PASSWORD = "admin"
 
 # Service token for programmatic/downstream access (header X-Desk-Passcode).
 _SERVICE_PASSCODE = os.environ.get("APP_PASSCODE", "")
