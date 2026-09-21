@@ -326,7 +326,7 @@ export default function Settings() {
               <Mail className="size-4 text-primary" /> Email digest
             </h3>
             <p className="mt-1 text-sm text-muted-foreground">
-              The full briefing is emailed to everyone below the moment each 6:00 AM run finishes.
+              The full briefing is emailed to everyone below the moment each 10:00 PM run finishes.
             </p>
             <form
               className="mt-4 flex gap-2"

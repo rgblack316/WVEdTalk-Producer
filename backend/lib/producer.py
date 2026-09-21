@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 MODEL_PROVIDER = "gemini"
 MODEL_NAME = "gemini-3.1-pro-preview"
 SCHEDULE_DOW_ET = 4  # Friday (Mon=0)
-SCHEDULE_HOUR_ET = 14  # 2:00 PM ET
+SCHEDULE_HOUR_ET = 16  # 4:00 PM ET
 
 # Reproduced VERBATIM per the producer brief — must open the recording script unchanged.
 REQUIRED_INTRO = (
@@ -418,7 +418,7 @@ async def _maybe_produce_weekly() -> None:
 
 
 async def scheduler_loop() -> None:
-    """Produce the weekly episode at 2:00 PM ET on Fridays if it doesn't exist yet."""
+    """Produce the weekly episode at 4:00 PM ET on Fridays if it doesn't exist yet."""
     while True:
         try:
             await _maybe_produce_weekly()

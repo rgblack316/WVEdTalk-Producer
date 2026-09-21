@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 EASTERN = timezone(timedelta(hours=-5))  # pod clock is UTC; ET anchor for the daily edition
 MODEL_PROVIDER = "gemini"
 MODEL_NAME = "gemini-3.1-pro-preview"
-SCHEDULE_HOUR_ET = 6
+SCHEDULE_HOUR_ET = 22
 
 _run_status = RunStatus()
 _run_lock = asyncio.Lock()
@@ -352,7 +352,7 @@ async def _maybe_run_daily() -> None:
 
 
 async def scheduler_loop() -> None:
-    """Fire the daily edition at 6:00 AM Eastern if that date has no briefing yet."""
+    """Fire the daily edition at 10:00 PM Eastern if that date has no briefing yet."""
     while True:
         try:
             await _maybe_run_daily()

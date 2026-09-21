@@ -25,7 +25,7 @@ story can be flagged as a podcast episode candidate with free-text prep notes.
 - Unique index on date; index on stories.is_candidate.
 
 ## Key flows
-- Scheduler loop fires at/after 6:00 AM ET if today has no complete briefing.
+- Scheduler loop fires at/after 10:00 PM ET if today has no complete briefing.
 - POST /api/run starts a background run (409 if one is in progress); a re-run on the same date
   REPLACES that edition but preserves is_candidate/notes on stories whose headline survives.
 - GET /api/run-status drives the header progress banner (frontend polls every 5s while running).
@@ -156,7 +156,7 @@ None seeded. First real briefing generated for 2026-09-18. Demo watch terms ("co
 "special education") were added during testing and left as harmless examples; no recipients configured.
 
 ## WVEdTalk Weekly Producer (feature)
-- **Purpose**: every Friday 2:00 PM ET, independently reviews the week and writes a recording-ready
+- **Purpose**: every Friday 4:00 PM ET, independently reviews the week and writes a recording-ready
   WVEdTalk episode. Adapts the user's full producer brief (`lib/producer.py` PRODUCER_BRIEF).
 - **Model**: Gemini 3.1 Pro + googleSearch grounding; fresh research, does not merely restate the
   daily briefings (they are passed as reference context only).
@@ -182,7 +182,7 @@ None seeded. First real briefing generated for 2026-09-18. Demo watch terms ("co
   no intro duplication), then stores recording_script + chapters. Frontend shows a one-click
   "Add chapter headers" button on the Recording Script section (Episodes + EpisodePage) only when
   `canEdit` and the episode has no chapters yet.
-- **Scheduler**: `lib/producer.scheduler_loop` fires Friday >=14:00 ET if no episode for the week.
+- **Scheduler**: `lib/producer.scheduler_loop` fires Friday >=16:00 ET if no episode for the week.
 - **Endpoints**: GET /api/episodes, /api/episodes/latest, /api/episodes/{week_of},
   GET /api/produce-status, POST /api/produce (background trigger, 409 if running).
 - **Frontend**: `/episodes` (Weekly Script — latest episode, producer notes, not-selected audit,

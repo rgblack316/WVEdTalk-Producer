@@ -169,7 +169,7 @@ export default function DeskLayout({ children }: { children: React.ReactNode }) 
       )}
       <main className="mx-auto max-w-6xl px-5 py-8">{children}</main>
       <footer className="border-t border-border px-5 py-6 text-center text-xs text-muted-foreground">
-        Scheduled daily at 6:00 AM Eastern · Editorial judgment, scores and rankings are produced by
+        Scheduled daily at 10:00 PM Eastern · Editorial judgment, scores and rankings are produced by
         the research model and presented unaltered.
       </footer>
     </div>

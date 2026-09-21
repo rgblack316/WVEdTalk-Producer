@@ -29,7 +29,7 @@ export default function Home() {
           <p className="mt-2 text-sm text-muted-foreground">
             {isError
               ? "The desk is offline in this preview. Once the backend is live, the daily briefing appears here — or start one now."
-              : "The daily edition runs automatically at 6:00 AM Eastern. Start the first research run now to see today's briefing across all of West Virginia."}
+              : "The daily edition runs automatically at 10:00 PM Eastern. Start the first research run now to see today's briefing across all of West Virginia."}
           </p>
           <Link to="/archive" className={buttonVariants({ variant: "default" }) + " mt-6"} data-testid="home-empty-cta">
             View archive
