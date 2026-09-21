@@ -87,6 +87,7 @@ export interface DeskConfig {
   watch_terms: string[];
   script_length: string;
   auto_lock_minutes: number;
+  timezone: string;
   daily_hour: number;
   daily_minute: number;
   weekly_dow: number;

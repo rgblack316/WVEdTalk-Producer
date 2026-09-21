@@ -190,14 +190,21 @@ None seeded. First real briefing generated for 2026-09-18. Demo watch terms ("co
   (past episode detail). Nav item "Weekly Script".
 
 ## Configurable schedule + run history (admin)
-- **Schedule** lives in the `desk_config` singleton (times are U.S. Eastern via a DST-aware
-  `ZoneInfo("America/New_York")` anchor — automatically correct in EST or EDT):
-  `daily_hour/daily_minute` (default 22:00) and `weekly_dow`/`weekly_hour`/`weekly_minute` (default
-  Fri 16:00, dow 0=Mon..6=Sun). Set via `POST /api/settings/schedule` (**admin-guarded**,
-  `require_admin`). Both schedulers read it through `desk.load_schedule()` (single source of truth):
-  `desk._maybe_run_daily` fires when ET now >= daily time; `producer._maybe_produce_weekly` fires on
-  the configured weekday at/after its time. `producer.resolve_week_of()` anchors the episode `week_of`
-  to the configured run day.
+- **Schedule** lives in the `desk_config` singleton. Run times are interpreted in an admin-chosen
+  home timezone (`timezone`, IANA name, default `America/New_York`, DST-aware via `ZoneInfo` +
+  `desk._safe_zone`/`is_valid_tz`). `POST /api/settings/schedule` (admin) now also takes `timezone`
+  and 422s on an unknown zone. Both schedulers and `next_runs` resolve "now" in that zone.
+- **Failure alerts**: `desk.record_run()` calls `email_digest.send_failure_alert()` whenever a
+  **scheduled** (not manual) run finishes with status `failed`; it emails every admin user with a
+  real email address (best-effort, never raises into the run).
+- **Timezone label**: the header next-run indicator (`DeskLayout`) formats with
+  `timeZoneName:"short"` and carries the browser's detected IANA zone in its tooltip.
+- **Mechanics**: fields `daily_hour/daily_minute` (default 22:00) and
+  `weekly_dow`/`weekly_hour`/`weekly_minute` (default Fri 16:00, dow 0=Mon..6=Sun). Both schedulers
+  read config through `desk.load_schedule()` (single source of truth): `desk._maybe_run_daily` fires
+  when now (in home tz) >= daily time; `producer._maybe_produce_weekly` fires on the configured
+  weekday at/after its time. `producer.resolve_week_of()` anchors the episode `week_of` to the
+  configured run day.
 - **Next-run indicator**: `GET /api/schedule/next` → `{daily_next, weekly_next}` as UTC ISO
   (tz-aware); the header (`DeskLayout`) renders them in the browser's LOCAL timezone via
   `new Date(iso).toLocaleString()`. Settings "Automatic run schedule" panel (admin only) edits times

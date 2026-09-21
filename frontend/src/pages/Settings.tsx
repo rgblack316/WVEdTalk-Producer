@@ -12,6 +12,22 @@ import type { AuthState, DeskConfig, RunLogEntry, Subscriber } from "@/lib/types
 
 const DOW = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const pad = (n: number) => String(n).padStart(2, "0");
+const TZ_OPTIONS = [
+  "America/New_York",
+  "America/Chicago",
+  "America/Denver",
+  "America/Phoenix",
+  "America/Los_Angeles",
+  "America/Anchorage",
+  "Pacific/Honolulu",
+  "America/Puerto_Rico",
+  "UTC",
+  "Europe/London",
+  "Europe/Paris",
+  "Asia/Kolkata",
+  "Asia/Tokyo",
+  "Australia/Sydney",
+];
 
 function errMsg(e: unknown) {
   return e instanceof ApiError
@@ -30,6 +46,7 @@ export default function Settings() {
   const [dailyTime, setDailyTime] = useState("22:00");
   const [weeklyDow, setWeeklyDow] = useState(4);
   const [weeklyTime, setWeeklyTime] = useState("16:00");
+  const [tz, setTz] = useState("America/New_York");
 
   const { data, isLoading } = useQuery({
     queryKey: ["config"],
@@ -54,6 +71,7 @@ export default function Settings() {
       setDailyTime(`${pad(data.daily_hour)}:${pad(data.daily_minute)}`);
       setWeeklyDow(data.weekly_dow);
       setWeeklyTime(`${pad(data.weekly_hour)}:${pad(data.weekly_minute)}`);
+      setTz(data.timezone);
     }
   }, [data]);
 
@@ -160,6 +178,7 @@ export default function Settings() {
       const [dh, dm] = dailyTime.split(":").map(Number);
       const [wh, wm] = weeklyTime.split(":").map(Number);
       return apiPost<DeskConfig>("/settings/schedule", {
+        timezone: tz,
         daily_hour: dh,
         daily_minute: dm,
         weekly_dow: weeklyDow,
@@ -370,15 +389,15 @@ export default function Settings() {
               <CalendarClock className="size-4 text-primary" /> Automatic run schedule
             </h3>
             <p className="mt-1 text-sm text-muted-foreground">
-              When the desk runs on its own. Times are U.S. Eastern (the desk's home timezone); the
-              header shows the next run converted to your local time.
+              When the desk runs on its own, in the home timezone you choose below. The header shows
+              the next run converted to your browser's local time.
             </p>
             <div className="mt-4 grid gap-6 md:grid-cols-2">
               <div>
                 <label htmlFor="daily-time" className="text-sm font-semibold">
                   Daily briefing
                 </label>
-                <p className="mt-1 text-xs text-muted-foreground">Runs every day at this Eastern time.</p>
+                <p className="mt-1 text-xs text-muted-foreground">Runs every day at this time.</p>
                 <input
                   id="daily-time"
                   type="time"
@@ -391,7 +410,7 @@ export default function Settings() {
               <div>
                 <span className="text-sm font-semibold">Weekly script</span>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Runs once a week on this day and Eastern time.
+                  Runs once a week on this day and time.
                 </p>
                 <div className="mt-2 flex flex-wrap gap-2">
                   <select
@@ -417,6 +436,28 @@ export default function Settings() {
                   />
                 </div>
               </div>
+            </div>
+            <div className="mt-5">
+              <label htmlFor="tz-select" className="text-sm font-semibold">
+                Home timezone
+              </label>
+              <p className="mt-1 text-xs text-muted-foreground">
+                All run times above are interpreted in this timezone (DST handled automatically). The
+                header shows the next run converted to your browser's local time.
+              </p>
+              <select
+                id="tz-select"
+                value={tz}
+                onChange={(e) => setTz(e.target.value)}
+                className="mt-2 rounded-sm border border-border bg-background px-3 py-2 text-sm"
+                data-testid="timezone-select"
+              >
+                {[...new Set([tz, ...TZ_OPTIONS])].map((z) => (
+                  <option key={z} value={z}>
+                    {z.replace(/_/g, " ")}
+                  </option>
+                ))}
+              </select>
             </div>
             <Button
               size="sm"

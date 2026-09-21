@@ -137,7 +137,9 @@ export default function DeskLayout({ children }: { children: React.ReactNode }) 
               <span
                 className="hidden items-center gap-1 text-xs text-muted-foreground xl:inline-flex"
                 data-testid="next-run-indicator"
-                title={`Next weekly script: ${new Date(nextRuns.weekly_next).toLocaleString()}`}
+                title={`Your timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}\nNext weekly script: ${new Date(
+                  nextRuns.weekly_next,
+                ).toLocaleString(undefined, { timeZoneName: "short" })}`}
               >
                 <Clock className="size-3.5" />
                 Next briefing{" "}
@@ -145,6 +147,7 @@ export default function DeskLayout({ children }: { children: React.ReactNode }) 
                   weekday: "short",
                   hour: "numeric",
                   minute: "2-digit",
+                  timeZoneName: "short",
                 })}
               </span>
             )}

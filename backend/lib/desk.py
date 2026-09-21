@@ -28,18 +28,33 @@ SCHEDULE_DEFAULTS = {
     "daily_hour": 22, "daily_minute": 0,
     "weekly_dow": 4, "weekly_hour": 16, "weekly_minute": 0,
 }
+DEFAULT_TZ = "America/New_York"
 
 
-async def load_schedule() -> Dict[str, int]:
-    """Admin-configured run times (ET), falling back to defaults. One source of truth shared by
-    both schedulers and the header 'next run' indicator."""
+def is_valid_tz(name: str) -> bool:
+    try:
+        ZoneInfo(name)
+        return True
+    except Exception:
+        return False
+
+
+def _safe_zone(name: str) -> ZoneInfo:
+    return ZoneInfo(name) if is_valid_tz(name) else ZoneInfo(DEFAULT_TZ)
+
+
+async def load_schedule() -> Dict[str, Any]:
+    """Admin-configured run times + home timezone, falling back to defaults. One source of truth
+    shared by both schedulers and the header 'next run' indicator."""
     doc = await db.desk_config.find_one({"key": "singleton"}, {"_id": 0}) or {}
-    out: Dict[str, int] = {}
+    out: Dict[str, Any] = {}
     for k, v in SCHEDULE_DEFAULTS.items():
         try:
             out[k] = int(doc.get(k, v))
         except (TypeError, ValueError):
             out[k] = v
+    tz = doc.get("timezone") or DEFAULT_TZ
+    out["timezone"] = tz if is_valid_tz(tz) else DEFAULT_TZ
     return out
 
 
@@ -57,7 +72,7 @@ def _next_weekly(now_et: datetime, dow: int, hour: int, minute: int) -> datetime
 async def next_runs() -> Dict[str, str]:
     """Next daily + weekly run as UTC ISO timestamps (browser converts to local time)."""
     s = await load_schedule()
-    now_et = datetime.now(EASTERN)
+    now_et = datetime.now(_safe_zone(s["timezone"]))
     d = _next_daily(now_et, s["daily_hour"], s["daily_minute"]).astimezone(timezone.utc)
     w = _next_weekly(now_et, s["weekly_dow"], s["weekly_hour"], s["weekly_minute"]).astimezone(timezone.utc)
     return {"daily_next": d.isoformat(), "weekly_next": w.isoformat()}
@@ -65,7 +80,8 @@ async def next_runs() -> Dict[str, str]:
 
 async def record_run(*, kind: str, trigger: str, status: str, label: str,
                      detail: str, started_at: datetime) -> None:
-    """Append one entry to the run history log. Best-effort — never raise into a run."""
+    """Append one entry to the run history log, and alert admins if a SCHEDULED run failed.
+    Best-effort — never raise into a run."""
     try:
         await db.run_log.insert_one({
             "id": str(uuid.uuid4()), "kind": kind, "trigger": trigger, "status": status,
@@ -75,6 +91,12 @@ async def record_run(*, kind: str, trigger: str, status: str, label: str,
         })
     except Exception:
         logger.exception("failed to record run history (non-fatal)")
+    if status == "failed" and trigger == "scheduled":
+        try:
+            from lib import email_digest
+            await email_digest.send_failure_alert(kind=kind, label=label, detail=detail)
+        except Exception:
+            logger.exception("failed to send failure alert (non-fatal)")
 
 
 def today_et() -> str:
@@ -405,11 +427,11 @@ async def _send_digest_safe(briefing: Briefing) -> None:
 
 
 async def _maybe_run_daily() -> None:
-    now = datetime.now(EASTERN)
-    date_str = now.strftime("%Y-%m-%d")
     if _run_status.running:
         return
     s = await load_schedule()
+    now = datetime.now(_safe_zone(s["timezone"]))
+    date_str = now.strftime("%Y-%m-%d")
     if (now.hour * 60 + now.minute) < (s["daily_hour"] * 60 + s["daily_minute"]):
         return
     if await db.briefings.find_one({"date": date_str, "status": "complete"}):

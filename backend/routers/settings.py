@@ -106,7 +106,10 @@ async def set_schedule(body: ScheduleUpdate, _admin=Depends(auth.require_admin))
         raise HTTPException(status_code=422, detail="Daily time is out of range")
     if not (0 <= body.weekly_dow <= 6 and 0 <= body.weekly_hour <= 23 and 0 <= body.weekly_minute <= 59):
         raise HTTPException(status_code=422, detail="Weekly day/time is out of range")
+    if not desk.is_valid_tz(body.timezone):
+        raise HTTPException(status_code=422, detail="Unknown timezone")
     cfg = await _load()
+    cfg.timezone = body.timezone
     cfg.daily_hour = body.daily_hour
     cfg.daily_minute = body.daily_minute
     cfg.weekly_dow = body.weekly_dow

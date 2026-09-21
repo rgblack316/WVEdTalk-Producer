@@ -51,7 +51,7 @@ async def resolve_week_of() -> str:
     """Anchor date (the admin-configured weekly run day) of the current ET week. Used so a
     manual or scheduled production keys the episode to the right week even if the run day changed."""
     s = await desk.load_schedule()
-    now = datetime.now(desk.EASTERN)
+    now = datetime.now(desk._safe_zone(s["timezone"]))
     delta = (now.weekday() - s["weekly_dow"]) % 7
     anchor = now - timedelta(days=delta)
     return anchor.strftime("%Y-%m-%d")
@@ -427,10 +427,10 @@ async def _email_episode_safe(episode: WeeklyEpisode) -> None:
 
 
 async def _maybe_produce_weekly() -> None:
-    now = datetime.now(desk.EASTERN)
     if _status.running:
         return
     s = await desk.load_schedule()
+    now = datetime.now(desk._safe_zone(s["timezone"]))
     if now.weekday() != s["weekly_dow"]:
         return
     if (now.hour * 60 + now.minute) < (s["weekly_hour"] * 60 + s["weekly_minute"]):

@@ -15,7 +15,8 @@ class DeskConfig(BaseModel):
     watch_terms: List[str] = []
     script_length: str = "standard"  # concise | standard | full
     auto_lock_minutes: int = 0  # 0 = off
-    # Automatic run schedule (U.S. Eastern, the desk's home timezone).
+    # Automatic run schedule, interpreted in the desk's home timezone (DST-aware).
+    timezone: str = "America/New_York"  # IANA name
     daily_hour: int = 22  # 0-23
     daily_minute: int = 0  # 0-59
     weekly_dow: int = 4  # 0=Mon .. 6=Sun (default Friday)
@@ -40,6 +41,7 @@ class AutoLockUpdate(BaseModel):
 
 
 class ScheduleUpdate(BaseModel):
+    timezone: str
     daily_hour: int
     daily_minute: int
     weekly_dow: int

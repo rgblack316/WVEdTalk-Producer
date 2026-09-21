@@ -407,6 +407,48 @@ async def send_episode(episode, recipients: List[str]) -> int:
     return await _fan_out(subject, html, recipients)
 
 
+def _alert_html(title: str, label: str, detail: str) -> str:
+    detail = escape(detail or "No further detail was captured.")
+    return (
+        '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
+        'style="max-width:560px;margin:0 auto;background:#fbfaf5"><tr><td style="padding:28px 24px">'
+        '<div style="font-family:Georgia,serif;font-size:20px;font-weight:bold;color:#16305e">'
+        'WVEdTalk News Desk</div>'
+        '<div style="font-family:Arial,sans-serif;font-size:12px;letter-spacing:.14em;'
+        'text-transform:uppercase;color:#b91c1c;margin-top:6px">Scheduled run failed</div>'
+        f'<p style="font-family:Arial,sans-serif;font-size:15px;color:#222;margin-top:16px">'
+        f'The scheduled <strong>{escape(title)}</strong> run for <strong>{escape(label)}</strong> '
+        'did not complete.</p>'
+        f'<div style="font-family:Arial,sans-serif;font-size:13px;color:#444;background:#fff;'
+        f'border-left:3px solid #b91c1c;padding:12px 14px;margin-top:12px;line-height:1.55">{detail}</div>'
+        '<p style="font-family:Arial,sans-serif;font-size:13px;color:#555;margin-top:16px">'
+        'Open the desk to review the run history and try again manually.</p>'
+        f'<p style="margin:16px 0 0"><a href="{APP_URL}/settings" '
+        'style="display:inline-block;background:#16305e;color:#fff;text-decoration:none;'
+        'font-family:Arial,sans-serif;font-size:14px;padding:10px 18px;border-radius:4px">'
+        'Open the desk</a></p>'
+        '<p style="font-family:Arial,sans-serif;font-size:12px;color:#999;margin-top:24px;'
+        'border-top:1px solid #e5e2d8;padding-top:12px">'
+        'You are receiving this because you are an admin on WVEdTalk News Desk.</p>'
+        '</td></tr></table>'
+    )
+
+
+async def send_failure_alert(*, kind: str, label: str, detail: str) -> int:
+    """Email every admin when a SCHEDULED run fails, so a silent miss never goes unnoticed.
+    Only real email-address admins are targeted (a fresh 'admin' username has no inbox)."""
+    admins = await db.users.find({"role": "admin"}, {"_id": 0, "email": 1}).to_list(200)
+    tos = [u["email"] for u in admins if "@" in (u.get("email") or "")]
+    if not tos:
+        logger.warning("scheduled %s run failed but no admin email is available for an alert", kind)
+        return 0
+    title = "daily briefing" if kind == "daily" else "weekly script"
+    subject = f"[WVEdTalk] Scheduled {title} run failed ({label})"
+    html = _alert_html(title, label, detail)
+    _assert_safe_email(subject, html)
+    return await _fan_out(subject, html, tos)
+
+
 async def _fan_out(subject: str, html: str, recipients: List[str]) -> int:
     sent = 0
     for to in recipients:
