@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Mail, Eye, Trash2, Send, Gauge, ShieldCheck, Timer, KeyRound, Users, Link2 } from "lucide-react";
+import { Mail, Eye, Trash2, Send, Gauge, ShieldCheck, Timer, KeyRound, Users, Link2, Code2, Copy } from "lucide-react";
 import DeskLayout from "@/components/DeskLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -53,6 +53,24 @@ export default function Settings() {
   const copySignupLink = () => {
     navigator.clipboard.writeText(`${window.location.origin}/subscribe`);
     toast.success("Public signup link copied");
+  };
+
+  const embedOrigin = typeof window !== "undefined" ? window.location.origin : "";
+  const embedCode = `<!-- WVEdTalk News Desk signup -->
+<div style="max-width:420px;font-family:Arial,Helvetica,sans-serif">
+  <form onsubmit="var e=this.email.value;var s=this.querySelector('.wvedtalk-msg');fetch('${embedOrigin}/api/public/embed-subscribe',{method:'POST',mode:'no-cors',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'email='+encodeURIComponent(e)});s.textContent='Thanks! You are subscribed to the WVEdTalk daily briefing.';this.reset();return false;">
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <input name="email" type="email" required placeholder="you@example.com" style="flex:1;min-width:200px;padding:10px 12px;border:1px solid #ccc;border-radius:6px;font-size:14px" />
+      <button type="submit" style="background:#16305e;color:#fff;border:0;border-radius:6px;padding:10px 18px;font-size:14px;font-weight:bold;cursor:pointer">Subscribe</button>
+    </div>
+    <p class="wvedtalk-msg" style="margin:8px 0 0;font-size:13px;color:#16305e"></p>
+  </form>
+  <p style="margin:6px 0 0;font-size:11px;color:#8a8a8a">Powered by WVEdTalk News Desk</p>
+</div>`;
+
+  const copyEmbed = () => {
+    navigator.clipboard.writeText(embedCode);
+    toast.success("Embed code copied");
   };
 
   const invalidate = (cfg: DeskConfig) => qc.setQueryData(["config"], cfg);
@@ -472,6 +490,40 @@ export default function Settings() {
                 </li>
               )}
             </ul>
+            {canEdit && (
+              <div className="mt-6 border-t border-border pt-4" data-testid="embed-panel">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="flex items-center gap-1.5 text-sm font-semibold">
+                    <Code2 className="size-4 text-primary" /> Embed the signup form on another site
+                  </p>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={copyEmbed}
+                    data-testid="copy-embed-code-button"
+                  >
+                    <Copy className="size-4" /> Copy embed code
+                  </Button>
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Paste this HTML into any web page. Visitors who subscribe are added to your
+                  subscribers list and receive the daily briefing — no account needed.
+                </p>
+                <textarea
+                  readOnly
+                  value={embedCode}
+                  onFocus={(e) => e.currentTarget.select()}
+                  className="mt-3 h-40 w-full rounded-sm border border-border bg-background p-3 font-mono text-xs"
+                  data-testid="embed-code-textarea"
+                />
+                <p className="mt-3 text-xs tracking-[0.14em] text-accent uppercase">Live preview</p>
+                <div
+                  className="mt-2 rounded-sm border border-dashed border-border p-4"
+                  data-testid="embed-preview"
+                  dangerouslySetInnerHTML={{ __html: embedCode }}
+                />
+              </div>
+            )}
           </section>
         </div>
       )}

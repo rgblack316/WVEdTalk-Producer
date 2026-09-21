@@ -123,6 +123,10 @@ send emails, or change any shared setting). Replaced the earlier single shared p
   The **weekly WVEdTalk episode email is unchanged — admin recipients only, never subscribers.**
   Admins/editors see and manage subscribers on the Settings "Public subscribers" panel
   (GET /api/subscribers any signed-in user; DELETE /api/subscribers/{email} editors only).
+- **Embeddable signup widget**: Settings subscribers panel offers a copy-paste HTML snippet (+ live
+  preview) that posts to `POST /api/public/embed-subscribe` (accepts form-urlencoded or JSON, returns
+  `Access-Control-Allow-Origin: *`; the widget uses a `no-cors` form submit — a simple request with no
+  preflight — so it works embedded on any external site). Shared logic via `_persist_subscriber`.
 - **Region filter + search** (frontend, `lib/regions.ts`): 8 WV region quick-filters (county->region
   map) plus a county/keyword search box on any briefing. Filtering hides trends/ideas/source-log.
 - **Markdown export** (frontend): Copy-to-clipboard and Download `.md` of the full edition.
