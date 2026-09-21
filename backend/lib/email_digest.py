@@ -15,7 +15,7 @@ from urllib.parse import quote, urlparse
 
 import httpx
 
-from lib.auth import make_unsub_token
+from lib.auth import make_share_token, make_unsub_token
 from lib.db import db
 
 logger = logging.getLogger(__name__)
@@ -184,6 +184,143 @@ def _digest_html(briefing, unsubscribe_url: Optional[str] = None) -> str:
     )
 
 
+# ---- full briefing email (public subscribers) --------------------------------
+
+# Render order + display labels for the full-briefing email.
+_SECTIONS = [
+    ("big_three", "The Big Three"),
+    ("developing", "Developing Stories"),
+    ("state_policy", "State Policy & Politics"),
+    ("k12", "K-12 Education"),
+    ("higher_ed", "Higher Education"),
+    ("other", "Other Significant Stories"),
+]
+
+
+def _safe_source_links(sources) -> str:
+    """Render source anchors that are GUARANTEED to pass _assert_safe_email: only https
+    links to non-shortener, non-numeric hosts, with the host itself as the anchor text
+    (so shown-host always == real-host). Anything unsafe is dropped, never raised — a
+    single bad source URL must not block the whole subscriber send."""
+    parts = []
+    for s in sources or []:
+        url = (getattr(s, "url", "") or "").strip()
+        if not url.lower().startswith("https://"):
+            continue
+        parsed = urlparse(url)
+        host = parsed.hostname or ""
+        if not _host_ok(host) or parsed.username is not None:
+            continue
+        title = escape((getattr(s, "title", "") or "").strip())
+        label = escape(host)
+        prefix = f"{title} — " if title else ""
+        parts.append(
+            f'<div style="font-family:Arial,sans-serif;font-size:12px;color:#666;margin-top:4px">'
+            f'{prefix}<a href="{url}" style="color:#a67c00">{label}</a></div>'
+        )
+    return "".join(parts)
+
+
+def _field(label: str, value: str) -> str:
+    value = (value or "").strip()
+    if not value:
+        return ""
+    return (
+        f'<div style="font-family:Arial,sans-serif;font-size:13px;color:#444;margin-top:8px;line-height:1.55">'
+        f'<span style="color:#a67c00;font-weight:bold">{escape(label)}: </span>{escape(value)}</div>'
+    )
+
+
+def _story_block(s) -> str:
+    loc = escape(s.location) if s.location else ""
+    badges = []
+    if s.classification:
+        badges.append(" / ".join(escape(c) for c in s.classification))
+    if s.importance is not None:
+        badges.append(f"Importance {s.importance}/10")
+    if s.podcast_potential is not None:
+        badges.append(f"Podcast {s.podcast_potential}/10")
+    meta = " · ".join([b for b in ([loc] if loc else []) + badges if b])
+
+    body = _field("What happened", s.what_happened) + _field("Why it matters", s.why_it_matters)
+    # Developing-story fields, when present.
+    body += _field("What is new", s.what_is_new)
+    body += _field("Previously known", s.previously_known)
+    body += _field("Unresolved", s.unresolved)
+    body += _field("What to watch next", s.watch_next)
+
+    return (
+        '<div style="padding:14px 0;border-bottom:1px solid #e5e2d8">'
+        + (
+            f'<div style="font-family:Arial,sans-serif;font-size:11px;letter-spacing:.1em;'
+            f'text-transform:uppercase;color:#a67c00">{meta}</div>' if meta else ""
+        )
+        + f'<div style="font-family:Georgia,serif;font-size:17px;font-weight:bold;color:#16305e;margin-top:2px">'
+        f'{escape(s.headline)}</div>'
+        + body
+        + _safe_source_links(s.sources)
+        + "</div>"
+    )
+
+
+def _full_digest_html(briefing, share_url: str, unsubscribe_url: Optional[str] = None) -> str:
+    """The COMPLETE briefing rendered inline for public subscribers (every section), plus a
+    public 'view on the web' share link and a one-click unsubscribe. No login required to read."""
+    date = escape(briefing.date)
+    note = escape(briefing.editor_note) if briefing.editor_note else ""
+
+    sections_html = []
+    for key, label in _SECTIONS:
+        stories = [s for s in briefing.stories if s.section == key]
+        if not stories:
+            continue
+        sections_html.append(
+            f'<div style="font-family:Georgia,serif;font-size:16px;font-weight:bold;color:#16305e;'
+            f'margin:26px 0 2px;border-bottom:2px solid #16305e;padding-bottom:4px">{escape(label)}</div>'
+            + "".join(_story_block(s) for s in stories)
+        )
+    if not sections_html:
+        sections_html.append(
+            '<p style="font-family:Arial,sans-serif;font-size:14px;color:#444;margin-top:16px">'
+            f'{escape(briefing.editor_note or "A short edition today — no major developments to report.")}</p>'
+        )
+
+    share_btn = (
+        f'<p style="margin:18px 0 4px"><a href="{share_url}" '
+        'style="display:inline-block;background:#16305e;color:#fff;text-decoration:none;'
+        'font-family:Arial,sans-serif;font-size:14px;padding:11px 20px;border-radius:4px">'
+        'View this briefing on the web</a></p>'
+    )
+
+    return (
+        '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
+        'style="max-width:640px;margin:0 auto;background:#fbfaf5"><tr><td style="padding:28px 24px">'
+        f'<div style="text-align:center;margin-bottom:18px"><img src="{APP_URL}/wvedtalk-logo.png" alt="WVEdTalk News Desk" width="150" style="width:150px;height:auto;display:inline-block"/></div>'
+        '<div style="font-family:Georgia,serif;font-size:24px;font-weight:bold;color:#16305e">'
+        'WVEdTalk News Desk</div>'
+        f'<div style="font-family:Arial,sans-serif;font-size:12px;letter-spacing:.14em;'
+        f'text-transform:uppercase;color:#a67c00;margin-top:4px">Daily Briefing · {date}</div>'
+        + (
+            f'<p style="font-family:Arial,sans-serif;font-size:14px;color:#555;line-height:1.6;'
+            f'border-left:3px solid #c8971b;padding-left:12px;margin-top:16px">{note}</p>'
+            if note else ""
+        )
+        + share_btn
+        + "".join(sections_html)
+        + '<p style="font-family:Arial,sans-serif;font-size:12px;color:#999;margin-top:28px;'
+        'border-top:1px solid #e5e2d8;padding-top:14px">'
+        'Sent by WVEdTalk News Desk, your statewide education research briefing. '
+        'We never ask for passwords or payment details by email.</p>'
+        + (
+            '<p style="font-family:Arial,sans-serif;font-size:12px;color:#999;margin-top:10px">'
+            'You are receiving this because you subscribed to the daily briefing. '
+            f'<a href="{unsubscribe_url}" style="color:#a67c00">Unsubscribe</a>.</p>'
+            if unsubscribe_url else ""
+        )
+        + "</td></tr></table>"
+    )
+
+
 async def send_digest(briefing, recipients: List[str]) -> int:
     """Send the daily digest — individually to each admin recipient AND each active public
     subscriber. Individual sends (never a group To/CC) keep every address hidden from the
@@ -201,10 +338,15 @@ async def send_digest(briefing, recipients: List[str]) -> int:
     sent = 0
     if admin:
         sent += await _fan_out(subject, _digest_html(briefing), admin)
+    share_url = f"{APP_URL}/share/briefing/{briefing.date}?t={make_share_token(briefing.date)}"
     for email in sub_emails:
         unsub = f"{APP_URL}/unsubscribe?email={quote(email)}&t={make_unsub_token(email)}"
         try:
-            await _send_email(to=email, subject=subject, html=_digest_html(briefing, unsubscribe_url=unsub))
+            await _send_email(
+                to=email,
+                subject=subject,
+                html=_full_digest_html(briefing, share_url, unsubscribe_url=unsub),
+            )
             sent += 1
         except Exception as exc:
             logger.error("digest to subscriber %s failed: %s", email, exc)

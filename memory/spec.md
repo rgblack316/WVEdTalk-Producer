@@ -121,6 +121,13 @@ send emails, or change any shared setting). Replaced the earlier single shared p
   sends are how addresses stay hidden from each other) with a per-subscriber one-click unsubscribe
   link (`auth.make_unsub_token`, verified at POST /api/public/unsubscribe → `/unsubscribe?email=&t=`).
   The **weekly WVEdTalk episode email is unchanged — admin recipients only, never subscribers.**
+  **Subscriber vs admin digest body**: admin recipients get the compact digest (`_digest_html`: Big
+  Three summary + a login-protected "Read the full briefing" link to `/briefings/{date}`). Public
+  subscribers get `_full_digest_html` — the COMPLETE briefing rendered inline (every section: Big
+  Three, Developing, State Policy, K-12, Higher Ed, Other, with sources) PLUS a "View this briefing
+  on the web" button to the public share page `/share/briefing/{date}?t=<make_share_token(date)>`
+  (no login). `_safe_source_links` pre-filters source anchors to https/non-shortener hosts with the
+  host as anchor text, so a bad source URL can never trip `_assert_safe_email` and block the send.
   Admins/editors see and manage subscribers on the Settings "Public subscribers" panel
   (GET /api/subscribers any signed-in user; DELETE /api/subscribers/{email} editors only).
 - **Embeddable signup widget**: Settings subscribers panel offers a copy-paste HTML snippet (+ live
