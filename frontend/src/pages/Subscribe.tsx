@@ -20,10 +20,12 @@ export default function Subscribe() {
     <div className="flex min-h-screen items-center justify-center bg-background px-5" data-testid="subscribe-page">
       <div className="w-full max-w-md">
         <div className="mb-8 text-center">
-          <h1 className="font-heading text-3xl leading-tight font-bold tracking-tight">
-            WVEdTalk News Desk
-          </h1>
-          <p className="mt-1 text-xs tracking-[0.18em] text-muted-foreground uppercase">
+          <img
+            src="/wvedtalk-logo.png"
+            alt="WVEdTalk News Desk"
+            className="mx-auto w-full max-w-[300px]"
+          />
+          <p className="mt-2 text-xs tracking-[0.18em] text-muted-foreground uppercase">
             Daily statewide education briefing
           </p>
         </div>

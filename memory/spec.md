@@ -38,6 +38,12 @@ story can be flagged as a podcast episode candidate with free-text prep notes.
 - `/` Today (latest briefing), `/archive`, `/candidates` (podcast prep board),
   `/briefings/:date` (full edition), `/briefings/:date/stories/:storyId` (detail + prep panel).
 
+## Branding
+- Logo: `frontend/public/wvedtalk-logo.png` (WVEDTALK WV license-plate art, ~700×700, optimized).
+  Displayed on the header masthead (DeskLayout, links home), the login screen (AuthGate), and the
+  public Subscribe / Unsubscribe / SharedBriefing pages. Favicons (`favicon.ico`, 16/32, apple-touch)
+  regenerated from the logo; `index.html` no longer references the old favicon.svg.
+
 ## Auth (multi-user)
 Email + password accounts with three roles: **admin** (all features + user management),
 **editor** (all features except user management), and **viewer** (read-only — can view every

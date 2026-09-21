@@ -23,10 +23,12 @@ export default function SharedBriefing() {
     <div className="min-h-screen bg-background" data-testid="shared-briefing">
       <header className="border-b border-border bg-card/70 backdrop-blur">
         <div className="mx-auto max-w-6xl px-5 py-4">
-          <h1 className="font-heading text-2xl leading-none font-bold tracking-tight md:text-3xl">
-            WVEdTalk News Desk
-          </h1>
-          <p className="mt-1 text-xs tracking-[0.18em] text-muted-foreground uppercase">
+          <img
+            src="/wvedtalk-logo.png"
+            alt="WVEdTalk News Desk"
+            className="h-14 w-auto md:h-16"
+          />
+          <p className="mt-2 text-xs tracking-[0.18em] text-muted-foreground uppercase">
             Shared briefing · West Virginia
           </p>
         </div>

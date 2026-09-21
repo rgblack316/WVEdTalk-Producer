@@ -22,9 +22,11 @@ export default function Unsubscribe() {
     <div className="flex min-h-screen items-center justify-center bg-background px-5" data-testid="unsubscribe-page">
       <div className="w-full max-w-md">
         <div className="mb-8 text-center">
-          <h1 className="font-heading text-3xl leading-tight font-bold tracking-tight">
-            WVEdTalk News Desk
-          </h1>
+          <img
+            src="/wvedtalk-logo.png"
+            alt="WVEdTalk News Desk"
+            className="mx-auto w-full max-w-[300px]"
+          />
         </div>
 
         <div className="rounded-md border border-border bg-card p-6 text-center shadow-sm">

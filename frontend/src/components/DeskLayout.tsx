@@ -84,13 +84,12 @@ export default function DeskLayout({ children }: { children: React.ReactNode }) 
         <div className="mx-auto flex max-w-6xl flex-col gap-3 px-5 py-4 md:flex-row md:items-end md:justify-between">
           <div>
             <Link to="/" className="block" data-testid="desk-masthead-link">
-              <h1 className="font-heading text-2xl leading-none font-bold tracking-tight md:text-3xl">
-                WVEdTalk News Desk
-              </h1>
+              <img
+                src="/wvedtalk-logo.png"
+                alt="WVEdTalk News Desk — The Weekly Drive Through West Virginia Education"
+                className="h-14 w-auto md:h-16"
+              />
             </Link>
-            <p className="mt-1 text-xs tracking-[0.18em] text-muted-foreground uppercase">
-              Statewide research &amp; editorial briefing · West Virginia
-            </p>
           </div>
           <div className="flex items-center gap-3">
             <nav className="flex flex-wrap gap-1" data-testid="desk-nav">
