@@ -449,6 +449,42 @@ async def send_failure_alert(*, kind: str, label: str, detail: str) -> int:
     return await _fan_out(subject, html, tos)
 
 
+def _thanks_html(name: str, url: str) -> str:
+    who = escape((name or "there").strip() or "there")
+    link = escape((url or "").strip())
+    return (
+        '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
+        'style="max-width:560px;margin:0 auto;background:#fbfaf5"><tr><td style="padding:28px 24px">'
+        f'<div style="text-align:center;margin-bottom:18px"><img src="{APP_URL}/wvedtalk-logo.png" '
+        'alt="WVEdTalk News Desk" width="150" style="width:150px;height:auto;display:inline-block"/></div>'
+        '<div style="font-family:Georgia,serif;font-size:20px;font-weight:bold;color:#16305e">Thank you!</div>'
+        f'<p style="font-family:Arial,sans-serif;font-size:15px;color:#222;margin-top:14px;line-height:1.6">'
+        f'Hi {who}, thank you for sending the WVEdTalk News Desk a West Virginia education story. '
+        'We used it as we put together our coverage — submissions like yours help us cover education '
+        'across all 55 counties, not just the biggest institutions.</p>'
+        f'<div style="font-family:Arial,sans-serif;font-size:12px;color:#666;background:#fff;'
+        f'border-left:3px solid #c8971b;padding:10px 12px;margin-top:12px;word-break:break-all">{link}</div>'
+        '<p style="font-family:Arial,sans-serif;font-size:14px;color:#444;margin-top:16px;line-height:1.6">'
+        'You are subscribed to our daily briefing — every edition has a one-click unsubscribe link. '
+        'Keep the tips coming!</p>'
+        '<p style="font-family:Arial,sans-serif;font-size:12px;color:#999;margin-top:24px;'
+        'border-top:1px solid #e5e2d8;padding-top:12px">WVEdTalk News Desk · Statewide education research</p>'
+        '</td></tr></table>'
+    )
+
+
+async def send_submission_thanks(*, name: str, email: str, url: str) -> int:
+    """Email a reader to thank them when their submitted story is used. Returns count sent (0 if
+    the address is unusable)."""
+    email = (email or "").strip()
+    if "@" not in email:
+        return 0
+    subject = "Thank you for your WVEdTalk story submission"
+    html = _thanks_html(name, url)
+    _assert_safe_email(subject, html)
+    return await _fan_out(subject, html, [email])
+
+
 async def _fan_out(subject: str, html: str, recipients: List[str]) -> int:
     sent = 0
     for to in recipients:

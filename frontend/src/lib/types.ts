@@ -128,6 +128,17 @@ export interface CreatedUser {
   temp_password: string;
 }
 
+export interface StorySubmission {
+  id: string;
+  url: string;
+  name: string;
+  email: string;
+  status: string; // new | used | archived
+  thanked: boolean;
+  submitted_at: string;
+  updated_at: string | null;
+}
+
 export interface Subscriber {
   email: string;
   active: boolean;

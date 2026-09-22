@@ -189,6 +189,23 @@ None seeded. First real briefing generated for 2026-09-18. Demo watch terms ("co
   look-ahead, full recording script, copy/download, past-episode list) and `/episodes/:week`
   (past episode detail). Nav item "Weekly Script".
 
+## Public story submissions (reader tips)
+- **Submit page** `/submit` (public, `SubmitStory.tsx`): a reader posts `{url, name, email}` to
+  `POST /api/public/submit-story` (no auth, IP-throttled). The endpoint validates the URL is a
+  well-formed http(s) link and name is non-empty (else 422), inserts into the `submissions`
+  collection (`status:"new"`, `thanked:false`, `submitted_at` UTC-ISO), and **auto-subscribes the
+  email** via the same `_persist_subscriber` used by `/public/subscribe`. Success shows an in-page
+  confirmation. Cross-linked with `/subscribe`.
+- **Run injection**: both `desk.run_briefing` (daily) and `producer.produce_episode` (weekly) load
+  up to 50 `status:"new"` submissions and inject their URLs into the model prompt as
+  "READER-SUBMITTED LEADS — evaluate independently, include only if it genuinely meets the bar".
+  Marking a submission used/archived removes it from future injection.
+- **Dashboard** `/submissions` (`Submissions.tsx`, in nav for all signed-in users; actions gated to
+  `canEdit`): lists every submission newest-first with submitter name + email (local-tz timestamp).
+  Backend router (auth-guarded): `GET /api/submissions`, `PATCH /api/submissions/{id}` (status
+  new|used|archived), `POST /api/submissions/{id}/thank` (emails the reader via
+  `email_digest.send_submission_thanks`, sets `thanked`), `DELETE /api/submissions/{id}`.
+
 ## Configurable schedule + run history (admin)
 - **Schedule** lives in the `desk_config` singleton. Run times are interpreted in an admin-chosen
   home timezone (`timezone`, IANA name, default `America/New_York`, DST-aware via `ZoneInfo` +

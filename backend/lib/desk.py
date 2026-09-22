@@ -177,7 +177,7 @@ OUTPUT: respond with a single JSON object and nothing else - no prose, no markdo
 Section rules: exactly up to three stories in "big_three" with rank 1-3 (fewer if fewer genuinely significant stories exist); roughly 5-10 in "other"; "developing" for continuing stories with new developments; "state_policy" for Legislature, Governor, WVDE, state board, funding, regulation and election items, explicitly stating whether a policy is proposed, under consideration, adopted, enacted, suspended, challenged, repealed or otherwise finalized; "k12" should receive substantial attention; "higher_ed" only where statewide significance earns it. Every URL must be a real page you actually consulted during this run. The source_log lists the important sources actually reviewed, including local and regional ones."""
 
 
-def _user_prompt(date_str: str, recent: List[Dict[str, Any]]) -> str:
+def _user_prompt(date_str: str, recent: List[Dict[str, Any]], submissions: List[Dict[str, Any]]) -> str:
     lines = [
         f"Today's calendar date is {date_str} (America/New_York). Produce the daily briefing for this date.",
         "Prioritize developments published or substantially updated in the previous 24 hours, and check the preceding several days for continuing stories.",
@@ -191,6 +191,16 @@ def _user_prompt(date_str: str, recent: List[Dict[str, Any]]) -> str:
             lines.append(f"- {b.get('date')}: {heads}")
     else:
         lines.append("\nThis is the first briefing; there is no prior archive to compare against.")
+    if submissions:
+        lines.append(
+            "\nREADER-SUBMITTED LEADS — members of the public submitted the following links for the desk to consider. "
+            "Evaluate each independently with live web search and your normal significance and verification standards; "
+            "include one ONLY if it genuinely meets the bar. Do not include a story merely because it was submitted, "
+            "and never fabricate around a link you cannot verify:"
+        )
+        for s in submissions:
+            who = f" (submitted by {s.get('name')})" if s.get("name") else ""
+            lines.append(f"- {s.get('url')}{who}")
     lines.append("\nReturn only the JSON object described in your instructions.")
     return "\n".join(lines)
 
@@ -206,7 +216,7 @@ def _parse_json(raw: str) -> Dict[str, Any]:
     return json.loads(text[start : end + 1])
 
 
-async def _call_model(date_str: str, recent: List[Dict[str, Any]]) -> Dict[str, Any]:
+async def _call_model(date_str: str, recent: List[Dict[str, Any]], submissions: List[Dict[str, Any]]) -> Dict[str, Any]:
     from emergentintegrations.llm.chat import LlmChat, UserMessage
 
     key = os.environ.get("EMERGENT_LLM_KEY", "")
@@ -218,7 +228,7 @@ async def _call_model(date_str: str, recent: List[Dict[str, Any]]) -> Dict[str, 
         .with_model(MODEL_PROVIDER, MODEL_NAME)
         .with_tools([{"googleSearch": {}}])  # live Google Search grounding — real cited sources
     )
-    resp = await chat.send_message_with_tools(UserMessage(text=_user_prompt(date_str, recent)))
+    resp = await chat.send_message_with_tools(UserMessage(text=_user_prompt(date_str, recent, submissions)))
     content = resp.content if isinstance(resp.content, str) else str(resp.content or "")
     data = _parse_json(content)
 
@@ -349,7 +359,12 @@ async def run_briefing(date_str: Optional[str] = None, trigger: str = "manual") 
                 .sort("date", -1)
                 .to_list(4)
             )
-            data = await _call_model(date_str, recent)
+            submissions = (
+                await db.submissions.find({"status": "new"}, {"_id": 0, "url": 1, "name": 1})
+                .sort("submitted_at", -1)
+                .to_list(50)
+            )
+            data = await _call_model(date_str, recent, submissions)
 
             stories: List[Story] = []
             for raw in data.get("stories") or []:

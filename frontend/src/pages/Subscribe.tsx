@@ -86,7 +86,11 @@ export default function Subscribe() {
           )}
         </div>
         <p className="mt-4 text-center text-xs text-muted-foreground">
-          We never ask for passwords or payment details by email.
+          Have a story to share?{" "}
+          <a href="/submit" className="text-primary underline-offset-2 hover:underline">
+            Submit a news tip
+          </a>
+          . We never ask for passwords or payment details by email.
         </p>
       </div>
     </div>

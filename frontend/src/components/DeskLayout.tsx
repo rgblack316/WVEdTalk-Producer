@@ -13,6 +13,7 @@ const BASE_NAV = [
   { to: "/archive", label: "Archive" },
   { to: "/episodes", label: "Weekly Script" },
   { to: "/candidates", label: "Podcast Prep" },
+  { to: "/submissions", label: "Submissions" },
   { to: "/settings", label: "Settings" },
 ];
 

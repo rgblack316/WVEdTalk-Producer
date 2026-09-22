@@ -23,6 +23,7 @@ from routers.episodes import router as episodes_router
 from routers.settings import router as settings_router
 from routers.users import router as users_router
 from routers.public import router as public_router
+from routers.submissions import router as submissions_router
 
 
 # Startup runs before the yield, shutdown after it. Add your own setup/teardown here.
@@ -57,6 +58,7 @@ _guard = [Depends(require_auth)]
 api_router.include_router(briefings_router, dependencies=_guard)
 api_router.include_router(settings_router, dependencies=_guard)
 api_router.include_router(episodes_router, dependencies=_guard)
+api_router.include_router(submissions_router, dependencies=_guard)
 api_router.include_router(users_router, dependencies=[Depends(require_admin)])
 
 # Include the router in the main app

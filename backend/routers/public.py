@@ -4,8 +4,9 @@ per-email HMAC token. Sign-up is idempotent, email-format validated, and IP-thro
 
 import re
 import time
+import uuid
 from datetime import datetime, timezone
-from urllib.parse import parse_qs
+from urllib.parse import parse_qs, urlparse
 
 from fastapi import APIRouter, HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse
@@ -14,6 +15,7 @@ from lib import auth
 from lib.db import db
 from models.briefing import Briefing
 from models.subscriber import SubscribeRequest, UnsubscribeRequest
+from models.submission import SubmissionRequest
 
 router = APIRouter(tags=["public"])
 
@@ -64,6 +66,39 @@ async def subscribe(body: SubscribeRequest, request: Request):
     await _persist_subscriber(str(body.email))
     # Same response whether new or existing — don't leak who is already subscribed.
     return {"ok": True, "message": "You're subscribed to the WVEdTalk News Desk daily briefing."}
+
+
+@router.post("/public/submit-story")
+async def submit_story(body: SubmissionRequest, request: Request):
+    """A reader submits a news link for the desk to consider. Submitting also subscribes their
+    email to the daily briefing. The link is only validated as a well-formed http(s) URL here —
+    the research model verifies it independently before any story is included."""
+    _throttle(request.client.host if request.client else "unknown")
+    url = (body.url or "").strip()
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https") or not parsed.netloc:
+        raise HTTPException(status_code=422, detail="Please submit a valid link starting with http:// or https://")
+    name = (body.name or "").strip()
+    if not name:
+        raise HTTPException(status_code=422, detail="Please include your name.")
+    email = str(body.email).lower().strip()
+    await db.submissions.insert_one(
+        {
+            "id": str(uuid.uuid4()),
+            "url": url[:2000],
+            "name": name[:120],
+            "email": email,
+            "status": "new",
+            "thanked": False,
+            "submitted_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": None,
+        }
+    )
+    await _persist_subscriber(email)  # submitting opts them into the daily briefing
+    return {
+        "ok": True,
+        "message": "Thank you! Your story has been submitted for the desk to consider, and you're now subscribed to the daily briefing.",
+    }
 
 
 @router.post("/public/unsubscribe")

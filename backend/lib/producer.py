@@ -135,6 +135,7 @@ def _user_prompt(
     briefings: List[Dict[str, Any]],
     script_length: str,
     candidates: List[Dict[str, Any]],
+    submissions: List[Dict[str, Any]],
 ) -> str:
     lines = [
         f"Produce the WVEdTalk weekly episode covering West Virginia education news for the week of {week_start} through {week_end} (America/New_York).",
@@ -156,6 +157,15 @@ def _user_prompt(
             note = f" — host note: {c['notes']}" if c.get("notes") else ""
             loc = f" [{c['location']}]" if c.get("location") else ""
             lines.append(f"- ({c.get('date','')}) {c.get('headline','')}{loc}{note}")
+    if submissions:
+        lines.append(
+            "\nREADER-SUBMITTED LEADS — members of the public submitted these links for consideration. "
+            "Evaluate each independently with live web search and your normal significance and verification standards; "
+            "cover one only if it genuinely merits inclusion. Do not include a story merely because it was submitted:"
+        )
+        for s in submissions:
+            who = f" (submitted by {s.get('name')})" if s.get("name") else ""
+            lines.append(f"- {s.get('url')}{who}")
     if briefings:
         lines.append(
             "\nFor reference only, the WV Education News Desk daily briefings from this week reported these stories. Use them to orient your research and to track what developed, but reassess everything independently:"
@@ -193,6 +203,7 @@ async def _call_model(
     briefings: List[Dict[str, Any]],
     script_length: str,
     candidates: List[Dict[str, Any]],
+    submissions: List[Dict[str, Any]],
 ) -> Dict[str, Any]:
     import os
 
@@ -208,7 +219,7 @@ async def _call_model(
         .with_tools([{"googleSearch": {}}])
     )
     resp = await chat.send_message_with_tools(
-        UserMessage(text=_user_prompt(week_start, week_end, briefings, script_length, candidates))
+        UserMessage(text=_user_prompt(week_start, week_end, briefings, script_length, candidates, submissions))
     )
     content = resp.content if isinstance(resp.content, str) else str(resp.content or "")
     data = desk._parse_json(content)
@@ -335,7 +346,12 @@ async def produce_episode(week_of: Optional[str] = None, trigger: str = "manual"
             candidates = await _gather_candidates()
             if candidates:
                 _status.message = f"Reviewing the week with {len(candidates)} host-flagged candidate(s) prioritized…"
-            data = await _call_model(week_start, week_end, briefings, script_length, candidates)
+            submissions = (
+                await db.submissions.find({"status": "new"}, {"_id": 0, "url": 1, "name": 1})
+                .sort("submitted_at", -1)
+                .to_list(50)
+            )
+            data = await _call_model(week_start, week_end, briefings, script_length, candidates, submissions)
 
             selected: List[EpisodeStory] = []
             for raw in data.get("selected_stories") or []:

@@ -12,6 +12,8 @@ import Episodes from "@/pages/Episodes";
 import EpisodePage from "@/pages/EpisodePage";
 import SharedBriefing from "@/pages/SharedBriefing";
 import Subscribe from "@/pages/Subscribe";
+import SubmitStory from "@/pages/SubmitStory";
+import Submissions from "@/pages/Submissions";
 import Unsubscribe from "@/pages/Unsubscribe";
 
 // Everything under ProtectedLayout sits behind the login gate; /share/* is public.
@@ -30,11 +32,13 @@ export default function App() {
       <Routes>
         <Route path="/share/briefing/:date" element={<SharedBriefing />} />
         <Route path="/subscribe" element={<Subscribe />} />
+        <Route path="/submit" element={<SubmitStory />} />
         <Route path="/unsubscribe" element={<Unsubscribe />} />
         <Route element={<ProtectedLayout />}>
           <Route path="/" element={<Home />} />
           <Route path="/archive" element={<Archive />} />
           <Route path="/candidates" element={<Candidates />} />
+          <Route path="/submissions" element={<Submissions />} />
           <Route path="/episodes" element={<Episodes />} />
           <Route path="/episodes/:week" element={<EpisodePage />} />
           <Route path="/settings" element={<Settings />} />
