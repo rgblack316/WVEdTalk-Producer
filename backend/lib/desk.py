@@ -112,19 +112,32 @@ def _norm_url(u: str) -> str:
 
 async def link_submissions_used(urls: List[str], label: str, ref: str) -> int:
     """Auto-link reader submissions whose URL appears among a run's sources: flip them to 'used'
-    and record where they appeared. Only touches submissions still marked 'new'. Best-effort."""
+    and record where they appeared. If auto_thank_on_use is enabled, email the reader a thank-you.
+    Only touches submissions still marked 'new'. Best-effort."""
     norms = {n for n in (_norm_url(u) for u in urls) if n}
     if not norms:
         return 0
+    cfg = await db.desk_config.find_one({"key": "singleton"}, {"_id": 0, "auto_thank_on_use": 1}) or {}
+    auto_thank = bool(cfg.get("auto_thank_on_use"))
     linked = 0
-    async for doc in db.submissions.find({"status": "new"}, {"_id": 0, "id": 1, "url": 1}):
-        if _norm_url(doc.get("url", "")) in norms:
-            await db.submissions.update_one(
-                {"id": doc["id"]},
-                {"$set": {"status": "used", "used_in": label, "used_ref": ref,
-                          "updated_at": datetime.now(timezone.utc).isoformat()}},
-            )
-            linked += 1
+    async for doc in db.submissions.find(
+        {"status": "new"}, {"_id": 0, "id": 1, "url": 1, "name": 1, "email": 1, "thanked": 1}
+    ):
+        if _norm_url(doc.get("url", "")) not in norms:
+            continue
+        sets = {"status": "used", "used_in": label, "used_ref": ref,
+                "updated_at": datetime.now(timezone.utc).isoformat()}
+        if auto_thank and not doc.get("thanked"):
+            try:
+                from lib import email_digest
+                if await email_digest.send_submission_thanks(
+                    name=doc.get("name", ""), email=doc.get("email", ""), url=doc.get("url", "")
+                ):
+                    sets["thanked"] = True
+            except Exception:
+                logger.exception("auto-thank failed (non-fatal)")
+        await db.submissions.update_one({"id": doc["id"]}, {"$set": sets})
+        linked += 1
     return linked
 
 

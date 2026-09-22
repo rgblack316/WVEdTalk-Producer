@@ -15,6 +15,7 @@ class DeskConfig(BaseModel):
     watch_terms: List[str] = []
     script_length: str = "standard"  # concise | standard | full
     auto_lock_minutes: int = 0  # 0 = off
+    auto_thank_on_use: bool = False  # auto-email a reader when their tip is auto-linked as used
     # Automatic run schedule, interpreted in the desk's home timezone (DST-aware).
     timezone: str = "America/New_York"  # IANA name
     daily_hour: int = 22  # 0-23
@@ -38,6 +39,10 @@ class ScriptLengthUpdate(BaseModel):
 
 class AutoLockUpdate(BaseModel):
     minutes: int
+
+
+class AutoThankUpdate(BaseModel):
+    enabled: bool
 
 
 class ScheduleUpdate(BaseModel):

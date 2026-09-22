@@ -10,6 +10,7 @@ from lib import desk
 from lib.db import db
 from models.config import (
     AutoLockUpdate,
+    AutoThankUpdate,
     DeskConfig,
     NextRuns,
     RecipientCreate,
@@ -96,6 +97,14 @@ async def set_auto_lock(body: AutoLockUpdate, _edit=Depends(auth.require_editor)
         raise HTTPException(status_code=422, detail="Minutes must be one of 0, 5, 15, 30, 60")
     cfg = await _load()
     cfg.auto_lock_minutes = body.minutes
+    await _save(cfg)
+    return cfg
+
+
+@router.post("/settings/auto-thank", response_model=DeskConfig)
+async def set_auto_thank(body: AutoThankUpdate):
+    cfg = await _load()
+    cfg.auto_thank_on_use = body.enabled
     await _save(cfg)
     return cfg
 

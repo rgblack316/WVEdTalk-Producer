@@ -5,12 +5,17 @@ from datetime import datetime, timezone
 from typing import List
 
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
 
 from lib import email_digest
 from lib.db import db
 from models.submission import StorySubmission, SubmissionUpdate
 
 router = APIRouter(tags=["submissions"])
+
+
+class BulkIds(BaseModel):
+    ids: List[str]
 
 _VALID = {"new", "used", "archived", "rejected"}
 
@@ -75,6 +80,27 @@ async def thank_submission(sid: str):
     )
     doc["thanked"] = True
     return StorySubmission(**doc)
+
+
+@router.post("/submissions/bulk-reject")
+async def bulk_reject(body: BulkIds):
+    """Reject several off-topic tips at once, emailing each reader (best-effort)."""
+    count = 0
+    for sid in body.ids[:200]:
+        doc = await db.submissions.find_one({"id": sid}, {"_id": 0})
+        if not doc:
+            continue
+        try:
+            await email_digest.send_submission_rejection(
+                name=doc.get("name", ""), email=doc.get("email", ""), url=doc.get("url", "")
+            )
+        except Exception:
+            pass
+        await db.submissions.update_one(
+            {"id": sid}, {"$set": {"status": "rejected", "updated_at": datetime.now(timezone.utc).isoformat()}}
+        )
+        count += 1
+    return {"ok": True, "count": count}
 
 
 @router.delete("/submissions/{sid}")
