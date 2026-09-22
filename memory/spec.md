@@ -189,6 +189,14 @@ None seeded. First real briefing generated for 2026-09-18. Demo watch terms ("co
   look-ahead, full recording script, copy/download, past-episode list) and `/episodes/:week`
   (past episode detail). Nav item "Weekly Script".
 
+## Weekly script — Value 4 Value support segment
+- `lib/producer.py` appends a **verbatim** "Value 4 Value" support segment (`REQUIRED_SUPPORT`) as its
+  own `## Support WVEdTalk` chapter **immediately before `## Closing`** via `_ensure_support()`
+  (mirrors `_ensure_intro`; idempotent; appends at end if no Closing header). Applied on fresh
+  production AND on chapter backfill (`chapterize_episode`); chapters are re-derived from the final
+  script so the new chapter is included in order. The model is instructed NOT to write its own
+  donation/fundraising segment. Segment mentions wvedtalk.com/support and wvedtalk.com/submit.
+
 ## Public story submissions (reader tips)
 - **Submit page** `/submit` (public, `SubmitStory.tsx`): posts `{url, name, email, website(honeypot), turnstile_token}` to `POST /api/public/submit-story`. Validates URL/name (422), stores to `submissions`, auto-subscribes the email. A hidden **honeypot** (`website`) silently drops bots; **Cloudflare Turnstile** is verified server-side (`lib/turnstile.py`) when `TURNSTILE_SITE_KEY`/`TURNSTILE_SECRET_KEY` are set in backend/.env — else it degrades to no-captcha. Site key served (public) via `GET /api/public/config`; the browser widget is `components/TurnstileWidget.tsx` (explicit render).
 - **Embeddable form** for partner sites: `POST /api/public/embed-subscribe` (existing) + `POST /api/public/embed-submit-story` (form-encoded, no-CORS, honeypot-guarded; Turnstile can't run cross-origin so honeypot only). Copyable snippets on the Settings page.

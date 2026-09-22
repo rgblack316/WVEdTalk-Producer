@@ -31,6 +31,32 @@ REQUIRED_INTRO = (
     "shape education. Thank you for joining me this week for WVEdTalk."
 )
 
+# Verbatim "Value 4 Value" support segment — appended as its own chapter just before the closing.
+SUPPORT_CHAPTER = "Support WVEdTalk"
+REQUIRED_SUPPORT = "\n\n".join(
+    [
+        "WVEdTalk is produced using a Value 4 Value model.",
+        "What does that mean? It means WVEdTalk is made possible by listeners who believe the "
+        "information we provide has value and want to help keep it going.",
+        "There are three ways you can contribute: your time, your talent, or your treasure.",
+        "Your time might mean sharing an episode with someone who needs to hear it, telling a friend "
+        "about WVEdTalk, or simply taking a few minutes to send us a story we should know about.",
+        "Your talent could mean helping us spread the word, providing information or expertise, "
+        "suggesting a topic, or finding ways to make WVEdTalk better.",
+        "And your treasure means making a financial contribution to help cover the costs of producing "
+        "and maintaining the podcast. If WVEdTalk provides value to you and you\u2019d like to give "
+        "something back, you can learn more at wvedtalk.com/support.",
+        "There\u2019s another important way you can contribute: help us find the news.",
+        "If you know about an education story, announcement, issue, or development happening anywhere "
+        "in West Virginia that you think we should be watching, send it our way at wvedtalk.com/submit. "
+        "The WVEdTalk News Desk reviews every submission and determines which stories may warrant "
+        "further research and coverage.",
+        "You don't have to contribute financially to be part of WVEdTalk. Your time, your talent, your "
+        "treasure\u2014or simply helping us find the stories that matter\u2014all help keep this project going.",
+        "Thanks for listening, and thanks for being part of WVEdTalk.",
+    ]
+)
+
 _status = ProduceStatus()
 _lock = asyncio.Lock()
 
@@ -87,7 +113,7 @@ RECORDING SCRIPT: write a polished, conversational script for a 15-20 minute epi
 
 The recording script MUST begin with the opening show identification, then IMMEDIATELY reproduce this host introduction VERBATIM (do not paraphrase, shorten, reorder, rewrite, substitute or omit any part):
 "__REQUIRED_INTRO__"
-Then transition naturally into the week's news. Structure: (1) Opening = show identification, then the exact required introduction, then a brief note of what the episode covers; (2) Major story coverage — for each story: what happened, what changed this week, background, why it matters, who is affected, competing perspectives when appropriate, unanswered questions, what to watch next, with more important stories getting more time; (3) legitimate thematic connections, not manufactured; (4) a brief look ahead at genuinely relevant upcoming legislative/board/court/policy events; (5) a concise conversational closing that identifies the program as WVEdTalk. No filler.
+Then transition naturally into the week's news. Structure: (1) Opening = show identification, then the exact required introduction, then a brief note of what the episode covers; (2) Major story coverage — for each story: what happened, what changed this week, background, why it matters, who is affected, competing perspectives when appropriate, unanswered questions, what to watch next, with more important stories getting more time; (3) legitimate thematic connections, not manufactured; (4) a brief look ahead at genuinely relevant upcoming legislative/board/court/policy events; (5) a concise conversational closing that identifies the program as WVEdTalk. No filler. Do NOT write any fundraising, donation, 'value for value', or call-to-contribute segment yourself — the desk automatically appends its official support message as a '## Support WVEdTalk' chapter immediately before the '## Closing' sign-off.
 
 LEGAL/ETHICAL: identify allegations as allegations, do not imply guilt before adjudication, distinguish allegations from findings, note unresolved cases, avoid sensational descriptions; state proposed legislation as proposed and where it is in the process; distinguish board discussion from action and note when no final decision was made.
 
@@ -245,6 +271,22 @@ def _ensure_intro(script: str) -> str:
     return opener + (script or "")
 
 
+def _ensure_support(script: str) -> str:
+    """Guarantee the verbatim Value 4 Value support segment appears as its own '## Support WVEdTalk'
+    chapter immediately before the closing sign-off. Idempotent; falls back to appending at the end
+    when no '## Closing' header is present."""
+    script = script or ""
+    if REQUIRED_SUPPORT in script:
+        return script
+    block = f"## {SUPPORT_CHAPTER}\n\n{REQUIRED_SUPPORT}"
+    last = None
+    for last in re.finditer(r"(?im)^[ \t]*##[ \t]+Closing[ \t]*$", script):
+        pass
+    if last:
+        return script[: last.start()].rstrip() + "\n\n" + block + "\n\n" + script[last.start() :]
+    return script.rstrip() + "\n\n" + block
+
+
 def _extract_chapters(script: str) -> List[str]:
     """Fallback: pull chapter titles from the '## ' header lines in the script."""
     return [m.group(1).strip() for m in re.finditer(r"(?m)^\s*##\s+(.+?)\s*$", script or "") if m.group(1).strip()]
@@ -303,10 +345,8 @@ async def chapterize_episode(week_of: str) -> Dict[str, Any]:
     data = await _chapterize_call(script)
     # Backfill must NOT add spoken content — only insert headers. Never prepend the intro here
     # (that belongs to fresh production); use the model's returned script, or the original if empty.
-    new_script = str(data.get("recording_script") or "").strip() or script
-    chapters = [c.strip() for c in (data.get("chapters") or []) if isinstance(c, str) and c.strip()]
-    if not chapters:
-        chapters = _extract_chapters(new_script)
+    new_script = _ensure_support(str(data.get("recording_script") or "").strip() or script)
+    chapters = _extract_chapters(new_script)
 
     await db.episodes.update_one(
         {"week_of": week_of},
@@ -380,10 +420,8 @@ async def produce_episode(week_of: Optional[str] = None, trigger: str = "manual"
                     source_log.append(SourceLink(url=c["url"], outlet=c.get("title", "")).model_dump())
                     have.add(c["url"])
 
-            final_script = _ensure_intro(str(data.get("recording_script") or ""))
-            chapters = [c.strip() for c in (data.get("chapters") or []) if isinstance(c, str) and c.strip()]
-            if not chapters:
-                chapters = _extract_chapters(final_script)
+            final_script = _ensure_support(_ensure_intro(str(data.get("recording_script") or "")))
+            chapters = _extract_chapters(final_script)
 
             episode = WeeklyEpisode(
                 week_of=week_of,
