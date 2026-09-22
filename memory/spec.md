@@ -190,12 +190,15 @@ None seeded. First real briefing generated for 2026-09-18. Demo watch terms ("co
   (past episode detail). Nav item "Weekly Script".
 
 ## Weekly script — Value 4 Value support segment
-- `lib/producer.py` appends a **verbatim** "Value 4 Value" support segment (`REQUIRED_SUPPORT`) as its
-  own `## Support WVEdTalk` chapter **immediately before `## Closing`** via `_ensure_support()`
-  (mirrors `_ensure_intro`; idempotent; appends at end if no Closing header). Applied on fresh
-  production AND on chapter backfill (`chapterize_episode`); chapters are re-derived from the final
-  script so the new chapter is included in order. The model is instructed NOT to write its own
-  donation/fundraising segment. Segment mentions wvedtalk.com/support and wvedtalk.com/submit.
+- `lib/producer.py` inserts a support segment as its own `## Support WVEdTalk` chapter **immediately
+  before `## Closing`** via `_ensure_support(script, text)` (idempotent by header; `_remove_support`
+  strips it). **Configurable outro**: text lives in `desk_config.support_segment` (canonical default
+  `models.config.DEFAULT_SUPPORT_SEGMENT`); `support_default_on` controls whether new episodes include
+  it. Edited from the Settings "Weekly support read" panel via `POST /api/settings/support`.
+- **Per-episode toggle**: each episode has `support_included`; `POST /api/episodes/{week_of}/support
+  {enabled}` adds/removes the segment on that one script and re-derives chapters. EpisodePage shows an
+  Add/Remove support read button. `chapterize_episode` no longer forces the segment (preserves the
+  episode's current state). The model is still told not to write its own donation segment.
 
 ## Public story submissions (reader tips)
 - **Submit page** `/submit` (public, `SubmitStory.tsx`): posts `{url, name, email, website(honeypot), turnstile_token}` to `POST /api/public/submit-story`. Validates URL/name (422), stores to `submissions`, auto-subscribes the email. A hidden **honeypot** (`website`) silently drops bots; **Cloudflare Turnstile** is verified server-side (`lib/turnstile.py`) when `TURNSTILE_SITE_KEY`/`TURNSTILE_SECRET_KEY` are set in backend/.env — else it degrades to no-captcha. Site key served (public) via `GET /api/public/config`; the browser widget is `components/TurnstileWidget.tsx` (explicit render).

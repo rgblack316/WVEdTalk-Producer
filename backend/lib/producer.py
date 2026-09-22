@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional
 from lib import desk
 from lib.db import db
 from models.briefing import SourceLink
+from models.config import DEFAULT_SUPPORT_SEGMENT
 from models.episode import (
     EpisodeStory,
     LookAheadItem,
@@ -31,31 +32,9 @@ REQUIRED_INTRO = (
     "shape education. Thank you for joining me this week for WVEdTalk."
 )
 
-# Verbatim "Value 4 Value" support segment — appended as its own chapter just before the closing.
+# Verbatim "Value 4 Value" support segment default (admin-overridable via desk_config).
 SUPPORT_CHAPTER = "Support WVEdTalk"
-REQUIRED_SUPPORT = "\n\n".join(
-    [
-        "WVEdTalk is produced using a Value 4 Value model.",
-        "What does that mean? It means WVEdTalk is made possible by listeners who believe the "
-        "information we provide has value and want to help keep it going.",
-        "There are three ways you can contribute: your time, your talent, or your treasure.",
-        "Your time might mean sharing an episode with someone who needs to hear it, telling a friend "
-        "about WVEdTalk, or simply taking a few minutes to send us a story we should know about.",
-        "Your talent could mean helping us spread the word, providing information or expertise, "
-        "suggesting a topic, or finding ways to make WVEdTalk better.",
-        "And your treasure means making a financial contribution to help cover the costs of producing "
-        "and maintaining the podcast. If WVEdTalk provides value to you and you\u2019d like to give "
-        "something back, you can learn more at wvedtalk.com/support.",
-        "There\u2019s another important way you can contribute: help us find the news.",
-        "If you know about an education story, announcement, issue, or development happening anywhere "
-        "in West Virginia that you think we should be watching, send it our way at wvedtalk.com/submit. "
-        "The WVEdTalk News Desk reviews every submission and determines which stories may warrant "
-        "further research and coverage.",
-        "You don't have to contribute financially to be part of WVEdTalk. Your time, your talent, your "
-        "treasure\u2014or simply helping us find the stories that matter\u2014all help keep this project going.",
-        "Thanks for listening, and thanks for being part of WVEdTalk.",
-    ]
-)
+REQUIRED_SUPPORT = DEFAULT_SUPPORT_SEGMENT
 
 _status = ProduceStatus()
 _lock = asyncio.Lock()
@@ -271,20 +250,29 @@ def _ensure_intro(script: str) -> str:
     return opener + (script or "")
 
 
-def _ensure_support(script: str) -> str:
-    """Guarantee the verbatim Value 4 Value support segment appears as its own '## Support WVEdTalk'
-    chapter immediately before the closing sign-off. Idempotent; falls back to appending at the end
-    when no '## Closing' header is present."""
+def _ensure_support(script: str, text: Optional[str] = None) -> str:
+    """Insert the support segment as its own '## Support WVEdTalk' chapter immediately before the
+    closing sign-off. Idempotent by header (won't duplicate); appends at end if no '## Closing'."""
     script = script or ""
-    if REQUIRED_SUPPORT in script:
+    if re.search(rf"(?im)^[ \t]*##[ \t]+{re.escape(SUPPORT_CHAPTER)}[ \t]*$", script):
         return script
-    block = f"## {SUPPORT_CHAPTER}\n\n{REQUIRED_SUPPORT}"
+    block = f"## {SUPPORT_CHAPTER}\n\n{(text or REQUIRED_SUPPORT).strip()}"
     last = None
     for last in re.finditer(r"(?im)^[ \t]*##[ \t]+Closing[ \t]*$", script):
         pass
     if last:
         return script[: last.start()].rstrip() + "\n\n" + block + "\n\n" + script[last.start() :]
     return script.rstrip() + "\n\n" + block
+
+
+def _remove_support(script: str) -> str:
+    """Strip the '## Support WVEdTalk' chapter block (header through the next '## ' or end)."""
+    out = re.sub(
+        rf"(?ims)\n*^[ \t]*##[ \t]+{re.escape(SUPPORT_CHAPTER)}[ \t]*$.*?(?=^[ \t]*##[ \t]|\Z)",
+        "\n\n",
+        script or "",
+    )
+    return out.strip()
 
 
 def _extract_chapters(script: str) -> List[str]:
@@ -345,7 +333,7 @@ async def chapterize_episode(week_of: str) -> Dict[str, Any]:
     data = await _chapterize_call(script)
     # Backfill must NOT add spoken content — only insert headers. Never prepend the intro here
     # (that belongs to fresh production); use the model's returned script, or the original if empty.
-    new_script = _ensure_support(str(data.get("recording_script") or "").strip() or script)
+    new_script = str(data.get("recording_script") or "").strip() or script
     chapters = _extract_chapters(new_script)
 
     await db.episodes.update_one(
@@ -420,7 +408,13 @@ async def produce_episode(week_of: Optional[str] = None, trigger: str = "manual"
                     source_log.append(SourceLink(url=c["url"], outlet=c.get("title", "")).model_dump())
                     have.add(c["url"])
 
-            final_script = _ensure_support(_ensure_intro(str(data.get("recording_script") or "")))
+            support_on = bool(cfg.get("support_default_on", True))
+            base_script = _ensure_intro(str(data.get("recording_script") or ""))
+            final_script = (
+                _ensure_support(base_script, cfg.get("support_segment") or REQUIRED_SUPPORT)
+                if support_on
+                else _remove_support(base_script)
+            )
             chapters = _extract_chapters(final_script)
 
             episode = WeeklyEpisode(
@@ -434,6 +428,7 @@ async def produce_episode(week_of: Optional[str] = None, trigger: str = "manual"
                 look_ahead=look_ahead,
                 recording_script=final_script,
                 chapters=chapters,
+                support_included=support_on,
                 source_log=source_log,
             )
 

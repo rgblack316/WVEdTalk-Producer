@@ -88,6 +88,8 @@ export interface DeskConfig {
   script_length: string;
   auto_lock_minutes: number;
   auto_thank_on_use: boolean;
+  support_segment: string;
+  support_default_on: boolean;
   timezone: string;
   daily_hour: number;
   daily_minute: number;
@@ -194,6 +196,7 @@ export interface WeeklyEpisode {
   look_ahead: LookAheadItem[];
   recording_script: string;
   chapters: string[];
+  support_included: boolean;
   source_log: SourceLink[];
   error: string;
 }

@@ -1,7 +1,7 @@
 import { useParams, Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ArrowLeft, Copy, Download, ExternalLink, Clock, Loader2, ListTree } from "lucide-react";
+import { ArrowLeft, Copy, Download, ExternalLink, Clock, Loader2, ListTree, Megaphone } from "lucide-react";
 import DeskLayout from "@/components/DeskLayout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -61,6 +61,16 @@ export default function EpisodePage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["episode", week] });
       toast.success("Chapter headers added");
+    },
+    onError: (e) =>
+      toast.error(e instanceof ApiError ? String((e.body as { detail?: string })?.detail ?? e.message) : String(e)),
+  });
+
+  const supportToggle = useMutation({
+    mutationFn: (enabled: boolean) => apiPost<WeeklyEpisode>(`/episodes/${week}/support`, { enabled }),
+    onSuccess: (_d, enabled) => {
+      qc.invalidateQueries({ queryKey: ["episode", week] });
+      toast.success(enabled ? "Support read added" : "Support read removed");
     },
     onError: (e) =>
       toast.error(e instanceof ApiError ? String((e.body as { detail?: string })?.detail ?? e.message) : String(e)),
@@ -213,18 +223,32 @@ export default function EpisodePage() {
           <section className="mb-10">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-2 border-b-2 border-foreground/80 pb-1">
               <h2 className="font-heading text-xl font-bold tracking-tight">Recording Script</h2>
-              {canEdit && (!episode.chapters || episode.chapters.length === 0) && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={chapterize.isPending}
-                  onClick={() => chapterize.mutate()}
-                  data-testid="chapterize-button"
-                >
-                  {chapterize.isPending ? <Loader2 className="size-4 animate-spin" /> : <ListTree className="size-4" />}
-                  {chapterize.isPending ? "Adding chapters…" : "Add chapter headers"}
-                </Button>
-              )}
+              <div className="flex flex-wrap items-center gap-2">
+                {canEdit && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={supportToggle.isPending}
+                    onClick={() => supportToggle.mutate(!episode.support_included)}
+                    data-testid="support-toggle-button"
+                  >
+                    {supportToggle.isPending ? <Loader2 className="size-4 animate-spin" /> : <Megaphone className="size-4" />}
+                    {episode.support_included ? "Remove support read" : "Add support read"}
+                  </Button>
+                )}
+                {canEdit && (!episode.chapters || episode.chapters.length === 0) && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={chapterize.isPending}
+                    onClick={() => chapterize.mutate()}
+                    data-testid="chapterize-button"
+                  >
+                    {chapterize.isPending ? <Loader2 className="size-4 animate-spin" /> : <ListTree className="size-4" />}
+                    {chapterize.isPending ? "Adding chapters…" : "Add chapter headers"}
+                  </Button>
+                )}
+              </div>
             </div>
             <ScriptView script={episode.recording_script} chapters={episode.chapters} />
           </section>

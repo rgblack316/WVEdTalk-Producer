@@ -17,6 +17,7 @@ from models.config import (
     RunLogEntry,
     ScheduleUpdate,
     ScriptLengthUpdate,
+    SupportUpdate,
     WatchTermCreate,
 )
 from models.subscriber import Subscriber
@@ -97,6 +98,15 @@ async def set_auto_lock(body: AutoLockUpdate, _edit=Depends(auth.require_editor)
         raise HTTPException(status_code=422, detail="Minutes must be one of 0, 5, 15, 30, 60")
     cfg = await _load()
     cfg.auto_lock_minutes = body.minutes
+    await _save(cfg)
+    return cfg
+
+
+@router.post("/settings/support", response_model=DeskConfig)
+async def set_support(body: SupportUpdate):
+    cfg = await _load()
+    cfg.support_segment = body.segment
+    cfg.support_default_on = body.default_on
     await _save(cfg)
     return cfg
 

@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Mail, Eye, Trash2, Send, Gauge, ShieldCheck, Timer, KeyRound, Users, Link2, Code2, Copy, CalendarClock, History } from "lucide-react";
+import { Mail, Eye, Trash2, Send, Gauge, ShieldCheck, Timer, KeyRound, Users, Link2, Code2, Copy, CalendarClock, History, Megaphone } from "lucide-react";
 import DeskLayout from "@/components/DeskLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -47,6 +47,8 @@ export default function Settings() {
   const [weeklyDow, setWeeklyDow] = useState(4);
   const [weeklyTime, setWeeklyTime] = useState("16:00");
   const [tz, setTz] = useState("America/New_York");
+  const [supportText, setSupportText] = useState("");
+  const [supportOn, setSupportOn] = useState(true);
 
   const { data, isLoading } = useQuery({
     queryKey: ["config"],
@@ -72,6 +74,8 @@ export default function Settings() {
       setWeeklyDow(data.weekly_dow);
       setWeeklyTime(`${pad(data.weekly_hour)}:${pad(data.weekly_minute)}`);
       setTz(data.timezone);
+      setSupportText(data.support_segment);
+      setSupportOn(data.support_default_on);
     }
   }, [data]);
 
@@ -187,6 +191,15 @@ export default function Settings() {
     onSuccess: (cfg) => {
       invalidate(cfg);
       toast.success("Auto-lock preference saved");
+    },
+    onError: (e) => toast.error(errMsg(e)),
+  });
+
+  const saveSupport = useMutation({
+    mutationFn: () => apiPost<DeskConfig>("/settings/support", { segment: supportText, default_on: supportOn }),
+    onSuccess: (cfg) => {
+      invalidate(cfg);
+      toast.success("Support read saved");
     },
     onError: (e) => toast.error(errMsg(e)),
   });
@@ -490,6 +503,37 @@ export default function Settings() {
           )}
 
           {/* Recent automatic runs — visible to all signed-in users */}
+          {canEdit && (
+          <section className="rounded-md border border-border bg-card p-5 md:col-span-2" data-testid="support-panel">
+            <h3 className="flex items-center gap-2 font-heading text-lg font-bold">
+              <Megaphone className="size-4 text-primary" /> Weekly support read (Value 4 Value)
+            </h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Added as a "Support WVEdTalk" chapter just before the closing of each new weekly script.
+              Edit the wording here — no code change needed. Existing episodes keep their current text;
+              toggle a specific episode on its page.
+            </p>
+            <textarea
+              value={supportText}
+              onChange={(e) => setSupportText(e.target.value)}
+              className="mt-3 h-52 w-full rounded-sm border border-border bg-background p-3 text-sm"
+              data-testid="support-text"
+            />
+            <label className="mt-3 flex cursor-pointer items-center gap-2 text-sm" data-testid="support-default-toggle">
+              <input
+                type="checkbox"
+                checked={supportOn}
+                onChange={(e) => setSupportOn(e.target.checked)}
+                className="size-4 cursor-pointer accent-primary"
+              />
+              Include the support read on newly produced episodes by default
+            </label>
+            <Button size="sm" className="mt-4" disabled={saveSupport.isPending} onClick={() => saveSupport.mutate()} data-testid="save-support-button">
+              Save support read
+            </Button>
+          </section>
+          )}
+
           <section
             className="rounded-md border border-border bg-card p-5 md:col-span-2"
             data-testid="run-history-panel"

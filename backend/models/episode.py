@@ -53,6 +53,7 @@ class WeeklyEpisode(BaseModel):
     look_ahead: List[LookAheadItem] = Field(default_factory=list)
     recording_script: str = ""
     chapters: List[str] = Field(default_factory=list)
+    support_included: bool = True  # whether the Value 4 Value support read is in the script
     source_log: List[SourceLink] = Field(default_factory=list)
     error: str = ""
 

@@ -4,6 +4,7 @@ import asyncio
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 
 from lib import producer
 from lib.auth import require_editor
@@ -95,6 +96,32 @@ async def chapterize(week_of: str, _edit=Depends(require_editor)):
         raise HTTPException(status_code=400, detail="This episode has no script to chapterize")
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Could not add chapters: {exc}")
+    return WeeklyEpisode(**doc)
+
+
+class _SupportToggle(BaseModel):
+    enabled: bool
+
+
+@router.post("/episodes/{week_of}/support", response_model=WeeklyEpisode)
+async def toggle_support(week_of: str, body: _SupportToggle, _edit=Depends(require_editor)):
+    """Add or remove the Value 4 Value support read on a single episode's script."""
+    doc = await db.episodes.find_one({"week_of": week_of})
+    if not doc:
+        raise HTTPException(status_code=404, detail=f"No episode for week of {week_of}")
+    doc.pop("_id", None)
+    script = str(doc.get("recording_script") or "")
+    cfg = await db.desk_config.find_one({"key": "singleton"}, {"_id": 0}) or {}
+    seg = cfg.get("support_segment") or producer.REQUIRED_SUPPORT
+    new_script = producer._ensure_support(script, seg) if body.enabled else producer._remove_support(script)
+    chapters = producer._extract_chapters(new_script)
+    await db.episodes.update_one(
+        {"week_of": week_of},
+        {"$set": {"recording_script": new_script, "chapters": chapters, "support_included": body.enabled}},
+    )
+    doc["recording_script"] = new_script
+    doc["chapters"] = chapters
+    doc["support_included"] = body.enabled
     return WeeklyEpisode(**doc)
 
 
