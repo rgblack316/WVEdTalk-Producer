@@ -115,6 +115,24 @@ export default function Settings() {
     toast.success("Embed code copied");
   };
 
+  const submitEmbedCode = `<!-- WVEdTalk News Desk story submission -->
+<div style="max-width:420px;font-family:Arial,Helvetica,sans-serif">
+  <form onsubmit="var f=this;var s=f.querySelector('.wvedtalk-msg');fetch('${embedOrigin}/api/public/embed-submit-story',{method:'POST',mode:'no-cors',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'url='+encodeURIComponent(f.url.value)+'&name='+encodeURIComponent(f.pname.value)+'&email='+encodeURIComponent(f.email.value)+'&website='+encodeURIComponent(f.website.value)});s.textContent='Thanks! Your story has been submitted for the desk to consider.';f.reset();return false;">
+    <input name="url" type="url" required placeholder="Link to the story" style="width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid #ccc;border-radius:6px;font-size:14px;margin-bottom:8px" />
+    <input name="pname" type="text" required placeholder="Your name" style="width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid #ccc;border-radius:6px;font-size:14px;margin-bottom:8px" />
+    <input name="email" type="email" required placeholder="you@example.com" style="width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid #ccc;border-radius:6px;font-size:14px;margin-bottom:8px" />
+    <input name="website" type="text" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px;height:0;width:0;opacity:0" />
+    <button type="submit" style="background:#16305e;color:#fff;border:0;border-radius:6px;padding:10px 18px;font-size:14px;font-weight:bold;cursor:pointer">Submit story</button>
+    <p class="wvedtalk-msg" style="margin:8px 0 0;font-size:13px;color:#16305e"></p>
+  </form>
+  <p style="margin:6px 0 0;font-size:11px;color:#8a8a8a">Powered by WVEdTalk News Desk</p>
+</div>`;
+
+  const copySubmitEmbed = () => {
+    navigator.clipboard.writeText(submitEmbedCode);
+    toast.success("Submit-form embed code copied");
+  };
+
   const invalidate = (cfg: DeskConfig) => qc.setQueryData(["config"], cfg);
 
   const addRecipient = useMutation({
@@ -724,6 +742,41 @@ export default function Settings() {
                   className="mt-2 rounded-sm border border-dashed border-border p-4"
                   data-testid="embed-preview"
                   dangerouslySetInnerHTML={{ __html: embedCode }}
+                />
+              </div>
+            )}
+            {canEdit && (
+              <div className="mt-6 border-t border-border pt-4" data-testid="submit-embed-panel">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="flex items-center gap-1.5 text-sm font-semibold">
+                    <Code2 className="size-4 text-primary" /> Embed the "Submit a story" form on another site
+                  </p>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={copySubmitEmbed}
+                    data-testid="copy-submit-embed-button"
+                  >
+                    <Copy className="size-4" /> Copy embed code
+                  </Button>
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Paste this HTML into any web page. Readers who submit a story link are added to the
+                  Submissions dashboard and subscribed to the daily briefing — no account needed. A hidden
+                  honeypot blocks basic bots.
+                </p>
+                <textarea
+                  readOnly
+                  value={submitEmbedCode}
+                  onFocus={(e) => e.currentTarget.select()}
+                  className="mt-3 h-40 w-full rounded-sm border border-border bg-background p-3 font-mono text-xs"
+                  data-testid="submit-embed-code-textarea"
+                />
+                <p className="mt-3 text-xs tracking-[0.14em] text-accent uppercase">Live preview</p>
+                <div
+                  className="mt-2 rounded-sm border border-dashed border-border p-4"
+                  data-testid="submit-embed-preview"
+                  dangerouslySetInnerHTML={{ __html: submitEmbedCode }}
                 />
               </div>
             )}

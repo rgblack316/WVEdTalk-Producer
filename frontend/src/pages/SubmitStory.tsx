@@ -1,25 +1,37 @@
-import { useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useState, useCallback } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { Newspaper, Loader2, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { apiPost, ApiError } from "@/lib/api";
+import TurnstileWidget from "@/components/TurnstileWidget";
+import { apiGet, apiPost, ApiError } from "@/lib/api";
+import type { PublicConfig } from "@/lib/types";
 
 // Public, unauthenticated news-tip submission. Sending a story also subscribes the reader to the
-// daily briefing. The desk verifies every link independently before it can appear in a briefing.
+// daily briefing. Protected by a hidden honeypot and (when configured) Cloudflare Turnstile.
 export default function SubmitStory() {
   const [url, setUrl] = useState("");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [website, setWebsite] = useState(""); // honeypot — stays empty for real users
+  const [token, setToken] = useState<string | null>(null);
+
+  const { data: config } = useQuery({
+    queryKey: ["public-config"],
+    queryFn: () => apiGet<PublicConfig>("/public/config"),
+    staleTime: 5 * 60 * 1000,
+  });
+  const captchaOn = Boolean(config?.turnstile_enabled && config.turnstile_site_key);
+  const onToken = useCallback((t: string | null) => setToken(t), []);
 
   const submit = useMutation({
-    mutationFn: (payload: { url: string; name: string; email: string }) =>
+    mutationFn: (payload: { url: string; name: string; email: string; website: string; turnstile_token: string | null }) =>
       apiPost<{ ok: boolean; message: string }>("/public/submit-story", payload),
   });
 
   const done = submit.isSuccess;
-  const ready = url.trim() && name.trim() && email.trim();
+  const ready = url.trim() && name.trim() && email.trim() && (!captchaOn || !!token);
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-5" data-testid="submit-story-page">
@@ -56,7 +68,14 @@ export default function SubmitStory() {
                 className="space-y-3"
                 onSubmit={(e) => {
                   e.preventDefault();
-                  if (ready) submit.mutate({ url: url.trim(), name: name.trim(), email: email.trim() });
+                  if (ready)
+                    submit.mutate({
+                      url: url.trim(),
+                      name: name.trim(),
+                      email: email.trim(),
+                      website,
+                      turnstile_token: token,
+                    });
                 }}
               >
                 <Input
@@ -81,6 +100,19 @@ export default function SubmitStory() {
                   onChange={(e) => setEmail(e.target.value)}
                   data-testid="submit-email-input"
                 />
+                {/* Honeypot: hidden from humans; bots that fill it are silently dropped. */}
+                <input
+                  type="text"
+                  name="website"
+                  tabIndex={-1}
+                  autoComplete="off"
+                  aria-hidden="true"
+                  value={website}
+                  onChange={(e) => setWebsite(e.target.value)}
+                  className="absolute left-[-9999px] h-0 w-0 opacity-0"
+                  data-testid="submit-honeypot"
+                />
+                {captchaOn && <TurnstileWidget siteKey={config!.turnstile_site_key!} onToken={onToken} />}
                 {submit.isError && (
                   <p className="text-sm text-destructive" data-testid="submit-error">
                     {submit.error instanceof ApiError

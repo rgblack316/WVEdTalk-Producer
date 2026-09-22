@@ -12,6 +12,7 @@ from fastapi import APIRouter, HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse
 
 from lib import auth
+from lib import turnstile
 from lib.db import db
 from models.briefing import Briefing
 from models.subscriber import SubscribeRequest, UnsubscribeRequest
@@ -68,32 +69,54 @@ async def subscribe(body: SubscribeRequest, request: Request):
     return {"ok": True, "message": "You're subscribed to the WVEdTalk News Desk daily briefing."}
 
 
-@router.post("/public/submit-story")
-async def submit_story(body: SubmissionRequest, request: Request):
-    """A reader submits a news link for the desk to consider. Submitting also subscribes their
-    email to the daily briefing. The link is only validated as a well-formed http(s) URL here —
-    the research model verifies it independently before any story is included."""
-    _throttle(request.client.host if request.client else "unknown")
-    url = (body.url or "").strip()
-    parsed = urlparse(url)
-    if parsed.scheme not in ("http", "https") or not parsed.netloc:
-        raise HTTPException(status_code=422, detail="Please submit a valid link starting with http:// or https://")
-    name = (body.name or "").strip()
-    if not name:
-        raise HTTPException(status_code=422, detail="Please include your name.")
-    email = str(body.email).lower().strip()
+def _valid_story_url(url: str) -> bool:
+    p = urlparse(url)
+    return p.scheme in ("http", "https") and bool(p.netloc)
+
+
+async def _persist_submission(url: str, name: str, email: str) -> None:
     await db.submissions.insert_one(
         {
             "id": str(uuid.uuid4()),
             "url": url[:2000],
             "name": name[:120],
-            "email": email,
+            "email": email.lower().strip(),
             "status": "new",
             "thanked": False,
+            "note": "",
+            "used_in": None,
+            "used_ref": None,
             "submitted_at": datetime.now(timezone.utc).isoformat(),
             "updated_at": None,
         }
     )
+
+
+@router.get("/public/config")
+async def public_config():
+    """Public runtime config for the submit form — the Turnstile SITE key is public by design."""
+    return {"turnstile_site_key": turnstile.SITE_KEY or None, "turnstile_enabled": turnstile.enabled()}
+
+
+@router.post("/public/submit-story")
+async def submit_story(body: SubmissionRequest, request: Request):
+    """A reader submits a news link for the desk to consider. Submitting also subscribes their
+    email to the daily briefing. The link is validated as a well-formed http(s) URL here — the
+    research model verifies it independently before any story is included."""
+    ip = request.client.host if request.client else "unknown"
+    _throttle(ip)
+    if (body.website or "").strip():  # honeypot: bots fill hidden fields — accept, store nothing
+        return {"ok": True, "message": "Thank you! Your story has been submitted for the desk to consider."}
+    if not await turnstile.verify(body.turnstile_token or "", ip if ip != "unknown" else None):
+        raise HTTPException(status_code=400, detail="Verification failed. Please try again.")
+    url = (body.url or "").strip()
+    if not _valid_story_url(url):
+        raise HTTPException(status_code=422, detail="Please submit a valid link starting with http:// or https://")
+    name = (body.name or "").strip()
+    if not name:
+        raise HTTPException(status_code=422, detail="Please include your name.")
+    email = str(body.email).lower().strip()
+    await _persist_submission(url, name, email)
     await _persist_subscriber(email)  # submitting opts them into the daily briefing
     return {
         "ok": True,
@@ -147,4 +170,57 @@ async def embed_subscribe(request: Request):
     await _persist_subscriber(email)
     return JSONResponse(
         {"ok": True, "message": "You're subscribed to the WVEdTalk daily briefing."}, headers=cors
+    )
+
+
+@router.options("/public/embed-submit-story")
+async def embed_submit_story_options():
+    return Response(
+        status_code=204,
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "POST, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type",
+        },
+    )
+
+
+@router.post("/public/embed-submit-story")
+async def embed_submit_story(request: Request):
+    """Cross-origin story-tip target for the embeddable widget on external sites. Accepts
+    x-www-form-urlencoded (no-CORS form submit) or JSON. Honeypot-guarded (Turnstile can't run
+    cross-origin here); the research model still verifies every link before it is used."""
+    _throttle(request.client.host if request.client else "unknown")
+    ctype = request.headers.get("content-type", "")
+    url = name = email = hp = ""
+    try:
+        if "application/json" in ctype:
+            data = await request.json() or {}
+            url = str(data.get("url", ""))
+            name = str(data.get("name", ""))
+            email = str(data.get("email", ""))
+            hp = str(data.get("website", ""))
+        else:
+            raw = (await request.body()).decode("utf-8", "ignore")
+            q = parse_qs(raw)
+            url = q.get("url", [""])[0]
+            name = q.get("name", [""])[0]
+            email = q.get("email", [""])[0]
+            hp = q.get("website", [""])[0]
+    except Exception:
+        url = name = email = hp = ""
+    cors = {"Access-Control-Allow-Origin": "*"}
+    if hp.strip():  # honeypot
+        return JSONResponse({"ok": True, "message": "Thanks! Your story has been submitted."}, headers=cors)
+    url, name, email = url.strip(), name.strip(), email.strip().lower()
+    if not _valid_story_url(url) or not name or not EMAIL_RE.match(email):
+        return JSONResponse(
+            {"ok": False, "message": "A valid story link, your name, and a valid email are required."},
+            status_code=400,
+            headers=cors,
+        )
+    await _persist_submission(url, name, email)
+    await _persist_subscriber(email)
+    return JSONResponse(
+        {"ok": True, "message": "Thanks! Your story has been submitted for the desk to consider."}, headers=cors
     )

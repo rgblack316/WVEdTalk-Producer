@@ -99,6 +99,35 @@ async def record_run(*, kind: str, trigger: str, status: str, label: str,
             logger.exception("failed to send failure alert (non-fatal)")
 
 
+def _norm_url(u: str) -> str:
+    try:
+        p = urllib.parse.urlparse((u or "").strip().lower())
+        host = p.hostname or ""
+        if host.startswith("www."):
+            host = host[4:]
+        return f"{host}{p.path.rstrip('/')}" if host else ""
+    except Exception:
+        return ""
+
+
+async def link_submissions_used(urls: List[str], label: str, ref: str) -> int:
+    """Auto-link reader submissions whose URL appears among a run's sources: flip them to 'used'
+    and record where they appeared. Only touches submissions still marked 'new'. Best-effort."""
+    norms = {n for n in (_norm_url(u) for u in urls) if n}
+    if not norms:
+        return 0
+    linked = 0
+    async for doc in db.submissions.find({"status": "new"}, {"_id": 0, "id": 1, "url": 1}):
+        if _norm_url(doc.get("url", "")) in norms:
+            await db.submissions.update_one(
+                {"id": doc["id"]},
+                {"$set": {"status": "used", "used_in": label, "used_ref": ref,
+                          "updated_at": datetime.now(timezone.utc).isoformat()}},
+            )
+            linked += 1
+    return linked
+
+
 def today_et() -> str:
     return datetime.now(EASTERN).strftime("%Y-%m-%d")
 
@@ -406,6 +435,14 @@ async def run_briefing(date_str: Optional[str] = None, trigger: str = "manual") 
             )
             _run_status.message = f"Briefing for {date_str} published ({len(stories)} stories)."
             run_ok = True
+            try:
+                await link_submissions_used(
+                    [src.url for s in stories for src in (s.sources or [])],
+                    label=f"Daily briefing {date_str}",
+                    ref=f"/briefings/{date_str}",
+                )
+            except Exception:
+                logger.exception("linking used submissions failed (non-fatal)")
             await _send_digest_safe(briefing)
             return briefing
         except Exception as exc:

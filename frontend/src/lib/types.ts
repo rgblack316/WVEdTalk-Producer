@@ -133,10 +133,18 @@ export interface StorySubmission {
   url: string;
   name: string;
   email: string;
-  status: string; // new | used | archived
+  status: string; // new | used | archived | rejected
   thanked: boolean;
+  note: string;
+  used_in: string | null;
+  used_ref: string | null;
   submitted_at: string;
   updated_at: string | null;
+}
+
+export interface PublicConfig {
+  turnstile_site_key: string | null;
+  turnstile_enabled: boolean;
 }
 
 export interface Subscriber {

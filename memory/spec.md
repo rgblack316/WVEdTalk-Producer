@@ -190,21 +190,11 @@ None seeded. First real briefing generated for 2026-09-18. Demo watch terms ("co
   (past episode detail). Nav item "Weekly Script".
 
 ## Public story submissions (reader tips)
-- **Submit page** `/submit` (public, `SubmitStory.tsx`): a reader posts `{url, name, email}` to
-  `POST /api/public/submit-story` (no auth, IP-throttled). The endpoint validates the URL is a
-  well-formed http(s) link and name is non-empty (else 422), inserts into the `submissions`
-  collection (`status:"new"`, `thanked:false`, `submitted_at` UTC-ISO), and **auto-subscribes the
-  email** via the same `_persist_subscriber` used by `/public/subscribe`. Success shows an in-page
-  confirmation. Cross-linked with `/subscribe`.
-- **Run injection**: both `desk.run_briefing` (daily) and `producer.produce_episode` (weekly) load
-  up to 50 `status:"new"` submissions and inject their URLs into the model prompt as
-  "READER-SUBMITTED LEADS — evaluate independently, include only if it genuinely meets the bar".
-  Marking a submission used/archived removes it from future injection.
-- **Dashboard** `/submissions` (`Submissions.tsx`, in nav for all signed-in users; actions gated to
-  `canEdit`): lists every submission newest-first with submitter name + email (local-tz timestamp).
-  Backend router (auth-guarded): `GET /api/submissions`, `PATCH /api/submissions/{id}` (status
-  new|used|archived), `POST /api/submissions/{id}/thank` (emails the reader via
-  `email_digest.send_submission_thanks`, sets `thanked`), `DELETE /api/submissions/{id}`.
+- **Submit page** `/submit` (public, `SubmitStory.tsx`): posts `{url, name, email, website(honeypot), turnstile_token}` to `POST /api/public/submit-story`. Validates URL/name (422), stores to `submissions`, auto-subscribes the email. A hidden **honeypot** (`website`) silently drops bots; **Cloudflare Turnstile** is verified server-side (`lib/turnstile.py`) when `TURNSTILE_SITE_KEY`/`TURNSTILE_SECRET_KEY` are set in backend/.env — else it degrades to no-captcha. Site key served (public) via `GET /api/public/config`; the browser widget is `components/TurnstileWidget.tsx` (explicit render).
+- **Embeddable form** for partner sites: `POST /api/public/embed-subscribe` (existing) + `POST /api/public/embed-submit-story` (form-encoded, no-CORS, honeypot-guarded; Turnstile can't run cross-origin so honeypot only). Copyable snippets on the Settings page.
+- **Run injection**: `desk.run_briefing` (daily) and `producer.produce_episode` (weekly) inject up to 50 `status:"new"` submission URLs into the model prompt as "reader-submitted leads — verify independently".
+- **Used-in auto-link**: after each run, `desk.link_submissions_used()` normalizes the run's source URLs (host+path, strips www/query/trailing slash) and flips any matching `new` submission to `used` with `used_in`/`used_ref` (links to the briefing/episode in the dashboard).
+- **Dashboard** `/submissions` (`Submissions.tsx`; actions gated to `canEdit`): per-tip private **note** (save), status new/used/archived, **Reject** (`POST /submissions/{id}/reject` — sets rejected + emails the reader a "not a fit" note via `email_digest.send_submission_rejection`), **Send thanks** (`/thank`), Delete. Backend routers: `GET /api/submissions`, `PATCH /api/submissions/{id}` (status+note), the two POST actions, `DELETE`.
 
 ## Configurable schedule + run history (admin)
 - **Schedule** lives in the `desk_config` singleton. Run times are interpreted in an admin-chosen

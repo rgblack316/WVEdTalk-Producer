@@ -408,6 +408,12 @@ async def produce_episode(week_of: Optional[str] = None, trigger: str = "manual"
             await db.episodes.replace_one({"week_of": week_of}, episode.model_dump(), upsert=True)
             _status.message = f"WVEdTalk episode for week of {week_of} is ready ({len(selected)} stories)."
             run_ok = True
+            try:
+                urls = [src.url for st in episode.selected_stories for src in (st.sources or [])]
+                urls += [src.url for src in (episode.source_log or [])]
+                await desk.link_submissions_used(urls, label=f"Weekly episode {week_of}", ref=f"/episodes/{week_of}")
+            except Exception:
+                logger.exception("linking used submissions failed (non-fatal)")
             await _email_episode_safe(episode)
             return episode
         except Exception as exc:
