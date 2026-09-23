@@ -128,6 +128,11 @@ send emails, or change any shared setting). Replaced the earlier single shared p
   on the web" button to the public share page `/share/briefing/{date}?t=<make_share_token(date)>`
   (no login). `_safe_source_links` pre-filters source anchors to https/non-shortener hosts with the
   host as anchor text, so a bad source URL can never trip `_assert_safe_email` and block the send.
+  NOTE: the full-briefing body renders lots of model-generated news prose, so `_assert_safe_email`'s
+  credential-request gate (`_CRED_ASK`) matches only imperative phishing phrases ("reply with your
+  password", "enter your cvv"), NOT bare topical nouns like "social security number" — a benign news
+  mention once tripped the gate and silently dropped ALL subscriber sends while the smaller admin
+  digest still went out. Data-entry surfaces stay hard-blocked by the form/input tag check.
   Admins/editors see and manage subscribers on the Settings "Public subscribers" panel
   (GET /api/subscribers any signed-in user; DELETE /api/subscribers/{email} editors only).
 - **Embeddable signup widget**: Settings subscribers panel offers a copy-paste HTML snippet (+ live

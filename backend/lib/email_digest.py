@@ -28,11 +28,20 @@ EMAIL_REPLY_TO = os.environ.get("EMAIL_REPLY_TO")  # maps to Reply-To (contact_e
 APP_URL = os.environ.get("APP_URL", "https://mountain-school-news.preview.emergentagent.com").rstrip("/")
 
 _SHORTENERS = ("bit.ly", "tinyurl.com", "t.co", "is.gd", "cutt.ly", "goo.gl", "rebrand.ly")
+# Imperative credential/payment REQUESTS directed at the recipient — genuine phishing
+# signals, always fatal. Bare topical nouns ("social security number", "cvv", "seed
+# phrase") are deliberately NOT listed on their own: legitimate WV education news routinely
+# mentions them (data breaches, benefits, pensions), and a mention inside escaped, form-less
+# prose asks the reader for nothing. Listing them as bare substrings silently dropped ENTIRE
+# subscriber sends whenever a briefing story referenced one. Actual data-entry surfaces are
+# already hard-blocked below via the form/input/textarea/select tag check, so a mention
+# without a collection form carries no phishing risk.
 _CRED_ASK = (
-    "reply with your password", "reply with the code", "send your password", "cvv",
+    "reply with your password", "reply with the code", "send your password",
     "send us your password", "enter your password below", "confirm your card number",
-    "your full card number", "seed phrase", "recovery phrase", "verify your card",
-    "social security number", "confirm your bank details",
+    "your full card number", "verify your card", "confirm your bank details",
+    "send us your cvv", "enter your cvv", "your seed phrase", "your recovery phrase",
+    "confirm your social security number", "enter your social security number",
 )
 _HOSTISH = re.compile(r"\b(?:https?://)?((?:[a-z0-9-]+\.)+[a-z]{2,})", re.I)
 
