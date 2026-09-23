@@ -104,3 +104,26 @@ class RunLogEntry(BaseModel):
 class NextRuns(BaseModel):
     daily_next: str  # UTC ISO
     weekly_next: str  # UTC ISO
+
+
+class DeliveryFailure(BaseModel):
+    """One address the digest could not be delivered to, with the provider's reason."""
+
+    email: str
+    error: str
+
+
+class DigestSendResult(BaseModel):
+    """Outcome of a digest send: per-audience counts plus a reason for each failed address,
+    so the UI and the admin alert can show exactly what happened (and to whom)."""
+
+    date: str = ""
+    admin_sent: int = 0
+    admin_failed: int = 0
+    sub_sent: int = 0
+    sub_failed: int = 0
+    failures: List[DeliveryFailure] = []
+
+
+class TestDigestRequest(BaseModel):
+    email: EmailStr

@@ -1,14 +1,14 @@
 import { useState, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Mail, Eye, Trash2, Send, Gauge, ShieldCheck, Timer, KeyRound, Users, Link2, Code2, Copy, CalendarClock, History, Megaphone } from "lucide-react";
+import { Mail, Eye, Trash2, Send, Gauge, ShieldCheck, Timer, KeyRound, Users, Link2, Code2, Copy, CalendarClock, History, Megaphone, FlaskConical, RotateCcw } from "lucide-react";
 import DeskLayout from "@/components/DeskLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { apiGet, apiPost, apiDelete, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/useAuth";
-import type { AuthState, DeskConfig, RunLogEntry, Subscriber } from "@/lib/types";
+import type { AuthState, DeskConfig, DigestSendResult, RunLogEntry, Subscriber } from "@/lib/types";
 
 const DOW = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const pad = (n: number) => String(n).padStart(2, "0");
@@ -49,6 +49,7 @@ export default function Settings() {
   const [tz, setTz] = useState("America/New_York");
   const [supportText, setSupportText] = useState("");
   const [supportOn, setSupportOn] = useState(true);
+  const [testEmail, setTestEmail] = useState("");
 
   const { data, isLoading } = useQuery({
     queryKey: ["config"],
@@ -172,8 +173,48 @@ export default function Settings() {
   });
 
   const sendNow = useMutation({
-    mutationFn: () => apiPost<{ sent: number }>("/settings/send-digest"),
-    onSuccess: (r) => toast.success(`Digest sent to ${r.sent} recipient${r.sent === 1 ? "" : "s"}`),
+    mutationFn: () => apiPost<DigestSendResult>("/settings/send-digest"),
+    onSuccess: (r) => {
+      const total = r.admin_sent + r.sub_sent;
+      const failed = r.admin_failed + r.sub_failed;
+      if (failed > 0) {
+        const first = r.failures[0];
+        toast.warning(
+          `Sent to ${total}; ${failed} failed${first ? ` — ${first.email}: ${first.error}` : ""}`,
+        );
+      } else {
+        toast.success(`Digest sent to ${total} recipient${total === 1 ? "" : "s"}`);
+      }
+    },
+    onError: (e) => toast.error(errMsg(e)),
+  });
+
+  const sendTest = useMutation({
+    mutationFn: (e: string) =>
+      apiPost<{ ok: boolean; email: string; error: string | null }>("/settings/test-digest", {
+        email: e,
+      }),
+    onSuccess: (r) => {
+      if (r.ok) toast.success(`Test briefing sent to ${r.email}`);
+      else toast.error(`Test send failed: ${r.error}`);
+    },
+    onError: (e) => toast.error(errMsg(e)),
+  });
+
+  const resendMissed = useMutation({
+    mutationFn: () => apiPost<DigestSendResult>("/settings/resend-digest"),
+    onSuccess: (r) => {
+      if (r.sub_sent === 0 && r.sub_failed === 0) {
+        toast.info("Everyone already received the latest briefing.");
+      } else if (r.sub_failed > 0) {
+        const first = r.failures[0];
+        toast.warning(
+          `Resent to ${r.sub_sent}; ${r.sub_failed} still failing${first ? ` (${first.error})` : ""}`,
+        );
+      } else {
+        toast.success(`Resent to ${r.sub_sent} subscriber${r.sub_sent === 1 ? "" : "s"} who missed it`);
+      }
+    },
     onError: (e) => toast.error(errMsg(e)),
   });
 
@@ -633,12 +674,69 @@ export default function Settings() {
               variant="secondary"
               size="sm"
               className="mt-4"
-              disabled={sendNow.isPending || recipients.length === 0}
+              disabled={sendNow.isPending || (recipients.length === 0 && activeSubscribers === 0)}
               onClick={() => sendNow.mutate()}
               data-testid="send-digest-now-button"
             >
               <Send className="size-4" /> Send latest briefing now
             </Button>
+
+            <div className="mt-6 space-y-5 border-t border-border pt-4">
+              {/* Send a test copy before distribution */}
+              <div data-testid="test-digest-block">
+                <p className="flex items-center gap-1.5 text-sm font-semibold">
+                  <FlaskConical className="size-4 text-accent" /> Send a test copy
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Email yourself the exact subscriber briefing before it goes out. Shows the real
+                  reason if delivery fails.
+                </p>
+                <form
+                  className="mt-3 flex gap-2"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    if (testEmail.trim()) sendTest.mutate(testEmail.trim());
+                  }}
+                >
+                  <Input
+                    type="email"
+                    placeholder="you@example.com"
+                    value={testEmail}
+                    onChange={(e) => setTestEmail(e.target.value)}
+                    data-testid="test-digest-input"
+                  />
+                  <Button
+                    type="submit"
+                    variant="outline"
+                    disabled={sendTest.isPending || !testEmail.trim()}
+                    data-testid="send-test-digest-button"
+                  >
+                    <FlaskConical className="size-4" /> Send test
+                  </Button>
+                </form>
+              </div>
+
+              {/* Resend today's briefing to subscribers who missed it */}
+              <div data-testid="resend-digest-block">
+                <p className="flex items-center gap-1.5 text-sm font-semibold">
+                  <RotateCcw className="size-4 text-accent" /> Resend today's briefing
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Re-sends the latest briefing only to subscribers who haven't received it yet —
+                  safe to run after fixing bad addresses.
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-3"
+                  disabled={resendMissed.isPending || activeSubscribers === 0}
+                  onClick={() => resendMissed.mutate()}
+                  data-testid="resend-digest-button"
+                >
+                  <RotateCcw className="size-4" /> Resend to subscribers who missed it
+                </Button>
+              </div>
+            </div>
           </section>
           )}
 

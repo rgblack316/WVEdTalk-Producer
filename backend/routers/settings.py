@@ -12,12 +12,14 @@ from models.config import (
     AutoLockUpdate,
     AutoThankUpdate,
     DeskConfig,
+    DigestSendResult,
     NextRuns,
     RecipientCreate,
     RunLogEntry,
     ScheduleUpdate,
     ScriptLengthUpdate,
     SupportUpdate,
+    TestDigestRequest,
     WatchTermCreate,
 )
 from models.subscriber import Subscriber
@@ -161,9 +163,10 @@ async def change_password(body: PasswordChange, user=Depends(auth.get_current_us
     return {"ok": True}
 
 
-@router.post("/settings/send-digest")
+@router.post("/settings/send-digest", response_model=DigestSendResult)
 async def send_latest_digest(_edit=Depends(auth.require_editor)):
-    """Send the most recent briefing to all configured recipients (server-side template)."""
+    """Send the most recent briefing to all configured recipients + active subscribers. Returns
+    per-audience counts and a reason for every failed address (so the UI can show what happened)."""
     cfg = await _load()
     sub_count = await db.subscribers.count_documents({"active": True})
     if not cfg.recipients and sub_count == 0:
@@ -174,10 +177,37 @@ async def send_latest_digest(_edit=Depends(auth.require_editor)):
     doc.pop("_id", None)
     from models.briefing import Briefing
 
-    sent = await email_digest.send_digest(Briefing(**doc), cfg.recipients)
-    if sent == 0:
-        raise HTTPException(status_code=502, detail="Email delivery failed — check configuration")
-    return {"sent": sent, "recipients": len(cfg.recipients)}
+    return await email_digest.send_digest(Briefing(**doc), cfg.recipients)
+
+
+@router.post("/settings/test-digest")
+async def test_digest(body: TestDigestRequest, _edit=Depends(auth.require_editor)):
+    """Send a single subscriber-style test copy of the latest briefing to one address, and report
+    back whether it succeeded (and the exact provider error if not) — a pre-flight before a blast."""
+    doc = await db.briefings.find_one({}, sort=[("date", -1)])
+    if not doc:
+        raise HTTPException(status_code=404, detail="No briefing available to send")
+    doc.pop("_id", None)
+    from models.briefing import Briefing
+
+    err = await email_digest.send_test_digest(Briefing(**doc), str(body.email))
+    return {"ok": err is None, "email": str(body.email), "error": err}
+
+
+@router.post("/settings/resend-digest", response_model=DigestSendResult)
+async def resend_digest(_edit=Depends(auth.require_editor)):
+    """Resend the latest briefing only to active subscribers who have not yet received it (per the
+    delivery log) — for recovering after a partial delivery failure. Idempotent and safe to repeat."""
+    sub_count = await db.subscribers.count_documents({"active": True})
+    if sub_count == 0:
+        raise HTTPException(status_code=400, detail="No public subscribers configured")
+    doc = await db.briefings.find_one({}, sort=[("date", -1)])
+    if not doc:
+        raise HTTPException(status_code=404, detail="No briefing available to send")
+    doc.pop("_id", None)
+    from models.briefing import Briefing
+
+    return await email_digest.resend_missed(Briefing(**doc))
 
 
 @router.get("/subscribers", response_model=List[Subscriber])

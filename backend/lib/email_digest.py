@@ -8,6 +8,7 @@ import ipaddress
 import logging
 import os
 import re
+from datetime import datetime, timezone
 from html import escape
 from html.parser import HTMLParser
 from typing import List, Optional
@@ -330,36 +331,195 @@ def _full_digest_html(briefing, share_url: str, unsubscribe_url: Optional[str] =
     )
 
 
-async def send_digest(briefing, recipients: List[str]) -> int:
-    """Send the daily digest — individually to each admin recipient AND each active public
-    subscriber. Individual sends (never a group To/CC) keep every address hidden from the
-    others, and each subscriber gets a personalized one-click unsubscribe link. Best-effort;
-    returns how many succeeded."""
+def _error_detail(exc: Exception) -> str:
+    """A concise, admin-readable reason a send failed — includes the email proxy's HTTP status
+    and response body when present (e.g. Resend's 'undeliverable_recipient'), else the exception
+    text. This is what surfaces in delivery alerts and the test-send UI."""
+    resp = getattr(exc, "response", None)
+    if resp is not None:
+        try:
+            return f"HTTP {resp.status_code}: {(resp.text or '').strip()[:200]}"
+        except Exception:
+            return f"HTTP error {getattr(resp, 'status_code', '?')}"
+    return (str(exc) or exc.__class__.__name__)[:200]
+
+
+async def _record_delivery(date: str, email: str, status: str, error: str = "") -> None:
+    """Upsert one subscriber delivery outcome so 'resend to who missed it' and the delivery
+    alert have an audit trail. Best-effort — never raise into a send."""
+    try:
+        await db.digest_deliveries.update_one(
+            {"date": date, "email": email.lower()},
+            {"$set": {"date": date, "email": email.lower(), "status": status,
+                      "error": (error or "")[:300],
+                      "at": datetime.now(timezone.utc).isoformat()}},
+            upsert=True,
+        )
+    except Exception:
+        logger.exception("recording digest delivery failed (non-fatal)")
+
+
+async def delivered_subscriber_emails(date: str) -> set:
+    """Lower-cased subscriber emails that already received the digest for this date."""
+    docs = await db.digest_deliveries.find(
+        {"date": date, "status": "sent"}, {"_id": 0, "email": 1}
+    ).to_list(10000)
+    return {d["email"] for d in docs if d.get("email")}
+
+
+async def _send_to_lists(briefing, admin: List[str], sub_emails: List[str], *,
+                         record: bool, alert: bool):
+    """Core fan-out: the compact digest to each admin recipient, the FULL briefing to each
+    subscriber. Captures a per-address failure reason, records subscriber outcomes to the
+    delivery log, and (optionally) emails admins when any subscriber send fails. Returns a
+    DigestSendResult."""
+    from models.config import DeliveryFailure, DigestSendResult
+
     subject = f"WVEdTalk News Desk — Daily Briefing, {briefing.date}"
-    admin = list(recipients or [])
-    admin_set = {r.lower() for r in admin}
+    res = DigestSendResult(date=briefing.date)
 
-    docs = await db.subscribers.find({"active": True}, {"_id": 0, "email": 1}).to_list(5000)
-    sub_emails = [
-        d["email"] for d in docs if d.get("email") and d["email"].lower() not in admin_set
-    ]
+    for to in admin:
+        try:
+            await _send_email(to=to, subject=subject, html=_digest_html(briefing))
+            res.admin_sent += 1
+        except Exception as exc:
+            det = _error_detail(exc)
+            res.admin_failed += 1
+            res.failures.append(DeliveryFailure(email=to, error=det))
+            logger.error("admin digest to %s failed: %s", to, det)
 
-    sent = 0
-    if admin:
-        sent += await _fan_out(subject, _digest_html(briefing), admin)
     share_url = f"{APP_URL}/share/briefing/{briefing.date}?t={make_share_token(briefing.date)}"
     for email in sub_emails:
         unsub = f"{APP_URL}/unsubscribe?email={quote(email)}&t={make_unsub_token(email)}"
         try:
             await _send_email(
-                to=email,
-                subject=subject,
+                to=email, subject=subject,
                 html=_full_digest_html(briefing, share_url, unsubscribe_url=unsub),
             )
-            sent += 1
+            res.sub_sent += 1
+            if record:
+                await _record_delivery(briefing.date, email, "sent")
         except Exception as exc:
-            logger.error("digest to subscriber %s failed: %s", email, exc)
-    return sent
+            det = _error_detail(exc)
+            res.sub_failed += 1
+            res.failures.append(DeliveryFailure(email=email, error=det))
+            logger.error("digest to subscriber %s failed: %s", email, det)
+            if record:
+                await _record_delivery(briefing.date, email, "failed", det)
+
+    if alert and res.sub_failed:
+        try:
+            await send_delivery_alert(res)
+        except Exception:
+            logger.exception("delivery-failure alert failed (non-fatal)")
+    return res
+
+
+async def send_digest(briefing, recipients: List[str], *, record: bool = True, alert: bool = True):
+    """Send the daily digest — the compact edition to each admin recipient AND the full briefing
+    to each active public subscriber. Individual sends (never a group To/CC) keep every address
+    private and give each subscriber a personal one-click unsubscribe link. Returns a
+    DigestSendResult with per-audience counts and a reason for every failed address."""
+    admin = list(recipients or [])
+    admin_set = {r.lower() for r in admin}
+    docs = await db.subscribers.find({"active": True}, {"_id": 0, "email": 1}).to_list(5000)
+    sub_emails = [
+        d["email"] for d in docs if d.get("email") and d["email"].lower() not in admin_set
+    ]
+    return await _send_to_lists(briefing, admin, sub_emails, record=record, alert=alert)
+
+
+async def resend_missed(briefing):
+    """Resend the full briefing only to active subscribers who have NOT already received this
+    date's digest (per the delivery log). Safe to run repeatedly. Returns a DigestSendResult."""
+    delivered = await delivered_subscriber_emails(briefing.date)
+    docs = await db.subscribers.find({"active": True}, {"_id": 0, "email": 1}).to_list(5000)
+    missed = [
+        d["email"] for d in docs if d.get("email") and d["email"].lower() not in delivered
+    ]
+    return await _send_to_lists(briefing, [], missed, record=True, alert=True)
+
+
+async def send_test_digest(briefing, email: str) -> Optional[str]:
+    """Send ONE subscriber-style full briefing to a test address (clearly marked [TEST]). Returns
+    None on success, or the exact failure reason so the UI can show what went wrong. Does not
+    touch the delivery log or fire alerts."""
+    email = (email or "").strip()
+    share_url = f"{APP_URL}/share/briefing/{briefing.date}?t={make_share_token(briefing.date)}"
+    unsub = f"{APP_URL}/unsubscribe?email={quote(email)}&t={make_unsub_token(email)}"
+    try:
+        await _send_email(
+            to=email,
+            subject=f"[TEST] WVEdTalk News Desk — Daily Briefing, {briefing.date}",
+            html=_full_digest_html(briefing, share_url, unsubscribe_url=unsub),
+        )
+        return None
+    except Exception as exc:
+        det = _error_detail(exc)
+        logger.error("test digest to %s failed: %s", email, det)
+        return det
+
+
+def _delivery_alert_html(res) -> str:
+    rows = []
+    for f in res.failures[:20]:
+        rows.append(
+            '<tr>'
+            f'<td style="padding:6px 10px;border-bottom:1px solid #e5e2d8;font-family:Arial,sans-serif;'
+            f'font-size:13px;color:#16305e;word-break:break-all">{escape(f.email)}</td>'
+            f'<td style="padding:6px 10px;border-bottom:1px solid #e5e2d8;font-family:Arial,sans-serif;'
+            f'font-size:12px;color:#b91c1c">{escape(f.error)}</td></tr>'
+        )
+    more = len(res.failures) - 20
+    extra = (
+        f'<p style="font-family:Arial,sans-serif;font-size:12px;color:#666;margin-top:8px">'
+        f'\u2026and {more} more.</p>' if more > 0 else ""
+    )
+    return (
+        '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
+        'style="max-width:620px;margin:0 auto;background:#fbfaf5"><tr><td style="padding:28px 24px">'
+        '<div style="font-family:Georgia,serif;font-size:20px;font-weight:bold;color:#16305e">'
+        'WVEdTalk News Desk</div>'
+        '<div style="font-family:Arial,sans-serif;font-size:12px;letter-spacing:.14em;'
+        'text-transform:uppercase;color:#b91c1c;margin-top:6px">Subscriber email delivery issue</div>'
+        f'<p style="font-family:Arial,sans-serif;font-size:15px;color:#222;margin-top:16px">'
+        f'The daily briefing for <strong>{escape(res.date)}</strong> could not be delivered to '
+        f'<strong>{res.sub_failed}</strong> subscriber(s). '
+        f'{res.sub_sent} subscriber(s) and {res.admin_sent} desk recipient(s) received it.</p>'
+        '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
+        'style="margin-top:12px;background:#fff;border:1px solid #e5e2d8">'
+        '<tr><th style="text-align:left;padding:6px 10px;font-family:Arial,sans-serif;font-size:11px;'
+        'letter-spacing:.1em;text-transform:uppercase;color:#a67c00;border-bottom:2px solid #16305e">Address</th>'
+        '<th style="text-align:left;padding:6px 10px;font-family:Arial,sans-serif;font-size:11px;'
+        'letter-spacing:.1em;text-transform:uppercase;color:#a67c00;border-bottom:2px solid #16305e">Reason</th></tr>'
+        + "".join(rows) + '</table>' + extra +
+        '<p style="font-family:Arial,sans-serif;font-size:13px;color:#555;margin-top:16px">'
+        'Addresses flagged "undeliverable" were blocked by the email provider (invalid or bouncing) \u2014 '
+        'remove or correct them, then retry from Settings \u2192 "Resend today\'s briefing".</p>'
+        f'<p style="margin:16px 0 0"><a href="{APP_URL}/settings" '
+        'style="display:inline-block;background:#16305e;color:#fff;text-decoration:none;'
+        'font-family:Arial,sans-serif;font-size:14px;padding:10px 18px;border-radius:4px">Open the desk</a></p>'
+        '<p style="font-family:Arial,sans-serif;font-size:12px;color:#999;margin-top:24px;'
+        'border-top:1px solid #e5e2d8;padding-top:12px">'
+        'You are receiving this because you are an admin on WVEdTalk News Desk.</p>'
+        '</td></tr></table>'
+    )
+
+
+async def send_delivery_alert(res) -> int:
+    """Email every admin (real inbox) when one or more subscriber digest sends fail, so a silent
+    partial miss never goes unnoticed. Best-effort; returns how many alerts were sent."""
+    if not res.sub_failed:
+        return 0
+    admins = await db.users.find({"role": "admin"}, {"_id": 0, "email": 1}).to_list(200)
+    tos = [u["email"] for u in admins if "@" in (u.get("email") or "")]
+    if not tos:
+        logger.warning("%d subscriber digest sends failed but no admin email for an alert", res.sub_failed)
+        return 0
+    subject = f"[WVEdTalk] {res.sub_failed} subscriber email(s) failed — {res.date}"
+    html = _delivery_alert_html(res)
+    _assert_safe_email(subject, html)
+    return await _fan_out(subject, html, tos)
 
 
 def _episode_html(episode) -> str:

@@ -151,6 +151,17 @@ send emails, or change any shared setting). Replaced the earlier single shared p
   EMAIL_FROM_NAME="WV Education News Desk"): HTML digest built from a server-side template and sent
   to configured recipients automatically after each run (`_send_digest_safe`, non-fatal) and via
   POST /api/settings/send-digest. Guardrail gate `_assert_safe_email` runs on every send.
+- **Delivery alerting + test send + resend** (all editor-guarded, in the Settings "Email digest"
+  panel): `send_digest` returns a `DigestSendResult` (per-audience counts + a `failures[]` reason
+  per address) and records every subscriber outcome to the `digest_deliveries` collection
+  (`{date,email,status,error,at}`). When any subscriber send fails, admins with a real inbox are
+  emailed a delivery-failure alert (`send_delivery_alert`). `POST /api/settings/test-digest`
+  ({email}) sends one [TEST] subscriber-style copy and returns `{ok,error}` with the exact provider
+  reason. `POST /api/settings/resend-digest` re-sends the latest briefing only to active subscribers
+  NOT in the delivery log for that date (recover from a partial failure; idempotent). NOTE: the email
+  proxy returns HTTP 422 `undeliverable_recipient` for invalid/bouncing addresses (and for
+  example.com) — that, not the safety gate, is the usual reason a public subscriber does not receive
+  the briefing; the admin recipient still succeeds because it is a valid inbox.
 - **Settings page** (`/settings`): manage recipients (EmailStr-validated) and watch terms, plus a
   "Send latest briefing now" button.
 - Config endpoints: GET /api/settings, POST/DELETE /api/settings/recipients, POST/DELETE

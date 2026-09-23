@@ -485,8 +485,12 @@ async def _send_digest_safe(briefing: Briefing) -> None:
         sub_count = await db.subscribers.count_documents({"active": True})
         if recipients or sub_count:
             _run_status.message = "Emailing the digest to recipients and subscribers…"
-            sent = await email_digest.send_digest(briefing, recipients)
-            logger.info("digest emailed to %d recipients/subscribers", sent)
+            res = await email_digest.send_digest(briefing, recipients)
+            logger.info(
+                "digest sent — admins %d/%d, subscribers %d/%d",
+                res.admin_sent, res.admin_sent + res.admin_failed,
+                res.sub_sent, res.sub_sent + res.sub_failed,
+            )
     except Exception:
         logger.exception("digest email step failed (non-fatal)")
 

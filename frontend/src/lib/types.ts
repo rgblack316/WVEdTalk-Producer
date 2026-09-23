@@ -114,6 +114,21 @@ export interface NextRuns {
   weekly_next: string;
 }
 
+// Mirrors backend/models/config.py DeliveryFailure / DigestSendResult.
+export interface DeliveryFailure {
+  email: string;
+  error: string;
+}
+
+export interface DigestSendResult {
+  date: string;
+  admin_sent: number;
+  admin_failed: number;
+  sub_sent: number;
+  sub_failed: number;
+  failures: DeliveryFailure[];
+}
+
 export interface User {
   id: string;
   email: string;
