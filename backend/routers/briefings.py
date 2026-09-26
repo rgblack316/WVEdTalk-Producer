@@ -12,6 +12,7 @@ from models.briefing import (
     Briefing,
     BriefingSummary,
     CandidateStory,
+    ClearCandidatesRequest,
     RunStatus,
     StoryUpdate,
 )
@@ -60,17 +61,18 @@ async def list_candidates():
 
 
 @router.post("/candidates/clear")
-async def clear_candidates(_edit=Depends(require_editor)):
-    """Un-flag every story currently tagged as an episode candidate. Prep notes are preserved, so
-    a story can be re-flagged and reconsidered if the episode is produced again. Manual only —
-    candidates never clear automatically at the end of a week."""
-    docs = await db.briefings.find(
-        {"stories.is_candidate": True}, {"stories.is_candidate": 1}
-    ).to_list(1000)
+async def clear_candidates(body: Optional[ClearCandidatesRequest] = None, _edit=Depends(require_editor)):
+    """Un-flag stories tagged as episode candidates. With a `date`, clears only that edition's
+    week; without one, clears every flagged story. Prep notes are preserved so a story can be
+    re-flagged and reconsidered later. Manual only — candidates never auto-clear."""
+    query: dict = {"stories.is_candidate": True}
+    if body and body.date:
+        query["date"] = body.date
+    docs = await db.briefings.find(query, {"stories.is_candidate": 1}).to_list(1000)
     cleared = sum(1 for d in docs for s in d.get("stories", []) if s.get("is_candidate"))
     if cleared:
         await db.briefings.update_many(
-            {"stories.is_candidate": True},
+            query,
             {"$set": {"stories.$[el].is_candidate": False}},
             array_filters=[{"el.is_candidate": True}],
         )

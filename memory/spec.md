@@ -32,8 +32,10 @@ story can be flagged as a podcast episode candidate with free-text prep notes.
 - GET /api/briefings (summaries), /api/briefings/latest, /api/briefings/{date} (full),
   PATCH /api/briefings/{date}/stories/{story_id} (toggle candidate / save notes),
   GET /api/candidates (all flagged stories across dates),
-  POST /api/candidates/clear (editor: un-flag ALL candidates at once — keeps prep notes;
-  manual only, candidates never auto-clear so a week can be reconsidered/re-produced).
+  POST /api/candidates/clear (editor: body {date?} — un-flag ALL candidates, or just one
+  edition's week when a date is given; keeps prep notes; manual only, candidates never auto-clear
+  so a week can be reconsidered/re-produced). The DeskLayout "Podcast Prep" nav tab shows a live
+  count badge of flagged stories (shares the ["candidates"] query cache so it stays in sync).
 - /api/briefings/{date} is the stable machine-readable contract for the downstream weekly agent.
 
 ## Frontend routes

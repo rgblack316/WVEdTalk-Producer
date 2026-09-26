@@ -6,7 +6,7 @@ import { Loader2, RefreshCw, LogOut, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { apiGet, apiPost, ApiError } from "@/lib/api";
 import { endSession } from "@/lib/session";
-import type { AuthState, DeskConfig, NextRuns, RunStatus } from "@/lib/types";
+import type { AuthState, CandidateStory, DeskConfig, NextRuns, RunStatus } from "@/lib/types";
 
 const BASE_NAV = [
   { to: "/", label: "Today's Briefing" },
@@ -44,6 +44,15 @@ export default function DeskLayout({ children }: { children: React.ReactNode }) 
     queryFn: () => apiGet<NextRuns>("/schedule/next"),
     refetchInterval: 60000,
   });
+
+  // Shared cache with the Podcast Prep page (queryKey ["candidates"]) so the nav badge and the
+  // board stay in sync — clearing candidates invalidates this key and both update together.
+  const { data: candidates } = useQuery({
+    queryKey: ["candidates"],
+    queryFn: () => apiGet<CandidateStory[]>("/candidates"),
+    staleTime: 30000,
+  });
+  const candidateCount = candidates?.length ?? 0;
 
   const isAdmin = auth?.user?.role === "admin";
   const isViewer = auth?.user?.role === "viewer";
@@ -114,6 +123,16 @@ export default function DeskLayout({ children }: { children: React.ReactNode }) 
                     }`}
                   >
                     {n.label}
+                    {n.to === "/candidates" && candidateCount > 0 && (
+                      <span
+                        className={`ml-1.5 inline-flex min-w-[1.125rem] items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] font-semibold leading-none ${
+                          active ? "bg-primary-foreground text-primary" : "bg-accent text-accent-foreground"
+                        }`}
+                        data-testid="candidate-count-badge"
+                      >
+                        {candidateCount}
+                      </span>
+                    )}
                   </Link>
                 );
               })}

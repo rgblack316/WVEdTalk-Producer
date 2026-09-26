@@ -98,3 +98,8 @@ class StoryUpdate(BaseModel):
 class CandidateStory(BaseModel):
     date: str
     story: Story
+
+
+class ClearCandidatesRequest(BaseModel):
+    # Optional edition date — clears only that week's candidates; omit to clear every flagged story.
+    date: Optional[str] = None
