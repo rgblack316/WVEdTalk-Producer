@@ -101,8 +101,11 @@ class CandidateStory(BaseModel):
 
 
 class ClearCandidatesRequest(BaseModel):
-    # Optional edition date — clears only that week's candidates; omit to clear every flagged story.
+    # Clear scope, all optional. `date` = one edition/day; `from_date`/`to_date` = an inclusive
+    # date range. Omit all three to clear every flagged story.
     date: Optional[str] = None
+    from_date: Optional[str] = None
+    to_date: Optional[str] = None
 
 
 class CandidateRef(BaseModel):

@@ -32,10 +32,10 @@ story can be flagged as a podcast episode candidate with free-text prep notes.
 - GET /api/briefings (summaries), /api/briefings/latest, /api/briefings/{date} (full),
   PATCH /api/briefings/{date}/stories/{story_id} (toggle candidate / save notes),
   GET /api/candidates (all flagged stories across dates),
-  POST /api/candidates/clear (editor: body {date?} — un-flag ALL candidates, or just one
-  edition/day when a date is given (the "Clear this day" button); keeps prep notes; returns the
-  exact refs cleared so the UI can Undo; manual only, candidates never auto-clear so a day can be
-  reconsidered/re-produced).
+  POST /api/candidates/clear (editor: body {date? | from_date?+to_date?} — un-flag ALL candidates,
+  a single edition/day (the "Clear this day" button), or an inclusive date range (the "Clear range"
+  picker); keeps prep notes; returns the exact refs cleared so the UI can Undo; manual only,
+  candidates never auto-clear so a day can be reconsidered/re-produced).
   POST /api/candidates/reflag (editor: body {refs:[{date,story_id}]}) re-flags specific stories —
   powers the "Undo" action on the clear toast. The Podcast Prep board can sort by date (grouped by
   edition, with per-week clear), podcast potential, or importance (flat, score-desc). The DeskLayout

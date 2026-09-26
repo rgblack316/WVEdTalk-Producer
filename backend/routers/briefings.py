@@ -64,13 +64,21 @@ async def list_candidates():
 
 @router.post("/candidates/clear", response_model=ClearCandidatesResponse)
 async def clear_candidates(body: Optional[ClearCandidatesRequest] = None, _edit=Depends(require_editor)):
-    """Un-flag stories tagged as episode candidates. With a `date`, clears only that edition's
-    week; without one, clears every flagged story. Prep notes are preserved so a story can be
-    re-flagged and reconsidered later. Returns the exact refs cleared so the UI can offer Undo.
-    Manual only — candidates never auto-clear."""
+    """Un-flag stories tagged as episode candidates. Scope by `date` (one edition/day), by an
+    inclusive `from_date`/`to_date` range, or omit all to clear every flagged story. Prep notes are
+    preserved so a story can be re-flagged and reconsidered later. Returns the exact refs cleared so
+    the UI can offer Undo. Manual only — candidates never auto-clear."""
     query: dict = {"stories.is_candidate": True}
     if body and body.date:
         query["date"] = body.date
+    elif body and (body.from_date or body.to_date):
+        rng: dict = {}
+        if body.from_date:
+            rng["$gte"] = body.from_date
+        if body.to_date:
+            rng["$lte"] = body.to_date
+        if rng:
+            query["date"] = rng
     docs = await db.briefings.find(
         query, {"date": 1, "stories.id": 1, "stories.is_candidate": 1}
     ).to_list(1000)

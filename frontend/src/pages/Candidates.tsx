@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { Star, Trash2, Loader2 } from "lucide-react";
+import { Star, Trash2, Loader2, CalendarRange } from "lucide-react";
 import { toast } from "sonner";
 import DeskLayout from "@/components/DeskLayout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogContent,
@@ -80,6 +81,9 @@ export default function Candidates() {
   const qc = useQueryClient();
   // undefined = dialog closed; null = clear ALL; string = clear that edition's week.
   const [target, setTarget] = useState<string | null | undefined>(undefined);
+  const [rangeOpen, setRangeOpen] = useState(false);
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
   // Remember the chosen sort between visits so the board opens how the user left it.
   const [sort, setSort] = useState<SortKey>(() => {
     const saved = typeof window !== "undefined" ? window.localStorage.getItem(SORT_STORAGE_KEY) : null;
@@ -111,8 +115,8 @@ export default function Candidates() {
   });
 
   const clearMut = useMutation({
-    mutationFn: (date: string | null) =>
-      apiPost<{ cleared: number; refs: CandidateRef[] }>("/candidates/clear", { date }),
+    mutationFn: (body: { date?: string | null; from_date?: string; to_date?: string }) =>
+      apiPost<{ cleared: number; refs: CandidateRef[] }>("/candidates/clear", body),
     onSuccess: (r) => {
       invalidate();
       if (r.cleared === 0) {
@@ -144,6 +148,15 @@ export default function Candidates() {
     const field = sort === "podcast" ? "podcast_potential" : "importance";
     return [...(data ?? [])].sort((a, b) => (b.story[field] ?? 0) - (a.story[field] ?? 0));
   }, [data, sort]);
+
+  // Distinct edition dates (ascending) — bounds + defaults for the "clear a date range" picker.
+  const dates = useMemo(() => Array.from(new Set((data ?? []).map((c) => c.date))).sort(), [data]);
+  const openRange = () => {
+    setFromDate(dates[0] ?? "");
+    setToDate(dates[dates.length - 1] ?? "");
+    setRangeOpen(true);
+  };
+  const rangeInvalid = !fromDate || !toDate || fromDate > toDate;
 
   const total = data?.length ?? 0;
   const hasCandidates = total > 0;
@@ -181,6 +194,11 @@ export default function Candidates() {
                 </button>
               ))}
             </div>
+            {canEdit && dates.length >= 2 && (
+              <Button variant="outline" size="sm" onClick={openRange} data-testid="clear-range-button">
+                <CalendarRange className="size-4" /> Clear range…
+              </Button>
+            )}
             {canEdit && (
               <Button variant="outline" size="sm" onClick={() => setTarget(null)} data-testid="clear-candidates-button">
                 <Trash2 className="size-4" /> Clear all candidates
@@ -266,11 +284,68 @@ export default function Candidates() {
             <Button
               variant="destructive"
               disabled={clearMut.isPending}
-              onClick={() => clearMut.mutate(target ?? null, { onSettled: () => setTarget(undefined) })}
+              onClick={() => clearMut.mutate(target ? { date: target } : {}, { onSettled: () => setTarget(undefined) })}
               data-testid="clear-candidates-confirm"
             >
               {clearMut.isPending ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
               {target ? "Clear this day" : "Clear candidates"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={rangeOpen} onOpenChange={(o) => !o && setRangeOpen(false)}>
+        <DialogContent data-testid="clear-range-dialog">
+          <DialogHeader>
+            <DialogTitle>Clear candidates in a date range</DialogTitle>
+            <DialogDescription>
+              Un-flags every candidate whose edition date falls between these dates (inclusive). Prep
+              notes are kept and you can Undo right after.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-wrap items-end gap-3">
+            <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+              From
+              <Input
+                type="date"
+                value={fromDate}
+                min={dates[0]}
+                max={dates[dates.length - 1]}
+                onChange={(e) => setFromDate(e.target.value)}
+                data-testid="range-from"
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+              To
+              <Input
+                type="date"
+                value={toDate}
+                min={dates[0]}
+                max={dates[dates.length - 1]}
+                onChange={(e) => setToDate(e.target.value)}
+                data-testid="range-to"
+              />
+            </label>
+          </div>
+          {fromDate && toDate && fromDate > toDate && (
+            <p className="text-xs text-destructive" data-testid="range-error">
+              The “from” date must be on or before the “to” date.
+            </p>
+          )}
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setRangeOpen(false)} data-testid="clear-range-cancel">
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={clearMut.isPending || rangeInvalid}
+              onClick={() =>
+                clearMut.mutate({ from_date: fromDate, to_date: toDate }, { onSettled: () => setRangeOpen(false) })
+              }
+              data-testid="clear-range-confirm"
+            >
+              {clearMut.isPending ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
+              Clear range
             </Button>
           </DialogFooter>
         </DialogContent>

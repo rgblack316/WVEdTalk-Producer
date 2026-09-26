@@ -18,8 +18,13 @@ public share links.
   `## Chapter` headers, per-story segment timers, and producer notes, generated Fridays.
   Uses a **hybrid** approach: host-flagged Podcast Prep candidates are prioritized
   alongside fresh independent research, with an audit trail of any pick set aside.
-  Includes a configurable **Value 4 Value** support read (editable text, per-episode toggle).
-- **Podcast Prep** — flag any story as an episode candidate and attach prep notes.
+  Includes a configurable **Value 4 Value** support read (editable text, per-episode toggle) and a
+  **"Links to New Sources for This Week"** show-notes list of clickable source hyperlinks after the
+  script (with one-click backfill for older episodes).
+- **Podcast Prep** — flag any story as an episode candidate and attach prep notes. The board sorts
+  by date (grouped by edition, with per-day clear), podcast potential, or importance (choice
+  remembered between visits), shows a live flagged-count badge in the nav, and can clear candidates
+  for a single day, a date range, or all at once — each with an **Undo** and prep notes always kept.
 - **Public story submissions** — a public `/submit` reader-tip form (and an embeddable
   version for partner sites) protected by a hidden honeypot and optional **Cloudflare
   Turnstile**. Tips are auto-linked when used in a briefing/episode, with a moderation
