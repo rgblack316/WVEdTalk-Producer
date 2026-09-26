@@ -31,7 +31,9 @@ story can be flagged as a podcast episode candidate with free-text prep notes.
 - GET /api/run-status drives the header progress banner (frontend polls every 5s while running).
 - GET /api/briefings (summaries), /api/briefings/latest, /api/briefings/{date} (full),
   PATCH /api/briefings/{date}/stories/{story_id} (toggle candidate / save notes),
-  GET /api/candidates (all flagged stories across dates).
+  GET /api/candidates (all flagged stories across dates),
+  POST /api/candidates/clear (editor: un-flag ALL candidates at once — keeps prep notes;
+  manual only, candidates never auto-clear so a week can be reconsidered/re-produced).
 - /api/briefings/{date} is the stable machine-readable contract for the downstream weekly agent.
 
 ## Frontend routes

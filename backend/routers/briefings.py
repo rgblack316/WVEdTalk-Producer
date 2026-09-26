@@ -59,6 +59,24 @@ async def list_candidates():
     return out
 
 
+@router.post("/candidates/clear")
+async def clear_candidates(_edit=Depends(require_editor)):
+    """Un-flag every story currently tagged as an episode candidate. Prep notes are preserved, so
+    a story can be re-flagged and reconsidered if the episode is produced again. Manual only —
+    candidates never clear automatically at the end of a week."""
+    docs = await db.briefings.find(
+        {"stories.is_candidate": True}, {"stories.is_candidate": 1}
+    ).to_list(1000)
+    cleared = sum(1 for d in docs for s in d.get("stories", []) if s.get("is_candidate"))
+    if cleared:
+        await db.briefings.update_many(
+            {"stories.is_candidate": True},
+            {"$set": {"stories.$[el].is_candidate": False}},
+            array_filters=[{"el.is_candidate": True}],
+        )
+    return {"cleared": cleared}
+
+
 @router.get("/run-status", response_model=RunStatus)
 async def run_status():
     return desk.get_run_status()

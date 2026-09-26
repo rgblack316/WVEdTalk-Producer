@@ -1,10 +1,22 @@
-import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { Star } from "lucide-react";
+import { Star, Trash2, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import DeskLayout from "@/components/DeskLayout";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { ScoreChip } from "@/components/StoryCard";
-import { apiGet } from "@/lib/api";
+import { apiGet, apiPost, ApiError } from "@/lib/api";
+import { useAuth } from "@/lib/useAuth";
 import type { CandidateStory } from "@/lib/types";
 
 function formatDate(date: string) {
@@ -19,24 +31,91 @@ function formatDate(date: string) {
 }
 
 export default function Candidates() {
+  const { canEdit } = useAuth();
+  const qc = useQueryClient();
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const { data, isLoading } = useQuery({
     queryKey: ["candidates"],
     queryFn: () => apiGet<CandidateStory[]>("/candidates"),
   });
 
+  const clearAll = useMutation({
+    mutationFn: () => apiPost<{ cleared: number }>("/candidates/clear"),
+    onSuccess: (r) => {
+      qc.invalidateQueries({ queryKey: ["candidates"] });
+      qc.invalidateQueries({ queryKey: ["briefing"] });
+      toast.success(
+        r.cleared === 0
+          ? "No candidates to clear"
+          : `Cleared ${r.cleared} candidate${r.cleared === 1 ? "" : "s"} (prep notes kept)`,
+      );
+    },
+    onError: (e) =>
+      toast.error(
+        e instanceof ApiError ? String((e.body as { detail?: string })?.detail ?? e.message) : String(e),
+      ),
+  });
+
+  const hasCandidates = !!data && data.length > 0;
+
   return (
     <DeskLayout>
-      <div className="mb-8">
-        <p className="text-xs tracking-[0.2em] text-accent uppercase">Podcast Prep</p>
-        <h2 className="font-heading text-3xl font-bold tracking-tight">Episode candidates</h2>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Every story flagged across all editions, newest first. Open a story to edit its prep notes.
-        </p>
+      <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="text-xs tracking-[0.2em] text-accent uppercase">Podcast Prep</p>
+          <h2 className="font-heading text-3xl font-bold tracking-tight">Episode candidates</h2>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Every story flagged across all editions, newest first. Open a story to edit its prep notes.
+          </p>
+        </div>
+
+        {canEdit && hasCandidates && (
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setConfirmOpen(true)}
+              data-testid="clear-candidates-button"
+            >
+              <Trash2 className="size-4" /> Clear all candidates
+            </Button>
+            <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+              <DialogContent data-testid="clear-candidates-dialog">
+                <DialogHeader>
+                  <DialogTitle>Clear all episode candidates?</DialogTitle>
+                  <DialogDescription>
+                    This un-flags all {data?.length} flagged {data?.length === 1 ? "story" : "stories"} so
+                    the shortlist starts fresh for the next week. Prep notes are kept, and nothing clears
+                    automatically — you can re-flag any story later if you produce the episode again.
+                  </DialogDescription>
+                </DialogHeader>
+                <DialogFooter>
+                  <Button
+                    variant="ghost"
+                    onClick={() => setConfirmOpen(false)}
+                    data-testid="clear-candidates-cancel"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    disabled={clearAll.isPending}
+                    onClick={() => clearAll.mutate(undefined, { onSettled: () => setConfirmOpen(false) })}
+                    data-testid="clear-candidates-confirm"
+                  >
+                    {clearAll.isPending ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
+                    Clear candidates
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          </>
+        )}
       </div>
 
       {isLoading ? (
         <div className="py-16 text-center text-muted-foreground">Loading candidates…</div>
-      ) : data && data.length > 0 ? (
+      ) : hasCandidates ? (
         <div className="space-y-4" data-testid="candidate-list">
           {data.map(({ date, story }) => (
             <div
