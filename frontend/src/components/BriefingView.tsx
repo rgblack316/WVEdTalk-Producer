@@ -1,14 +1,14 @@
 import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Copy, Download, Eye, Share2 } from "lucide-react";
 import { StoryCard, SourceList } from "@/components/StoryCard";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { apiGet } from "@/lib/api";
+import { apiGet, apiPatch } from "@/lib/api";
 import { SECTION_LABELS, SECTION_ORDER } from "@/lib/types";
-import type { Briefing, DeskConfig } from "@/lib/types";
+import type { Briefing, DeskConfig, Story } from "@/lib/types";
 import {
   WV_REGIONS,
   briefingToMarkdown,
@@ -40,9 +40,11 @@ export function SectionHeading({ children }: { children: React.ReactNode }) {
 export default function BriefingView({
   briefing,
   isPublic = false,
+  canFlag = false,
 }: {
   briefing: Briefing;
   isPublic?: boolean;
+  canFlag?: boolean;
 }) {
   const [region, setRegion] = useState<string>("");
   const [query, setQuery] = useState<string>("");
@@ -54,6 +56,21 @@ export default function BriefingView({
     enabled: !isPublic, // /settings is authed — skip it on the public share view
   });
   const watchTerms = config?.watch_terms ?? [];
+
+  // Flag/unflag a story as an episode candidate straight from the briefing (editors/admins only —
+  // gated by canFlag, which the public share view never sets). Mirrors the toggle on StoryDetail.
+  const qc = useQueryClient();
+  const toggleCandidate = useMutation({
+    mutationFn: (s: Story) =>
+      apiPatch<Briefing>(`/briefings/${briefing.date}/stories/${s.id}`, { is_candidate: !s.is_candidate }),
+    onSuccess: (_d, s) => {
+      qc.invalidateQueries({ queryKey: ["briefing", briefing.date] });
+      qc.invalidateQueries({ queryKey: ["briefing", "latest"] });
+      qc.invalidateQueries({ queryKey: ["candidates"] });
+      toast.success(s.is_candidate ? "Removed from candidates" : "Flagged as episode candidate");
+    },
+    onError: () => toast.error("Could not update — please try again"),
+  });
 
   const filtered = useMemo(
     () =>
@@ -207,7 +224,15 @@ export default function BriefingView({
             <SectionHeading>{SECTION_LABELS[section]}</SectionHeading>
             <div className={featured ? "space-y-5" : "grid gap-4 md:grid-cols-2"}>
               {stories.map((story) => (
-                <StoryCard key={story.id} story={story} date={briefing.date} featured={featured} isPublic={isPublic} />
+                <StoryCard
+                  key={story.id}
+                  story={story}
+                  date={briefing.date}
+                  featured={featured}
+                  isPublic={isPublic}
+                  canFlag={canFlag && !isPublic}
+                  onToggleCandidate={() => toggleCandidate.mutate(story)}
+                />
               ))}
             </div>
           </section>

@@ -42,11 +42,15 @@ export function StoryCard({
   date,
   featured = false,
   isPublic = false,
+  canFlag = false,
+  onToggleCandidate,
 }: {
   story: Story;
   date: string;
   featured?: boolean;
   isPublic?: boolean;
+  canFlag?: boolean;
+  onToggleCandidate?: () => void;
 }) {
   return (
     <article
@@ -69,7 +73,7 @@ export function StoryCard({
             {c}
           </Badge>
         ))}
-        {story.is_candidate && (
+        {story.is_candidate && !canFlag && (
           <Badge variant="outline" className="gap-1">
             <Star className="size-3 fill-current" /> Episode candidate
           </Badge>
@@ -99,9 +103,24 @@ export function StoryCard({
         </Link>
       )}
 
-      <div className="mt-2 flex flex-wrap gap-2">
+      <div className="mt-2 flex flex-wrap items-center gap-2">
         <ScoreChip label="Importance" value={story.importance} />
         <ScoreChip label="Podcast" value={story.podcast_potential} />
+        {canFlag && (
+          <button
+            type="button"
+            onClick={onToggleCandidate}
+            data-testid={`flag-candidate-${story.id}`}
+            className={`inline-flex items-center gap-1 rounded-sm border px-2 py-0.5 text-xs transition-colors duration-150 ${
+              story.is_candidate
+                ? "border-accent bg-accent text-accent-foreground"
+                : "border-border text-muted-foreground hover:border-accent hover:text-foreground"
+            }`}
+          >
+            <Star className={`size-3 ${story.is_candidate ? "fill-current" : ""}`} />
+            {story.is_candidate ? "Episode candidate" : "Flag as candidate"}
+          </button>
+        )}
       </div>
 
       {story.what_happened && (

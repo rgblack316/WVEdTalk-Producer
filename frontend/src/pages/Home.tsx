@@ -5,9 +5,11 @@ import DeskLayout from "@/components/DeskLayout";
 import BriefingView from "@/components/BriefingView";
 import { buttonVariants } from "@/components/ui/button";
 import { apiGet } from "@/lib/api";
+import { useAuth } from "@/lib/useAuth";
 import type { Briefing } from "@/lib/types";
 
 export default function Home() {
+  const { canEdit } = useAuth();
   const { data, isLoading, isError } = useQuery({
     queryKey: ["briefing", "latest"],
     queryFn: () => apiGet<Briefing | null>("/briefings/latest"),
@@ -21,7 +23,7 @@ export default function Home() {
           Loading the desk…
         </div>
       ) : data ? (
-        <BriefingView briefing={data} />
+        <BriefingView briefing={data} canFlag={canEdit} />
       ) : (
         <div className="mx-auto max-w-lg py-16 text-center" data-testid="home-empty">
           <Newspaper className="mx-auto mb-4 size-10 text-muted-foreground" />

@@ -3,9 +3,11 @@ import { useQuery } from "@tanstack/react-query";
 import DeskLayout from "@/components/DeskLayout";
 import BriefingView from "@/components/BriefingView";
 import { apiGet, ApiError } from "@/lib/api";
+import { useAuth } from "@/lib/useAuth";
 import type { Briefing } from "@/lib/types";
 
 export default function BriefingPage() {
+  const { canEdit } = useAuth();
   const { date = "" } = useParams();
   const { data, isLoading, error } = useQuery({
     queryKey: ["briefing", date],
@@ -18,7 +20,7 @@ export default function BriefingPage() {
       {isLoading ? (
         <div className="py-16 text-center text-muted-foreground">Loading briefing…</div>
       ) : data ? (
-        <BriefingView briefing={data} />
+        <BriefingView briefing={data} canFlag={canEdit} />
       ) : (
         <div className="py-16 text-center" data-testid="briefing-not-found">
           <h2 className="font-heading text-2xl font-bold">Briefing unavailable</h2>
