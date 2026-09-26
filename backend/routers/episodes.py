@@ -125,6 +125,20 @@ async def toggle_support(week_of: str, body: _SupportToggle, _edit=Depends(requi
     return WeeklyEpisode(**doc)
 
 
+@router.post("/episodes/{week_of}/relink", response_model=WeeklyEpisode)
+async def relink(week_of: str, _edit=Depends(require_editor)):
+    """Backfill the 'Links to New Sources for This Week' show-notes list on an existing episode."""
+    try:
+        doc = await producer.relink_episode(week_of)
+    except ValueError as exc:
+        if str(exc) == "not_found":
+            raise HTTPException(status_code=404, detail=f"No episode for week of {week_of}")
+        raise HTTPException(status_code=400, detail="This episode has no sources to link")
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Could not rebuild links: {exc}")
+    return WeeklyEpisode(**doc)
+
+
 @router.get("/episodes/{week_of}", response_model=WeeklyEpisode)
 async def get_episode(week_of: str):
     doc = await db.episodes.find_one({"week_of": week_of})

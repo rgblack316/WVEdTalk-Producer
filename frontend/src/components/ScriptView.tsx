@@ -1,7 +1,20 @@
+import { ExternalLink } from "lucide-react";
+import type { SourceLink } from "@/lib/types";
+
 // Renders the recording script with chapter headers: any line formatted as "## Title"
 // (emitted by the producer between story segments) becomes a styled chapter heading and
 // doubles as a podcast chapter title. A quick chapter list is shown above the script.
-export function ScriptView({ script, chapters }: { script: string; chapters?: string[] }) {
+// When `links` are provided, a "Links to New Sources for This Week" show-notes list of
+// clickable hyperlinks is rendered after the script for easy episode note publishing.
+export function ScriptView({
+  script,
+  chapters,
+  links,
+}: {
+  script: string;
+  chapters?: string[];
+  links?: SourceLink[];
+}) {
   const lines = (script || "").split("\n");
   return (
     <div>
@@ -42,6 +55,32 @@ export function ScriptView({ script, chapters }: { script: string; chapters?: st
           );
         })}
       </div>
+
+      {links && links.length > 0 && (
+        <div className="mt-6 rounded-md border border-border bg-card p-6" data-testid="episode-links">
+          <h4 className="mb-3 border-b border-border pb-1 font-heading text-base font-bold text-primary">
+            Links to New Sources for This Week:
+          </h4>
+          <ul className="space-y-1.5">
+            {links.map((src, i) => (
+              <li key={src.url || i} className="text-sm" data-testid={`episode-link-${i}`}>
+                <a
+                  href={src.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-start gap-1.5 text-primary hover:underline"
+                >
+                  <ExternalLink className="mt-1 size-3 shrink-0" />
+                  <span>
+                    {src.title || src.url}
+                    {src.outlet && <span className="text-muted-foreground"> — {src.outlet}</span>}
+                  </span>
+                </a>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }

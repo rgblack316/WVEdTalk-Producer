@@ -213,6 +213,7 @@ export interface WeeklyEpisode {
   chapters: string[];
   support_included: boolean;
   source_log: SourceLink[];
+  episode_links: SourceLink[];
   error: string;
 }
 

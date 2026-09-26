@@ -258,3 +258,12 @@ None seeded. First real briefing generated for 2026-09-18. Demo watch terms ("co
   template, passes the `_assert_safe_email` guardrail) and is auto-sent to recipients right after
   each production run (`_email_episode_safe`, non-fatal). Manual send via POST /api/episodes/send
   and the "Email episode" button on the weekly page.
+- **Links to New Sources for This Week** (show notes): `WeeklyEpisode.episode_links` is the
+  de-duplicated set of every source used to build the episode (source_log + each selected story's
+  sources; first URL wins), computed via `producer._collect_links()` after link resolution at
+  production time. `ScriptView` renders it as a clickable bullet-hyperlink section titled
+  "Links to New Sources for This Week:" immediately after the recording script (Episodes +
+  EpisodePage); `episode.episodeToMarkdown` emits the same section (replacing the old SOURCE LOG
+  block) after the script. Backfill for older episodes: `POST /api/episodes/{week_of}/relink`
+  (editor-guarded, `producer.relink_episode`) re-resolves redirect URLs and rebuilds episode_links;
+  an "Update source links" button appears on both episode pages.

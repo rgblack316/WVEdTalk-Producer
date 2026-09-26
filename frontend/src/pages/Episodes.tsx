@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
-import { Loader2, Mic, Copy, Download, ExternalLink, Clock, Mail, ListTree } from "lucide-react";
+import { Loader2, Mic, Copy, Download, ExternalLink, Clock, Mail, ListTree, Link2 } from "lucide-react";
 import DeskLayout from "@/components/DeskLayout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -103,6 +103,18 @@ export default function Episodes() {
   });
 
   const running = status?.running ?? false;
+
+  const relink = useMutation({
+    mutationFn: () => apiPost<WeeklyEpisode>(`/episodes/${episode?.week_of}/relink`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["episode", "latest"] });
+      toast.success("Source links updated");
+    },
+    onError: (e) => {
+      const msg = e instanceof ApiError ? String((e.body as { detail?: string })?.detail ?? e.message) : String(e);
+      toast.error(msg);
+    },
+  });
 
   const copyScript = async () => {
     if (!episode) return;
@@ -306,20 +318,34 @@ export default function Episodes() {
           <section className="mb-10" data-testid="episode-script">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-2 border-b-2 border-foreground/80 pb-1">
               <h2 className="font-heading text-xl font-bold tracking-tight">Recording Script</h2>
-              {canEdit && (!episode.chapters || episode.chapters.length === 0) && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={chapterize.isPending}
-                  onClick={() => chapterize.mutate()}
-                  data-testid="chapterize-button"
-                >
-                  {chapterize.isPending ? <Loader2 className="size-4 animate-spin" /> : <ListTree className="size-4" />}
-                  {chapterize.isPending ? "Adding chapters…" : "Add chapter headers"}
-                </Button>
+              {canEdit && (
+                <div className="flex flex-wrap items-center gap-2">
+                  {(!episode.chapters || episode.chapters.length === 0) && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={chapterize.isPending}
+                      onClick={() => chapterize.mutate()}
+                      data-testid="chapterize-button"
+                    >
+                      {chapterize.isPending ? <Loader2 className="size-4 animate-spin" /> : <ListTree className="size-4" />}
+                      {chapterize.isPending ? "Adding chapters…" : "Add chapter headers"}
+                    </Button>
+                  )}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={relink.isPending}
+                    onClick={() => relink.mutate()}
+                    data-testid="relink-button"
+                  >
+                    {relink.isPending ? <Loader2 className="size-4 animate-spin" /> : <Link2 className="size-4" />}
+                    {relink.isPending ? "Updating links…" : "Update source links"}
+                  </Button>
+                </div>
               )}
             </div>
-            <ScriptView script={episode.recording_script} chapters={episode.chapters} />
+            <ScriptView script={episode.recording_script} chapters={episode.chapters} links={episode.episode_links} />
           </section>
 
           {list && list.length > 1 && (

@@ -56,9 +56,10 @@ export function episodeToMarkdown(e: WeeklyEpisode): string {
 
   L.push(`## RECORDING SCRIPT`, ``, e.recording_script, ``);
 
-  if (e.source_log.length) {
-    L.push(`## SOURCE LOG`, ``);
-    e.source_log.forEach((src) =>
+  const links = e.episode_links && e.episode_links.length ? e.episode_links : e.source_log;
+  if (links.length) {
+    L.push(`## Links to New Sources for This Week:`, ``);
+    links.forEach((src) =>
       L.push(`- [${src.title || src.url}](${src.url})${src.outlet ? ` — ${src.outlet}` : ""}`),
     );
     L.push(``);

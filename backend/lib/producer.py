@@ -280,6 +280,29 @@ def _extract_chapters(script: str) -> List[str]:
     return [m.group(1).strip() for m in re.finditer(r"(?m)^\s*##\s+(.+?)\s*$", script or "") if m.group(1).strip()]
 
 
+def _collect_links(source_log, stories) -> List[SourceLink]:
+    """The de-duplicated set of every source used to build the episode — the source log plus
+    each selected story's sources — for the show-notes 'Links to New Sources for This Week' list.
+    Order: source log first, then story sources; the first occurrence of a URL wins."""
+    seen: set = set()
+    out: List[SourceLink] = []
+
+    def _add(items) -> None:
+        for s in items or []:
+            url = (getattr(s, "url", "") or "").strip()
+            if not url or url in seen:
+                continue
+            seen.add(url)
+            out.append(
+                SourceLink(url=url, title=getattr(s, "title", "") or "", outlet=getattr(s, "outlet", "") or "")
+            )
+
+    _add(source_log)
+    for st in stories or []:
+        _add(getattr(st, "sources", None))
+    return out
+
+
 async def _chapterize_call(script: str) -> Dict[str, Any]:
     """Ask the model to insert chapter headers into an EXISTING script without rewriting it."""
     import os
@@ -344,6 +367,36 @@ async def chapterize_episode(week_of: str) -> Dict[str, Any]:
     doc["chapters"] = chapters
     doc.pop("_id", None)
     return doc
+
+
+async def relink_episode(week_of: str) -> Dict[str, Any]:
+    """Backfill the consolidated 'Links to New Sources for This Week' list on an existing episode.
+    Re-resolves any redirect URLs to direct publisher links, then rebuilds episode_links from the
+    source log + every story's sources. Raises ValueError('not_found')."""
+    doc = await db.episodes.find_one({"week_of": week_of})
+    if not doc:
+        raise ValueError("not_found")
+    doc.pop("_id", None)
+    ep = WeeklyEpisode(**doc)
+
+    links = list(ep.source_log)
+    for s in ep.selected_stories:
+        links.extend(s.sources)
+    try:
+        await desk.resolve_links(links)
+    except Exception:
+        logger.exception("relink: source resolution failed (using stored URLs)")
+
+    ep.episode_links = _collect_links(ep.source_log, ep.selected_stories)
+    await db.episodes.update_one(
+        {"week_of": week_of},
+        {"$set": {
+            "source_log": [s.model_dump() for s in ep.source_log],
+            "selected_stories": [s.model_dump() for s in ep.selected_stories],
+            "episode_links": [s.model_dump() for s in ep.episode_links],
+        }},
+    )
+    return ep.model_dump()
 
 
 async def produce_episode(week_of: Optional[str] = None, trigger: str = "manual") -> WeeklyEpisode:
@@ -437,6 +490,7 @@ async def produce_episode(week_of: Optional[str] = None, trigger: str = "manual"
             for s in episode.selected_stories:
                 links.extend(s.sources)
             await desk.resolve_links(links)
+            episode.episode_links = _collect_links(episode.source_log, episode.selected_stories)
 
             await db.episodes.replace_one({"week_of": week_of}, episode.model_dump(), upsert=True)
             _status.message = f"WVEdTalk episode for week of {week_of} is ready ({len(selected)} stories)."
