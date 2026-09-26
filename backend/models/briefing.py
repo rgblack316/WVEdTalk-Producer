@@ -103,3 +103,17 @@ class CandidateStory(BaseModel):
 class ClearCandidatesRequest(BaseModel):
     # Optional edition date — clears only that week's candidates; omit to clear every flagged story.
     date: Optional[str] = None
+
+
+class CandidateRef(BaseModel):
+    date: str
+    story_id: str
+
+
+class ReflagRequest(BaseModel):
+    refs: List[CandidateRef] = []
+
+
+class ClearCandidatesResponse(BaseModel):
+    cleared: int = 0
+    refs: List[CandidateRef] = []  # exactly which stories were un-flagged, so the UI can offer Undo

@@ -82,6 +82,11 @@ export interface CandidateStory {
   story: Story;
 }
 
+export interface CandidateRef {
+  date: string;
+  story_id: string;
+}
+
 export interface DeskConfig {
   recipients: string[];
   watch_terms: string[];

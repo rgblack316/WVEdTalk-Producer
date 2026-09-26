@@ -17,7 +17,7 @@ import {
 import { ScoreChip } from "@/components/StoryCard";
 import { apiGet, apiPost, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/useAuth";
-import type { CandidateStory } from "@/lib/types";
+import type { CandidateRef, CandidateStory, Story } from "@/lib/types";
 
 function formatDate(date: string) {
   const [y, m, d] = date.split("-").map(Number);
@@ -30,36 +30,96 @@ function formatDate(date: string) {
   });
 }
 
+function CandidateCard({ date, story, showDate }: { date: string; story: Story; showDate: boolean }) {
+  return (
+    <div className="wire-rise rounded-md border border-border bg-card p-5" data-testid={`candidate-${story.id}`}>
+      <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">
+        {showDate && (
+          <Badge variant="outline" className="gap-1">
+            <Star className="size-3 fill-current" />
+            {formatDate(date)}
+          </Badge>
+        )}
+        {story.location && (
+          <span className="tracking-[0.14em] text-muted-foreground uppercase">{story.location}</span>
+        )}
+        {story.classification?.map((c) => (
+          <Badge key={c} variant="secondary">
+            {c}
+          </Badge>
+        ))}
+      </div>
+      <Link
+        to={`/briefings/${date}/stories/${story.id}`}
+        className="font-heading text-xl font-bold tracking-tight transition-colors hover:text-primary"
+      >
+        {story.headline}
+      </Link>
+      <div className="mt-2 flex flex-wrap gap-2">
+        <ScoreChip label="Importance" value={story.importance} />
+        <ScoreChip label="Podcast" value={story.podcast_potential} />
+      </div>
+      {story.notes && (
+        <p className="mt-3 border-l-2 border-accent pl-3 text-sm text-muted-foreground">{story.notes}</p>
+      )}
+    </div>
+  );
+}
+
+type SortKey = "date" | "podcast" | "importance";
+const SORTS: [SortKey, string][] = [
+  ["date", "Date"],
+  ["podcast", "Podcast potential"],
+  ["importance", "Importance"],
+];
+
 export default function Candidates() {
   const { canEdit } = useAuth();
   const qc = useQueryClient();
   // undefined = dialog closed; null = clear ALL; string = clear that edition's week.
   const [target, setTarget] = useState<string | null | undefined>(undefined);
+  const [sort, setSort] = useState<SortKey>("date");
 
   const { data, isLoading } = useQuery({
     queryKey: ["candidates"],
     queryFn: () => apiGet<CandidateStory[]>("/candidates"),
   });
 
-  const clearMut = useMutation({
-    mutationFn: (date: string | null) => apiPost<{ cleared: number }>("/candidates/clear", { date }),
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ["candidates"] });
+    qc.invalidateQueries({ queryKey: ["briefing"] });
+  };
+  const errText = (e: unknown) =>
+    e instanceof ApiError ? String((e.body as { detail?: string })?.detail ?? e.message) : String(e);
+
+  const reflag = useMutation({
+    mutationFn: (refs: CandidateRef[]) => apiPost<{ restored: number }>("/candidates/reflag", { refs }),
     onSuccess: (r) => {
-      qc.invalidateQueries({ queryKey: ["candidates"] });
-      qc.invalidateQueries({ queryKey: ["briefing"] });
-      toast.success(
-        r.cleared === 0
-          ? "No candidates to clear"
-          : `Cleared ${r.cleared} candidate${r.cleared === 1 ? "" : "s"} (prep notes kept)`,
-      );
+      invalidate();
+      toast.success(`Restored ${r.restored} candidate${r.restored === 1 ? "" : "s"}`);
     },
-    onError: (e) =>
-      toast.error(
-        e instanceof ApiError ? String((e.body as { detail?: string })?.detail ?? e.message) : String(e),
-      ),
+    onError: (e) => toast.error(errText(e)),
   });
 
-  // Group flagged stories by edition date. `data` arrives newest-first, and a Map keeps
-  // insertion order, so the groups render newest week first.
+  const clearMut = useMutation({
+    mutationFn: (date: string | null) =>
+      apiPost<{ cleared: number; refs: CandidateRef[] }>("/candidates/clear", { date }),
+    onSuccess: (r) => {
+      invalidate();
+      if (r.cleared === 0) {
+        toast.success("No candidates to clear");
+        return;
+      }
+      toast.success(`Cleared ${r.cleared} candidate${r.cleared === 1 ? "" : "s"} (prep notes kept)`, {
+        duration: 8000,
+        action: { label: "Undo", onClick: () => reflag.mutate(r.refs) },
+      });
+    },
+    onError: (e) => toast.error(errText(e)),
+  });
+
+  // Group flagged stories by edition date. `data` arrives newest-first, and a Map keeps insertion
+  // order, so the groups render newest week first.
   const groups = useMemo(() => {
     const m = new Map<string, CandidateStory[]>();
     (data ?? []).forEach((c) => {
@@ -69,6 +129,12 @@ export default function Candidates() {
     });
     return Array.from(m.entries());
   }, [data]);
+
+  // Flat list sorted by the chosen score (desc). Used when sort !== "date".
+  const sorted = useMemo(() => {
+    const field = sort === "podcast" ? "podcast_potential" : "importance";
+    return [...(data ?? [])].sort((a, b) => (b.story[field] ?? 0) - (a.story[field] ?? 0));
+  }, [data, sort]);
 
   const total = data?.length ?? 0;
   const hasCandidates = total > 0;
@@ -82,25 +148,49 @@ export default function Candidates() {
           <p className="text-xs tracking-[0.2em] text-accent uppercase">Podcast Prep</p>
           <h2 className="font-heading text-3xl font-bold tracking-tight">Episode candidates</h2>
           <p className="mt-2 text-sm text-muted-foreground">
-            Every story flagged across all editions, newest first. Open a story to edit its prep notes.
+            Every story flagged across all editions. Open a story to edit its prep notes.
           </p>
         </div>
 
-        {canEdit && hasCandidates && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setTarget(null)}
-            data-testid="clear-candidates-button"
-          >
-            <Trash2 className="size-4" /> Clear all candidates
-          </Button>
+        {hasCandidates && (
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-1 rounded-md border border-border p-0.5" data-testid="candidate-sort">
+              <span className="px-2 text-xs text-muted-foreground">Sort</span>
+              {SORTS.map(([key, label]) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setSort(key)}
+                  data-testid={`sort-${key}`}
+                  className={`rounded px-2.5 py-1 text-xs transition-colors duration-150 ${
+                    sort === key
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            {canEdit && (
+              <Button variant="outline" size="sm" onClick={() => setTarget(null)} data-testid="clear-candidates-button">
+                <Trash2 className="size-4" /> Clear all candidates
+              </Button>
+            )}
+          </div>
         )}
       </div>
 
       {isLoading ? (
         <div className="py-16 text-center text-muted-foreground">Loading candidates…</div>
-      ) : hasCandidates ? (
+      ) : !hasCandidates ? (
+        <div className="py-16 text-center" data-testid="candidates-empty">
+          <Star className="mx-auto mb-4 size-10 text-muted-foreground" />
+          <p className="text-sm text-muted-foreground">
+            No episode candidates yet. Open any story and flag it to build the shortlist here.
+          </p>
+        </div>
+      ) : sort === "date" ? (
         <div className="space-y-8" data-testid="candidate-list">
           {groups.map(([date, items]) => (
             <div key={date} data-testid={`candidate-week-${date}`}>
@@ -126,59 +216,24 @@ export default function Candidates() {
               </div>
               <div className="space-y-4">
                 {items.map(({ story }) => (
-                  <div
-                    key={story.id}
-                    className="wire-rise rounded-md border border-border bg-card p-5"
-                    data-testid={`candidate-${story.id}`}
-                  >
-                    <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">
-                      {story.location && (
-                        <span className="tracking-[0.14em] text-muted-foreground uppercase">
-                          {story.location}
-                        </span>
-                      )}
-                      {story.classification?.map((c) => (
-                        <Badge key={c} variant="secondary">
-                          {c}
-                        </Badge>
-                      ))}
-                    </div>
-                    <Link
-                      to={`/briefings/${date}/stories/${story.id}`}
-                      className="font-heading text-xl font-bold tracking-tight transition-colors hover:text-primary"
-                    >
-                      {story.headline}
-                    </Link>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      <ScoreChip label="Importance" value={story.importance} />
-                      <ScoreChip label="Podcast" value={story.podcast_potential} />
-                    </div>
-                    {story.notes && (
-                      <p className="mt-3 border-l-2 border-accent pl-3 text-sm text-muted-foreground">
-                        {story.notes}
-                      </p>
-                    )}
-                  </div>
+                  <CandidateCard key={story.id} date={date} story={story} showDate={false} />
                 ))}
               </div>
             </div>
           ))}
         </div>
       ) : (
-        <div className="py-16 text-center" data-testid="candidates-empty">
-          <Star className="mx-auto mb-4 size-10 text-muted-foreground" />
-          <p className="text-sm text-muted-foreground">
-            No episode candidates yet. Open any story and flag it to build the shortlist here.
-          </p>
+        <div className="space-y-4" data-testid="candidate-list">
+          {sorted.map(({ date, story }) => (
+            <CandidateCard key={story.id} date={date} story={story} showDate />
+          ))}
         </div>
       )}
 
       <Dialog open={target !== undefined} onOpenChange={(o) => !o && setTarget(undefined)}>
         <DialogContent data-testid="clear-candidates-dialog">
           <DialogHeader>
-            <DialogTitle>
-              {target ? "Clear this week's candidates?" : "Clear all episode candidates?"}
-            </DialogTitle>
+            <DialogTitle>{target ? "Clear this week's candidates?" : "Clear all episode candidates?"}</DialogTitle>
             <DialogDescription>
               This un-flags{" "}
               {target ? (
@@ -191,8 +246,8 @@ export default function Candidates() {
                   all {targetCount} flagged {targetCount === 1 ? "story" : "stories"}
                 </>
               )}
-              . Prep notes are kept, and nothing clears automatically — you can re-flag any story later
-              if you produce the episode again.
+              . Prep notes are kept, nothing clears automatically, and you can Undo right after — so a
+              week can be reconsidered if you produce the episode again.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

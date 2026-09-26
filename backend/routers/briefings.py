@@ -13,6 +13,8 @@ from models.briefing import (
     BriefingSummary,
     CandidateStory,
     ClearCandidatesRequest,
+    ClearCandidatesResponse,
+    ReflagRequest,
     RunStatus,
     StoryUpdate,
 )
@@ -60,23 +62,46 @@ async def list_candidates():
     return out
 
 
-@router.post("/candidates/clear")
+@router.post("/candidates/clear", response_model=ClearCandidatesResponse)
 async def clear_candidates(body: Optional[ClearCandidatesRequest] = None, _edit=Depends(require_editor)):
     """Un-flag stories tagged as episode candidates. With a `date`, clears only that edition's
     week; without one, clears every flagged story. Prep notes are preserved so a story can be
-    re-flagged and reconsidered later. Manual only — candidates never auto-clear."""
+    re-flagged and reconsidered later. Returns the exact refs cleared so the UI can offer Undo.
+    Manual only — candidates never auto-clear."""
     query: dict = {"stories.is_candidate": True}
     if body and body.date:
         query["date"] = body.date
-    docs = await db.briefings.find(query, {"stories.is_candidate": 1}).to_list(1000)
-    cleared = sum(1 for d in docs for s in d.get("stories", []) if s.get("is_candidate"))
-    if cleared:
+    docs = await db.briefings.find(
+        query, {"date": 1, "stories.id": 1, "stories.is_candidate": 1}
+    ).to_list(1000)
+    refs = [
+        {"date": d["date"], "story_id": s.get("id")}
+        for d in docs
+        for s in d.get("stories", [])
+        if s.get("is_candidate") and s.get("id")
+    ]
+    if refs:
         await db.briefings.update_many(
             query,
             {"$set": {"stories.$[el].is_candidate": False}},
             array_filters=[{"el.is_candidate": True}],
         )
-    return {"cleared": cleared}
+    return {"cleared": len(refs), "refs": refs}
+
+
+@router.post("/candidates/reflag")
+async def reflag_candidates(body: ReflagRequest, _edit=Depends(require_editor)):
+    """Re-flag specific stories that were just cleared — powers the 'Undo' on the Podcast Prep board."""
+    by_date: dict = {}
+    for r in body.refs:
+        by_date.setdefault(r.date, []).append(r.story_id)
+    for date, ids in by_date.items():
+        await db.briefings.update_one(
+            {"date": date},
+            {"$set": {"stories.$[el].is_candidate": True}},
+            array_filters=[{"el.id": {"$in": ids}}],
+        )
+    return {"restored": len(body.refs)}
 
 
 @router.get("/run-status", response_model=RunStatus)
