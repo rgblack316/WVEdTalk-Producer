@@ -217,9 +217,9 @@ export default function Candidates() {
                     size="sm"
                     className="text-muted-foreground hover:text-destructive"
                     onClick={() => setTarget(date)}
-                    data-testid={`clear-week-${date}`}
+                    data-testid={`clear-day-${date}`}
                   >
-                    <Trash2 className="size-3.5" /> Clear this week
+                    <Trash2 className="size-3.5" /> Clear this day
                   </Button>
                 )}
               </div>
@@ -242,7 +242,7 @@ export default function Candidates() {
       <Dialog open={target !== undefined} onOpenChange={(o) => !o && setTarget(undefined)}>
         <DialogContent data-testid="clear-candidates-dialog">
           <DialogHeader>
-            <DialogTitle>{target ? "Clear this week's candidates?" : "Clear all episode candidates?"}</DialogTitle>
+            <DialogTitle>{target ? "Clear this day's candidates?" : "Clear all episode candidates?"}</DialogTitle>
             <DialogDescription>
               This un-flags{" "}
               {target ? (
@@ -255,8 +255,8 @@ export default function Candidates() {
                   all {targetCount} flagged {targetCount === 1 ? "story" : "stories"}
                 </>
               )}
-              . Prep notes are kept, nothing clears automatically, and you can Undo right after — so a
-              week can be reconsidered if you produce the episode again.
+              . Prep notes are kept, nothing clears automatically, and you can Undo right after — so
+              anything cleared can be reconsidered if you produce the episode again.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -270,7 +270,7 @@ export default function Candidates() {
               data-testid="clear-candidates-confirm"
             >
               {clearMut.isPending ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
-              {target ? "Clear this week" : "Clear candidates"}
+              {target ? "Clear this day" : "Clear candidates"}
             </Button>
           </DialogFooter>
         </DialogContent>
