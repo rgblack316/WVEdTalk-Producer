@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { Star, Trash2, Loader2 } from "lucide-react";
@@ -72,13 +72,22 @@ const SORTS: [SortKey, string][] = [
   ["podcast", "Podcast potential"],
   ["importance", "Importance"],
 ];
+const SORT_STORAGE_KEY = "wvedtalk.candidates.sort";
+const isSortKey = (v: unknown): v is SortKey => v === "date" || v === "podcast" || v === "importance";
 
 export default function Candidates() {
   const { canEdit } = useAuth();
   const qc = useQueryClient();
   // undefined = dialog closed; null = clear ALL; string = clear that edition's week.
   const [target, setTarget] = useState<string | null | undefined>(undefined);
-  const [sort, setSort] = useState<SortKey>("date");
+  // Remember the chosen sort between visits so the board opens how the user left it.
+  const [sort, setSort] = useState<SortKey>(() => {
+    const saved = typeof window !== "undefined" ? window.localStorage.getItem(SORT_STORAGE_KEY) : null;
+    return isSortKey(saved) ? saved : "date";
+  });
+  useEffect(() => {
+    window.localStorage.setItem(SORT_STORAGE_KEY, sort);
+  }, [sort]);
 
   const { data, isLoading } = useQuery({
     queryKey: ["candidates"],
