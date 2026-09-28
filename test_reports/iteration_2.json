@@ -1,0 +1,32 @@
+{
+  "iteration": 2,
+  "summary": "Verified 2 acceptance criteria re: source link filtering (isExternalUrl). Both PASSED when exercised through the real ingress URL (APP_URL); noted host-comparison sensitivity as a note, not a bug.",
+  "passed": 2,
+  "failed": 0,
+  "flaky": 0,
+  "blocked": 0,
+  "test_error": 0,
+  "retest_needed": false,
+  "bugs": [],
+  "action_items": [],
+  "checks": [
+    {
+      "criterion": "Source links on the daily briefing page never point to our own app / private briefings and are never empty",
+      "name": "briefing-source-links-external-only",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Logged in as admin@johnscreekstudios.com, navigated to https://mountain-school-news.preview.emergentagent.com/briefings/2026-09-21. Collected all anchors inside data-testid=story-source-list (Big Three cards + Source Log): 5 rendered links, all absolute http(s) to external hosts (wvpublic.org x2, wvmetronews.com, newsandsentinel.com, wchsnetwork.com). None empty/'#', none pointing to window.location.host (mountain-school-news.preview.emergentagent.com). Seeded empty url, relative '/briefings/2026-09-21', and self-host share link were correctly excluded from rendering."
+    },
+    {
+      "criterion": "Story detail page source list also excludes bad links",
+      "name": "story-detail-source-links-external-only",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Navigated to https://mountain-school-news.preview.emergentagent.com/briefings/2026-09-21/stories/2a42a27f-288c-4758-a1f4-68eb67deb850 after login. data-testid=story-source-list rendered exactly 2 anchors: https://wvpublic.org/education/story-123 and https://wvmetronews.com/education/456. No empty href, no self-host href. Seeded bad sources (empty, relative, self-host) correctly filtered out."
+    }
+  ],
+  "notes": [
+    "isExternalUrl() (components/StoryCard.tsx) compares a candidate URL's host against window.location.host at render time. When these checks were first run against the default localhost:3000 dev-server origin, the self-host seeded link (https://mountain-school-news.preview.emergentagent.com/share/briefing/2026-09-21) was NOT filtered — it rendered as a live anchor, because 'mountain-school-news.preview.emergentagent.com' != 'localhost:3000'. That is expected/correct behavior for the filter's design (it is host-relative, not a hardcoded domain check) but it means the criterion can only be meaningfully verified when the page is loaded from the SAME origin real users hit. Re-running both checks through APP_URL (https://mountain-school-news.preview.emergentagent.com, the ingress path) passed cleanly: the self-host link was correctly excluded there. Per the harness instructions this ingress URL is the one that matters for this criterion, so both checks now target it (recorded in each check's .meta.json). No application bug — flagging only so future re-runs of this suite continue to target APP_URL for these two checks, not localhost.",
+    "Two acceptance criteria in this briefing; both are pure UI-rendering filters with no independent API contract to assert (the backend already returns the unfiltered mixed seed data by design per spec_deviations — filtering is a frontend concern), so no backend test file was added; both are covered by browser checks only."
+  ]
+}

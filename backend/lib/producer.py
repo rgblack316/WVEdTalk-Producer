@@ -387,6 +387,9 @@ async def relink_episode(week_of: str) -> Dict[str, Any]:
     except Exception:
         logger.exception("relink: source resolution failed (using stored URLs)")
 
+    ep.source_log = desk._valid_sources(ep.source_log)
+    for s in ep.selected_stories:
+        s.sources = desk._valid_sources(s.sources)
     ep.episode_links = _collect_links(ep.source_log, ep.selected_stories)
     await db.episodes.update_one(
         {"week_of": week_of},
@@ -490,6 +493,9 @@ async def produce_episode(week_of: Optional[str] = None, trigger: str = "manual"
             for s in episode.selected_stories:
                 links.extend(s.sources)
             await desk.resolve_links(links)
+            episode.source_log = desk._valid_sources(episode.source_log)
+            for s in episode.selected_stories:
+                s.sources = desk._valid_sources(s.sources)
             episode.episode_links = _collect_links(episode.source_log, episode.selected_stories)
 
             await db.episodes.replace_one({"week_of": week_of}, episode.model_dump(), upsert=True)

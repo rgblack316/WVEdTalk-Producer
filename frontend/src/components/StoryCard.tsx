@@ -3,6 +3,17 @@ import { Badge } from "@/components/ui/badge";
 import { ExternalLink, Star } from "lucide-react";
 import type { SourceLink, Story } from "@/lib/types";
 
+// A source is only a real article link if it's an absolute http(s) URL to another site — never
+// empty/relative (renders as href="" → our own briefing page) and never our own host.
+export function isExternalUrl(u: string | undefined | null): boolean {
+  try {
+    const url = new URL(u ?? "");
+    return /^https?:$/.test(url.protocol) && url.host !== window.location.host;
+  } catch {
+    return false;
+  }
+}
+
 export function ScoreChip({ label, value }: { label: string; value: number | null }) {
   if (value === null || value === undefined) return null;
   return (
@@ -14,10 +25,11 @@ export function ScoreChip({ label, value }: { label: string; value: number | nul
 }
 
 export function SourceList({ sources }: { sources: SourceLink[] }) {
-  if (!sources?.length) return null;
+  const items = (sources ?? []).filter((s) => isExternalUrl(s?.url));
+  if (!items.length) return null;
   return (
     <ul className="space-y-1" data-testid="story-source-list">
-      {sources.map((s, i) => (
+      {items.map((s, i) => (
         <li key={`${s.url}-${i}`} className="text-sm">
           <a
             href={s.url}

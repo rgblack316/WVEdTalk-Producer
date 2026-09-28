@@ -296,6 +296,33 @@ def _domain(url: str) -> str:
         return ""
 
 
+APP_HOST = (urllib.parse.urlparse(os.environ.get("APP_URL", "")).hostname or "").lower()
+
+
+def _is_valid_source_url(url: str) -> bool:
+    """A source URL is publishable only if it's an absolute http(s) link to an EXTERNAL site.
+    Rejects: empty/relative URLs (which render as href="" → a link back to our own briefing),
+    unresolved Google grounding redirects, and our own app host — the causes of source links
+    pointing at the private news desk instead of the actual news story."""
+    try:
+        p = urllib.parse.urlparse((url or "").strip())
+    except Exception:
+        return False
+    if p.scheme not in ("http", "https") or not p.hostname:
+        return False
+    host = p.hostname.lower()
+    if "vertexaisearch.cloud.google.com" in host:
+        return False
+    if APP_HOST and (host == APP_HOST or host.endswith("." + APP_HOST)):
+        return False
+    return True
+
+
+def _valid_sources(links: List[SourceLink]) -> List[SourceLink]:
+    """Keep only sources that resolve to a real external article (see _is_valid_source_url)."""
+    return [l for l in (links or []) if l and _is_valid_source_url(l.url)]
+
+
 def _is_private_host(host: str) -> bool:
     """Block loopback/link-local/private/metadata targets (SSRF guard)."""
     import ipaddress
@@ -366,6 +393,11 @@ async def _resolve_sources(briefing: Briefing) -> None:
     for s in briefing.stories:
         links.extend(s.sources)
     await resolve_links(links)
+    # Drop any link that didn't resolve to a real external article — an empty/relative URL renders
+    # as a link back to our own briefing, and an unresolved grounding redirect isn't the story.
+    briefing.source_log = _valid_sources(briefing.source_log)
+    for s in briefing.stories:
+        s.sources = _valid_sources(s.sources)
 
 
 def _merge_workspace(new: Briefing, previous: Optional[Dict[str, Any]]) -> None:

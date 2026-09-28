@@ -1,4 +1,5 @@
 import { ExternalLink } from "lucide-react";
+import { isExternalUrl } from "@/components/StoryCard";
 import type { SourceLink } from "@/lib/types";
 
 // Renders the recording script with chapter headers: any line formatted as "## Title"
@@ -16,6 +17,7 @@ export function ScriptView({
   links?: SourceLink[];
 }) {
   const lines = (script || "").split("\n");
+  const validLinks = (links ?? []).filter((s) => isExternalUrl(s?.url));
   return (
     <div>
       {chapters && chapters.length > 0 && (
@@ -56,13 +58,13 @@ export function ScriptView({
         })}
       </div>
 
-      {links && links.length > 0 && (
+      {validLinks.length > 0 && (
         <div className="mt-6 rounded-md border border-border bg-card p-6" data-testid="episode-links">
           <h4 className="mb-3 border-b border-border pb-1 font-heading text-base font-bold text-primary">
             Links to New Sources for This Week:
           </h4>
           <ul className="space-y-1.5">
-            {links.map((src, i) => (
+            {validLinks.map((src, i) => (
               <li key={src.url || i} className="text-sm" data-testid={`episode-link-${i}`}>
                 <a
                   href={src.url}
