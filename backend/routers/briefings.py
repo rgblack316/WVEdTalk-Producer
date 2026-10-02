@@ -183,6 +183,11 @@ async def update_story(date: str, story_id: str, update: StoryUpdate, _edit=Depe
                 s["is_excluded"] = update.is_excluded
                 if update.is_excluded:
                     s["is_candidate"] = False
+                    s["is_positive"] = False  # an excluded story can't also be the positive close
+            if update.is_positive is not None:
+                s["is_positive"] = update.is_positive
+                if update.is_positive:
+                    s["is_excluded"] = False  # a positive-close story can't also be excluded
             if update.notes is not None:
                 s["notes"] = update.notes
     if not found:

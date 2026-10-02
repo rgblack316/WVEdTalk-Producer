@@ -27,6 +27,7 @@ export interface Story {
   sources: SourceLink[];
   is_candidate: boolean;
   is_excluded: boolean;
+  is_positive: boolean;
   notes: string;
 }
 

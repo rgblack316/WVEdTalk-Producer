@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
-import { ExternalLink, Star, Ban } from "lucide-react";
+import { ExternalLink, Star, Ban, Sparkles } from "lucide-react";
 import type { SourceLink, Story } from "@/lib/types";
 
 // A source is only a real article link if it's an absolute http(s) URL to another site — never
@@ -57,6 +57,7 @@ export function StoryCard({
   canFlag = false,
   onToggleCandidate,
   onToggleExclude,
+  onTogglePositive,
 }: {
   story: Story;
   date: string;
@@ -65,6 +66,7 @@ export function StoryCard({
   canFlag?: boolean;
   onToggleCandidate?: () => void;
   onToggleExclude?: () => void;
+  onTogglePositive?: () => void;
 }) {
   return (
     <article
@@ -90,6 +92,11 @@ export function StoryCard({
         {story.is_candidate && !canFlag && (
           <Badge variant="outline" className="gap-1">
             <Star className="size-3 fill-current" /> Episode candidate
+          </Badge>
+        )}
+        {story.is_positive && !canFlag && (
+          <Badge variant="outline" className="gap-1 text-emerald-700 dark:text-emerald-400">
+            <Sparkles className="size-3" /> Positive note
           </Badge>
         )}
       </div>
@@ -148,6 +155,21 @@ export function StoryCard({
           >
             <Ban className="size-3" />
             {story.is_excluded ? "Excluded" : "Exclude"}
+          </button>
+        )}
+        {canFlag && (
+          <button
+            type="button"
+            onClick={onTogglePositive}
+            data-testid={`positive-candidate-${story.id}`}
+            className={`inline-flex items-center gap-1 rounded-sm border px-2 py-0.5 text-xs transition-colors duration-150 ${
+              story.is_positive
+                ? "border-emerald-600 bg-emerald-600 text-white"
+                : "border-border text-muted-foreground hover:border-emerald-600 hover:text-foreground"
+            }`}
+          >
+            <Sparkles className="size-3" />
+            {story.is_positive ? "Positive note" : "Mark positive"}
           </button>
         )}
       </div>

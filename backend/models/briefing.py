@@ -40,6 +40,7 @@ class Story(BaseModel):
     # host workspace
     is_candidate: bool = False
     is_excluded: bool = False  # host explicitly ruled this out of weekly-episode consideration
+    is_positive: bool = False  # host flagged this as a good-news story to end the episode on
     notes: str = ""
 
 
@@ -94,6 +95,7 @@ class RunStatus(BaseModel):
 class StoryUpdate(BaseModel):
     is_candidate: Optional[bool] = None
     is_excluded: Optional[bool] = None
+    is_positive: Optional[bool] = None
     notes: Optional[str] = None
 
 

@@ -21,7 +21,7 @@ story can be flagged as a podcast episode candidate with free-text prep notes.
 - Story: id, section (big_three|other|developing|state_policy|k12|higher_ed), rank, headline,
   location, classification[], importance, podcast_potential, what_happened, why_it_matters,
   podcast_angle, questions[], developing fields (original_date, what_is_new, previously_known,
-  unresolved, watch_next), sources[{title,url,outlet}], is_candidate, notes.
+  unresolved, watch_next), sources[{title,url,outlet}], is_candidate, is_excluded, is_positive, notes.
 - Unique index on date; index on stories.is_candidate.
 
 ## Key flows
@@ -31,7 +31,8 @@ story can be flagged as a podcast episode candidate with free-text prep notes.
 - GET /api/run-status drives the header progress banner (frontend polls every 5s while running).
 - GET /api/briefings (summaries), /api/briefings/latest, /api/briefings/{date} (full),
   PATCH /api/briefings/{date}/stories/{story_id} (toggle candidate / EXCLUDE from weekly-episode
-  consideration / save notes; candidate and exclude are mutually exclusive) — used both by
+  consideration / flag POSITIVE to end the episode on / save notes; candidate↔exclude are mutually
+  exclusive, and exclude clears positive / positive clears exclude) — used both by
   the StoryDetail page and the inline "Flag as candidate" toggle on each briefing story card
   (BriefingView, editors/admins only via the canFlag prop; never shown on the public share view),
   GET /api/candidates (all flagged stories across dates),
@@ -217,12 +218,20 @@ None seeded. First real briefing generated for 2026-09-18. Demo watch terms ("co
   look-ahead, full recording script, copy/download, past-episode list) and `/episodes/:week`
   (past episode detail). Nav item "Weekly Script".
 
-## Weekly script — Value 4 Value support segment
-- `lib/producer.py` inserts a support segment as its own `## Support WVEdTalk` chapter **immediately
-  before `## Closing`** via `_ensure_support(script, text)` (idempotent by header; `_remove_support`
-  strips it). **Configurable outro**: text lives in `desk_config.support_segment` (canonical default
-  `models.config.DEFAULT_SUPPORT_SEGMENT`); `support_default_on` controls whether new episodes include
-  it. Edited from the Settings "Weekly support read" panel via `POST /api/settings/support`.
+## Weekly script — Value 4 Value support segment + positive-note close
+- `lib/producer.py` inserts a support segment as its own `## Support WVEdTalk` chapter. It now goes
+  **immediately before the final `## On a Positive Note` chapter** when present (so the support read
+  is heard and the episode then ENDS on the uplifting story — flipped from the old positive-then-support
+  order), falling back to immediately before `## Closing` if the model emitted no positive chapter.
+  `_ensure_support(script, text)` is idempotent by header; `_remove_support` strips it.
+  **Positive-note chapter**: the PRODUCER_BRIEF instructs the model to end with a dedicated
+  `## On a Positive Note` chapter (good-news story/stories) as the last content chapter before
+  `## Closing`, and that the desk inserts the support message right before it. `producer._gather_positive()`
+  collects host-flagged positive stories (`stories.is_positive==True` and not excluded) and injects them
+  into the prompt as the strongly-favored picks for that positive close. **Configurable outro**: text
+  lives in `desk_config.support_segment` (canonical default `models.config.DEFAULT_SUPPORT_SEGMENT`);
+  `support_default_on` controls whether new episodes include it. Edited from the Settings "Weekly support
+  read" panel via `POST /api/settings/support`.
 - **Per-episode toggle**: each episode has `support_included`; `POST /api/episodes/{week_of}/support
   {enabled}` adds/removes the segment on that one script and re-derives chapters. EpisodePage shows an
   Add/Remove support read button. `chapterize_episode` no longer forces the segment (preserves the

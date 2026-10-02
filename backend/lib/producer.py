@@ -35,6 +35,9 @@ REQUIRED_INTRO = (
 # Verbatim "Value 4 Value" support segment default (admin-overridable via desk_config).
 SUPPORT_CHAPTER = "Support WVEdTalk"
 REQUIRED_SUPPORT = DEFAULT_SUPPORT_SEGMENT
+# The episode's final uplifting chapter. The support message is inserted immediately BEFORE it, so
+# listeners hear the support read and then the episode ends on this positive story.
+POSITIVE_CHAPTER = "On a Positive Note"
 
 _status = ProduceStatus()
 _lock = asyncio.Lock()
@@ -92,7 +95,7 @@ RECORDING SCRIPT: write a polished, conversational script for a 15-20 minute epi
 
 The recording script MUST begin with the opening show identification, then IMMEDIATELY reproduce this host introduction VERBATIM (do not paraphrase, shorten, reorder, rewrite, substitute or omit any part):
 "__REQUIRED_INTRO__"
-Then transition naturally into the week's news. Structure: (1) Opening = show identification, then the exact required introduction, then a brief note of what the episode covers; (2) Major story coverage — for each story: what happened, what changed this week, background, why it matters, who is affected, competing perspectives when appropriate, unanswered questions, what to watch next, with more important stories getting more time; (3) legitimate thematic connections, not manufactured; (4) a brief look ahead at genuinely relevant upcoming legislative/board/court/policy events; (5) a concise conversational closing that identifies the program as WVEdTalk. No filler. Do NOT write any fundraising, donation, 'value for value', or call-to-contribute segment yourself — the desk automatically appends its official support message as a '## Support WVEdTalk' chapter immediately before the '## Closing' sign-off.
+Then transition naturally into the week's news. Structure: (1) Opening = show identification, then the exact required introduction, then a brief note of what the episode covers; (2) Major story coverage — for each story: what happened, what changed this week, background, why it matters, who is affected, competing perspectives when appropriate, unanswered questions, what to watch next, with more important stories getting more time; (3) legitimate thematic connections, not manufactured; (4) a brief look ahead at genuinely relevant upcoming legislative/board/court/policy events; (5) a final uplifting segment that ends the episode on a positive note — a dedicated chapter titled EXACTLY "## On a Positive Note" featuring the week's good-news/positive story or stories (strongly favor any story the host has flagged as a positive story, verified and updated with fresh research; if none are flagged and no genuine good-news story exists, a brief hopeful reflection is acceptable), placed as the LAST content chapter immediately before the sign-off; (6) a concise conversational closing under "## Closing" that identifies the program as WVEdTalk. No filler. Do NOT write any fundraising, donation, 'value for value', or call-to-contribute segment yourself — the desk automatically inserts its official support message as a '## Support WVEdTalk' chapter immediately BEFORE the final '## On a Positive Note' chapter, so listeners hear the support message and then the episode ends on the uplifting story.
 
 LEGAL/ETHICAL: identify allegations as allegations, do not imply guilt before adjudication, distinguish allegations from findings, note unresolved cases, avoid sensational descriptions; state proposed legislation as proposed and where it is in the process; distinguish board discussion from action and note when no final decision was made.
 
@@ -140,6 +143,7 @@ def _user_prompt(
     briefings: List[Dict[str, Any]],
     script_length: str,
     candidates: List[Dict[str, Any]],
+    positive: List[Dict[str, Any]],
     submissions: List[Dict[str, Any]],
 ) -> str:
     lines = [
@@ -159,6 +163,18 @@ def _user_prompt(
             "Honor the host's notes where provided:"
         )
         for c in candidates:
+            note = f" — host note: {c['notes']}" if c.get("notes") else ""
+            loc = f" [{c['location']}]" if c.get("location") else ""
+            lines.append(f"- ({c.get('date','')}) {c.get('headline','')}{loc}{note}")
+    if positive:
+        lines.append(
+            "\nHOST-FLAGGED POSITIVE / GOOD-NEWS STORIES — the host wants the episode to END ON A POSITIVE NOTE. "
+            "Verify and update each of the following uplifting stories with fresh independent research, then feature "
+            "the strongest as the episode's closing '## On a Positive Note' chapter (placed right before the sign-off, "
+            "after the '## Support WVEdTalk' message the desk inserts). Strongly favor these for that positive close; "
+            "honor the host's notes where provided:"
+        )
+        for c in positive:
             note = f" — host note: {c['notes']}" if c.get("notes") else ""
             loc = f" [{c['location']}]" if c.get("location") else ""
             lines.append(f"- ({c.get('date','')}) {c.get('headline','')}{loc}{note}")
@@ -202,12 +218,31 @@ async def _gather_candidates() -> List[Dict[str, Any]]:
     return out
 
 
+async def _gather_positive() -> List[Dict[str, Any]]:
+    """Stories the host flagged as good-news/positive to end the episode on."""
+    docs = await db.briefings.find({"stories.is_positive": True}).sort("date", -1).to_list(200)
+    out: List[Dict[str, Any]] = []
+    for d in docs:
+        for s in d.get("stories", []):
+            if s.get("is_positive") and not s.get("is_excluded"):
+                out.append(
+                    {
+                        "date": d.get("date", ""),
+                        "headline": s.get("headline", ""),
+                        "location": s.get("location", ""),
+                        "notes": s.get("notes", ""),
+                    }
+                )
+    return out
+
+
 async def _call_model(
     week_start: str,
     week_end: str,
     briefings: List[Dict[str, Any]],
     script_length: str,
     candidates: List[Dict[str, Any]],
+    positive: List[Dict[str, Any]],
     submissions: List[Dict[str, Any]],
 ) -> Dict[str, Any]:
     import os
@@ -224,7 +259,7 @@ async def _call_model(
         .with_tools([{"googleSearch": {}}])
     )
     resp = await chat.send_message_with_tools(
-        UserMessage(text=_user_prompt(week_start, week_end, briefings, script_length, candidates, submissions))
+        UserMessage(text=_user_prompt(week_start, week_end, briefings, script_length, candidates, positive, submissions))
     )
     content = resp.content if isinstance(resp.content, str) else str(resp.content or "")
     data = desk._parse_json(content)
@@ -251,17 +286,21 @@ def _ensure_intro(script: str) -> str:
 
 
 def _ensure_support(script: str, text: Optional[str] = None) -> str:
-    """Insert the support segment as its own '## Support WVEdTalk' chapter immediately before the
-    closing sign-off. Idempotent by header (won't duplicate); appends at end if no '## Closing'."""
+    """Insert the support segment as its own '## Support WVEdTalk' chapter. It goes immediately
+    before the final '## On a Positive Note' chapter when present (so the support read is heard and
+    the episode then ends on the uplifting story), otherwise before '## Closing', otherwise appended.
+    Idempotent by header (won't duplicate)."""
     script = script or ""
     if re.search(rf"(?im)^[ \t]*##[ \t]+{re.escape(SUPPORT_CHAPTER)}[ \t]*$", script):
         return script
     block = f"## {SUPPORT_CHAPTER}\n\n{(text or REQUIRED_SUPPORT).strip()}"
-    last = None
-    for last in re.finditer(r"(?im)^[ \t]*##[ \t]+Closing[ \t]*$", script):
-        pass
-    if last:
-        return script[: last.start()].rstrip() + "\n\n" + block + "\n\n" + script[last.start() :]
+    # Prefer the positive-note chapter as the anchor; fall back to the closing sign-off.
+    anchors = [m.start() for m in re.finditer(rf"(?im)^[ \t]*##[ \t]+{re.escape(POSITIVE_CHAPTER)}[ \t]*$", script)]
+    if not anchors:
+        anchors = [m.start() for m in re.finditer(r"(?im)^[ \t]*##[ \t]+Closing[ \t]*$", script)]
+    if anchors:
+        idx = anchors[-1]
+        return script[:idx].rstrip() + "\n\n" + block + "\n\n" + script[idx:]
     return script.rstrip() + "\n\n" + block
 
 
@@ -428,6 +467,7 @@ async def produce_episode(week_of: Optional[str] = None, trigger: str = "manual"
             cfg = await db.desk_config.find_one({"key": "singleton"}, {"_id": 0}) or {}
             script_length = cfg.get("script_length", "standard")
             candidates = await _gather_candidates()
+            positive = await _gather_positive()
             if candidates:
                 _status.message = f"Reviewing the week with {len(candidates)} host-flagged candidate(s) prioritized…"
             submissions = (
@@ -435,7 +475,7 @@ async def produce_episode(week_of: Optional[str] = None, trigger: str = "manual"
                 .sort("submitted_at", -1)
                 .to_list(50)
             )
-            data = await _call_model(week_start, week_end, briefings, script_length, candidates, submissions)
+            data = await _call_model(week_start, week_end, briefings, script_length, candidates, positive, submissions)
 
             selected: List[EpisodeStory] = []
             for raw in data.get("selected_stories") or []:

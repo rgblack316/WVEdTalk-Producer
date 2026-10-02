@@ -84,6 +84,17 @@ export default function BriefingView({
     onError: () => toast.error("Could not update — please try again"),
   });
 
+  const togglePositive = useMutation({
+    mutationFn: (s: Story) =>
+      apiPatch<Briefing>(`/briefings/${briefing.date}/stories/${s.id}`, { is_positive: !s.is_positive }),
+    onSuccess: (_d, s) => {
+      qc.invalidateQueries({ queryKey: ["briefing", briefing.date] });
+      qc.invalidateQueries({ queryKey: ["briefing", "latest"] });
+      toast.success(s.is_positive ? "Removed from positive stories" : "Flagged to end the episode on");
+    },
+    onError: () => toast.error("Could not update — please try again"),
+  });
+
   const filtered = useMemo(
     () =>
       briefing.stories.filter(
@@ -245,6 +256,7 @@ export default function BriefingView({
                   canFlag={canFlag && !isPublic}
                   onToggleCandidate={() => toggleCandidate.mutate(story)}
                   onToggleExclude={() => toggleExclude.mutate(story)}
+                  onTogglePositive={() => togglePositive.mutate(story)}
                 />
               ))}
             </div>
