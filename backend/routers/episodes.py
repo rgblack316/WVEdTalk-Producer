@@ -139,6 +139,33 @@ async def relink(week_of: str, _edit=Depends(require_editor)):
     return WeeklyEpisode(**doc)
 
 
+@router.post("/episodes/{week_of}/reflow-support", response_model=WeeklyEpisode)
+async def reflow_support(week_of: str, _edit=Depends(require_editor)):
+    """Re-apply the current support-placement rule to an existing episode's script: strip the
+    '## Support WVEdTalk' read and re-insert it immediately before the final '## On a Positive Note'
+    chapter (or before '## Closing' if none), so the host can preview the new support-before-positive
+    ordering without a full re-produce. 400 if the support read is turned off for this episode."""
+    doc = await db.episodes.find_one({"week_of": week_of})
+    if not doc:
+        raise HTTPException(status_code=404, detail=f"No episode for week of {week_of}")
+    doc.pop("_id", None)
+    if not doc.get("support_included", True):
+        raise HTTPException(status_code=400, detail="The support read is turned off for this episode")
+    cfg = await db.desk_config.find_one({"key": "singleton"}, {"_id": 0}) or {}
+    seg = cfg.get("support_segment") or producer.REQUIRED_SUPPORT
+    script = str(doc.get("recording_script") or "")
+    new_script = producer._ensure_support(producer._remove_support(script), seg)
+    chapters = producer._extract_chapters(new_script)
+    await db.episodes.update_one(
+        {"week_of": week_of},
+        {"$set": {"recording_script": new_script, "chapters": chapters, "support_included": True}},
+    )
+    doc["recording_script"] = new_script
+    doc["chapters"] = chapters
+    doc["support_included"] = True
+    return WeeklyEpisode(**doc)
+
+
 @router.get("/episodes/{week_of}", response_model=WeeklyEpisode)
 async def get_episode(week_of: str):
     doc = await db.episodes.find_one({"week_of": week_of})

@@ -90,6 +90,7 @@ export default function BriefingView({
     onSuccess: (_d, s) => {
       qc.invalidateQueries({ queryKey: ["briefing", briefing.date] });
       qc.invalidateQueries({ queryKey: ["briefing", "latest"] });
+      qc.invalidateQueries({ queryKey: ["positive-stories"] });
       toast.success(s.is_positive ? "Removed from positive stories" : "Flagged to end the episode on");
     },
     onError: () => toast.error("Could not update — please try again"),

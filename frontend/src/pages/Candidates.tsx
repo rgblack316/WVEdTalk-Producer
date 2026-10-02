@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { Star, Trash2, Loader2, CalendarRange } from "lucide-react";
+import { Star, Trash2, Loader2, CalendarRange, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import DeskLayout from "@/components/DeskLayout";
 import { Badge } from "@/components/ui/badge";
@@ -31,13 +31,29 @@ function formatDate(date: string) {
   });
 }
 
-function CandidateCard({ date, story, showDate }: { date: string; story: Story; showDate: boolean }) {
+type ViewKey = "candidates" | "positive";
+
+function CandidateCard({
+  date,
+  story,
+  showDate,
+  tone,
+}: {
+  date: string;
+  story: Story;
+  showDate: boolean;
+  tone: ViewKey;
+}) {
+  const positive = tone === "positive";
   return (
     <div className="wire-rise rounded-md border border-border bg-card p-5" data-testid={`candidate-${story.id}`}>
       <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">
         {showDate && (
-          <Badge variant="outline" className="gap-1">
-            <Star className="size-3 fill-current" />
+          <Badge
+            variant="outline"
+            className={`gap-1 ${positive ? "text-emerald-700 dark:text-emerald-400" : ""}`}
+          >
+            {positive ? <Sparkles className="size-3" /> : <Star className="size-3 fill-current" />}
             {formatDate(date)}
           </Badge>
         )}
@@ -79,6 +95,7 @@ const isSortKey = (v: unknown): v is SortKey => v === "date" || v === "podcast" 
 export default function Candidates() {
   const { canEdit } = useAuth();
   const qc = useQueryClient();
+  const [view, setView] = useState<ViewKey>("candidates");
   // undefined = dialog closed; null = clear ALL; string = clear that edition's week.
   const [target, setTarget] = useState<string | null | undefined>(undefined);
   const [rangeOpen, setRangeOpen] = useState(false);
@@ -93,10 +110,17 @@ export default function Candidates() {
     window.localStorage.setItem(SORT_STORAGE_KEY, sort);
   }, [sort]);
 
-  const { data, isLoading } = useQuery({
+  const { data: candData, isLoading: candLoading } = useQuery({
     queryKey: ["candidates"],
     queryFn: () => apiGet<CandidateStory[]>("/candidates"),
   });
+  const { data: posData, isLoading: posLoading } = useQuery({
+    queryKey: ["positive-stories"],
+    queryFn: () => apiGet<CandidateStory[]>("/positive-stories"),
+  });
+
+  const data = view === "candidates" ? candData : posData;
+  const isLoading = view === "candidates" ? candLoading : posLoading;
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ["candidates"] });
@@ -159,22 +183,54 @@ export default function Candidates() {
   const rangeInvalid = !fromDate || !toDate || fromDate > toDate;
 
   const total = data?.length ?? 0;
-  const hasCandidates = total > 0;
+  const hasItems = total > 0;
+  const isPositive = view === "positive";
+  const showClearControls = canEdit && !isPositive; // clear/undo only applies to candidate flags
   const targetCount =
     target === null ? total : typeof target === "string" ? groups.find(([d]) => d === target)?.[1].length ?? 0 : 0;
+
+  const VIEWS: [ViewKey, string, number][] = [
+    ["candidates", "Episode candidates", candData?.length ?? 0],
+    ["positive", "Positive stories", posData?.length ?? 0],
+  ];
 
   return (
     <DeskLayout>
       <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="text-xs tracking-[0.2em] text-accent uppercase">Podcast Prep</p>
-          <h2 className="font-heading text-3xl font-bold tracking-tight">Episode candidates</h2>
+          <h2 className="font-heading text-3xl font-bold tracking-tight">
+            {isPositive ? "Positive stories" : "Episode candidates"}
+          </h2>
           <p className="mt-2 text-sm text-muted-foreground">
-            Every story flagged across all editions. Open a story to edit its prep notes.
+            {isPositive
+              ? "Stories you've flagged to end the episode on a positive note. The producer features the strongest as the closing segment. Open a story to edit its prep notes."
+              : "Every story flagged across all editions. Open a story to edit its prep notes."}
           </p>
+          <div className="mt-4 flex items-center gap-1 rounded-md border border-border p-0.5" data-testid="prep-view">
+            {VIEWS.map(([key, label, count]) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setView(key)}
+                data-testid={`view-${key}`}
+                className={`inline-flex items-center gap-1.5 rounded px-3 py-1 text-xs transition-colors duration-150 ${
+                  view === key
+                    ? key === "positive"
+                      ? "bg-emerald-600 text-white"
+                      : "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {key === "positive" ? <Sparkles className="size-3.5" /> : <Star className="size-3.5" />}
+                {label}
+                <span className="tabular-nums opacity-80">({count})</span>
+              </button>
+            ))}
+          </div>
         </div>
 
-        {hasCandidates && (
+        {hasItems && (
           <div className="flex flex-wrap items-center gap-3">
             <div className="flex items-center gap-1 rounded-md border border-border p-0.5" data-testid="candidate-sort">
               <span className="px-2 text-xs text-muted-foreground">Sort</span>
@@ -194,12 +250,12 @@ export default function Candidates() {
                 </button>
               ))}
             </div>
-            {canEdit && dates.length >= 2 && (
+            {showClearControls && dates.length >= 2 && (
               <Button variant="outline" size="sm" onClick={openRange} data-testid="clear-range-button">
                 <CalendarRange className="size-4" /> Clear range…
               </Button>
             )}
-            {canEdit && (
+            {showClearControls && (
               <Button variant="outline" size="sm" onClick={() => setTarget(null)} data-testid="clear-candidates-button">
                 <Trash2 className="size-4" /> Clear all candidates
               </Button>
@@ -209,13 +265,25 @@ export default function Candidates() {
       </div>
 
       {isLoading ? (
-        <div className="py-16 text-center text-muted-foreground">Loading candidates…</div>
-      ) : !hasCandidates ? (
+        <div className="py-16 text-center text-muted-foreground">Loading…</div>
+      ) : !hasItems ? (
         <div className="py-16 text-center" data-testid="candidates-empty">
-          <Star className="mx-auto mb-4 size-10 text-muted-foreground" />
-          <p className="text-sm text-muted-foreground">
-            No episode candidates yet. Open any story and flag it to build the shortlist here.
-          </p>
+          {isPositive ? (
+            <>
+              <Sparkles className="mx-auto mb-4 size-10 text-muted-foreground" />
+              <p className="text-sm text-muted-foreground">
+                No positive stories flagged yet. Open any story and mark it positive to feature it as the
+                episode's uplifting close.
+              </p>
+            </>
+          ) : (
+            <>
+              <Star className="mx-auto mb-4 size-10 text-muted-foreground" />
+              <p className="text-sm text-muted-foreground">
+                No episode candidates yet. Open any story and flag it to build the shortlist here.
+              </p>
+            </>
+          )}
         </div>
       ) : sort === "date" ? (
         <div className="space-y-8" data-testid="candidate-list">
@@ -223,13 +291,17 @@ export default function Candidates() {
             <div key={date} data-testid={`candidate-week-${date}`}>
               <div className="mb-3 flex flex-wrap items-center justify-between gap-2 border-b border-border pb-1.5">
                 <div className="flex items-center gap-2">
-                  <Star className="size-3.5 fill-current text-accent" />
+                  {isPositive ? (
+                    <Sparkles className="size-3.5 text-emerald-600" />
+                  ) : (
+                    <Star className="size-3.5 fill-current text-accent" />
+                  )}
                   <span className="font-heading text-sm font-bold tracking-tight">{formatDate(date)}</span>
                   <span className="text-xs text-muted-foreground">
                     {items.length} flagged {items.length === 1 ? "story" : "stories"}
                   </span>
                 </div>
-                {canEdit && (
+                {showClearControls && (
                   <Button
                     variant="ghost"
                     size="sm"
@@ -243,7 +315,7 @@ export default function Candidates() {
               </div>
               <div className="space-y-4">
                 {items.map(({ story }) => (
-                  <CandidateCard key={story.id} date={date} story={story} showDate={false} />
+                  <CandidateCard key={story.id} date={date} story={story} showDate={false} tone={view} />
                 ))}
               </div>
             </div>
@@ -252,7 +324,7 @@ export default function Candidates() {
       ) : (
         <div className="space-y-4" data-testid="candidate-list">
           {sorted.map(({ date, story }) => (
-            <CandidateCard key={story.id} date={date} story={story} showDate />
+            <CandidateCard key={story.id} date={date} story={story} showDate tone={view} />
           ))}
         </div>
       )}

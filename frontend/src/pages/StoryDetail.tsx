@@ -47,6 +47,7 @@ export default function StoryDetail() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["briefing", date] });
       qc.invalidateQueries({ queryKey: ["candidates"] });
+      qc.invalidateQueries({ queryKey: ["positive-stories"] });
     },
     onError: () => toast.error("Could not save — try again."),
   });

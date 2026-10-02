@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
-import { Loader2, Mic, Copy, Download, ExternalLink, Clock, Mail, ListTree, Link2 } from "lucide-react";
+import { Loader2, Mic, Copy, Download, ExternalLink, Clock, Mail, ListTree, Link2, ArrowUpDown } from "lucide-react";
 import DeskLayout from "@/components/DeskLayout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -109,6 +109,23 @@ export default function Episodes() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["episode", "latest"] });
       toast.success("Source links updated");
+    },
+    onError: (e) => {
+      const msg = e instanceof ApiError ? String((e.body as { detail?: string })?.detail ?? e.message) : String(e);
+      toast.error(msg);
+    },
+  });
+
+  const reflowSupport = useMutation({
+    mutationFn: () => apiPost<WeeklyEpisode>(`/episodes/${episode?.week_of}/reflow-support`),
+    onSuccess: (ep) => {
+      qc.invalidateQueries({ queryKey: ["episode", "latest"] });
+      const hasPositive = ep.recording_script.includes("## On a Positive Note");
+      toast.success(
+        hasPositive
+          ? "Support read moved to just before the positive-note close"
+          : "Support read placed before the closing — produce a fresh episode to add a positive-note chapter",
+      );
     },
     onError: (e) => {
       const msg = e instanceof ApiError ? String((e.body as { detail?: string })?.detail ?? e.message) : String(e);
@@ -342,6 +359,19 @@ export default function Episodes() {
                     {relink.isPending ? <Loader2 className="size-4 animate-spin" /> : <Link2 className="size-4" />}
                     {relink.isPending ? "Updating links…" : "Update source links"}
                   </Button>
+                  {episode.support_included && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={reflowSupport.isPending}
+                      onClick={() => reflowSupport.mutate()}
+                      data-testid="reflow-support-button"
+                      title="Re-apply the new support-before-positive ordering to this script"
+                    >
+                      {reflowSupport.isPending ? <Loader2 className="size-4 animate-spin" /> : <ArrowUpDown className="size-4" />}
+                      {reflowSupport.isPending ? "Reordering…" : "Preview support order"}
+                    </Button>
+                  )}
                 </div>
               )}
             </div>

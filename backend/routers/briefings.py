@@ -75,6 +75,19 @@ async def list_excluded_stories():
     return out
 
 
+@router.get("/positive-stories", response_model=List[CandidateStory])
+async def list_positive_stories():
+    """Every briefing story the host flagged as a good-news/positive story to end the episode on
+    (is_positive == True), newest edition first — powers the nav badge and the Podcast Prep filter."""
+    docs = await db.briefings.find({"stories.is_positive": True}).sort("date", -1).to_list(200)
+    out: List[CandidateStory] = []
+    for d in docs:
+        for s in d.get("stories", []):
+            if s.get("is_positive"):
+                out.append(CandidateStory(date=d["date"], story=s))
+    return out
+
+
 @router.post("/candidates/clear", response_model=ClearCandidatesResponse)
 async def clear_candidates(body: Optional[ClearCandidatesRequest] = None, _edit=Depends(require_editor)):
     """Un-flag stories tagged as episode candidates. Scope by `date` (one edition/day), by an

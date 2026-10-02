@@ -36,6 +36,9 @@ story can be flagged as a podcast episode candidate with free-text prep notes.
   the StoryDetail page and the inline "Flag as candidate" toggle on each briefing story card
   (BriefingView, editors/admins only via the canFlag prop; never shown on the public share view),
   GET /api/candidates (all flagged stories across dates),
+  GET /api/positive-stories (all is_positive stories — powers the nav emerald count badge and the
+  Podcast Prep "Positive" filter; shares the ["positive-stories"] query cache),
+  GET /api/excluded-stories (all is_excluded stories — Excluded page),
   POST /api/candidates/clear (editor: body {date? | from_date?+to_date?} — un-flag ALL candidates,
   a single edition/day (the "Clear this day" button), or an inclusive date range (the "Clear range"
   picker); keeps prep notes; returns the exact refs cleared so the UI can Undo; manual only,
@@ -48,8 +51,12 @@ story can be flagged as a podcast episode candidate with free-text prep notes.
 - /api/briefings/{date} is the stable machine-readable contract for the downstream weekly agent.
 
 ## Frontend routes
-- `/` Today (latest briefing), `/archive`, `/candidates` (podcast prep board),
-  `/briefings/:date` (full edition), `/briefings/:date/stories/:storyId` (detail + prep panel).
+- `/` Today (latest briefing), `/archive`, `/candidates` (podcast prep board — a Candidates/Positive
+  view filter: Candidates shows is_candidate flags with clear/undo controls, Positive shows is_positive
+  flags with no clear controls; both sort by date/podcast/importance), `/excluded` (excluded stories +
+  rejected tips), `/briefings/:date` (full edition), `/briefings/:date/stories/:storyId` (detail + prep
+  panel with candidate / exclude / positive toggles). The DeskLayout "Podcast Prep" nav tab shows two
+  count badges: candidates (accent) and positive stories (emerald).
 
 ## Branding
 - Logo: `frontend/public/wvedtalk-logo.png` (WVEDTALK WV license-plate art, ~700×700, optimized).
@@ -232,6 +239,12 @@ None seeded. First real briefing generated for 2026-09-18. Demo watch terms ("co
   lives in `desk_config.support_segment` (canonical default `models.config.DEFAULT_SUPPORT_SEGMENT`);
   `support_default_on` controls whether new episodes include it. Edited from the Settings "Weekly support
   read" panel via `POST /api/settings/support`.
+- **Preview support order** (one-click, no re-produce): `POST /api/episodes/{week_of}/reflow-support`
+  (editor-guarded) strips and re-inserts the support read on the existing script using the current
+  placement rule (before the positive-note chapter, else before closing); 400 if support is off. The
+  Episodes "Recording Script" header shows a "Preview support order" button when the episode includes
+  the support read. Old episodes without a positive-note chapter show the read before the closing (toast
+  says to produce a fresh episode to add that chapter).
 - **Per-episode toggle**: each episode has `support_included`; `POST /api/episodes/{week_of}/support
   {enabled}` adds/removes the segment on that one script and re-derives chapters. EpisodePage shows an
   Add/Remove support read button. `chapterize_episode` no longer forces the segment (preserves the

@@ -55,6 +55,15 @@ export default function DeskLayout({ children }: { children: React.ReactNode }) 
   });
   const candidateCount = candidates?.length ?? 0;
 
+  // Shares the ["positive-stories"] cache with the Podcast Prep "Positive" filter so the nav badge
+  // and the board stay in sync — flagging a story positive invalidates this key.
+  const { data: positiveStories } = useQuery({
+    queryKey: ["positive-stories"],
+    queryFn: () => apiGet<CandidateStory[]>("/positive-stories"),
+    staleTime: 30000,
+  });
+  const positiveCount = positiveStories?.length ?? 0;
+
   const isAdmin = auth?.user?.role === "admin";
   const isViewer = auth?.user?.role === "viewer";
   const canEdit = auth?.user?.role === "admin" || auth?.user?.role === "editor";
@@ -132,6 +141,15 @@ export default function DeskLayout({ children }: { children: React.ReactNode }) 
                         data-testid="candidate-count-badge"
                       >
                         {candidateCount}
+                      </span>
+                    )}
+                    {n.to === "/candidates" && positiveCount > 0 && (
+                      <span
+                        className="ml-1 inline-flex min-w-[1.125rem] items-center justify-center rounded-full bg-emerald-600 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white"
+                        data-testid="positive-count-badge"
+                        title={`${positiveCount} positive-note ${positiveCount === 1 ? "story" : "stories"} flagged`}
+                      >
+                        {positiveCount}
                       </span>
                     )}
                   </Link>
