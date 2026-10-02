@@ -2,11 +2,32 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
-import { Inbox, ExternalLink, Heart, Trash2, Check, Archive, Ban, Save, LinkIcon } from "lucide-react";
+import {
+  Inbox,
+  ExternalLink,
+  Heart,
+  Trash2,
+  Check,
+  Archive,
+  Ban,
+  Save,
+  LinkIcon,
+  Merge,
+  Users,
+  Globe,
+} from "lucide-react";
 import DeskLayout from "@/components/DeskLayout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { apiGet, apiPatch, apiPost, apiDelete, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/useAuth";
 import type { DeskConfig, StorySubmission } from "@/lib/types";
@@ -17,6 +38,7 @@ const FILTERS = [
   { value: "used", label: "Used" },
   { value: "rejected", label: "Rejected" },
   { value: "archived", label: "Archived" },
+  { value: "merged", label: "Merged" },
 ];
 
 const STATUS_VARIANT: Record<string, "default" | "secondary" | "outline" | "destructive"> = {
@@ -24,10 +46,23 @@ const STATUS_VARIANT: Record<string, "default" | "secondary" | "outline" | "dest
   used: "default",
   archived: "outline",
   rejected: "destructive",
+  merged: "outline",
 };
 
 function errMsg(e: unknown, fallback: string) {
   return e instanceof ApiError ? String((e.body as { detail?: string })?.detail ?? fallback) : fallback;
+}
+
+// Normalize a URL so tips pointing at the same article group together (lowercased, no trailing slash).
+const normUrl = (url: string) => (url || "").trim().toLowerCase().replace(/\/+$/, "");
+
+// The outlet/domain for an article URL, shown as a small badge next to each title.
+function outletOf(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return "";
+  }
 }
 
 export default function Submissions() {
@@ -43,7 +78,13 @@ export default function Submissions() {
 
   const [filter, setFilter] = useState("all");
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const filtered = (data ?? []).filter((s) => filter === "all" || s.status === filter);
+  // Normalized URL whose duplicate group is being merged (null = dialog closed), + chosen primary id.
+  const [mergeKey, setMergeKey] = useState<string | null>(null);
+  const [mergePrimary, setMergePrimary] = useState<string>("");
+
+  const all = data ?? [];
+  // "All" shows active tips only; merged duplicates live under their own tab so the inbox stays clean.
+  const filtered = all.filter((s) => (filter === "all" ? s.status !== "merged" : s.status === filter));
 
   const { data: config } = useQuery({
     queryKey: ["config"],
@@ -127,13 +168,38 @@ export default function Submissions() {
     onError: (e) => toast.error(errMsg(e, "Could not backfill titles.")),
   });
 
-  // Flag reader tips that share the same article URL (normalized) so duplicates are obvious.
-  const dupCounts = (data ?? []).reduce<Record<string, number>>((acc, s) => {
-    const key = (s.url || "").trim().toLowerCase().replace(/\/+$/, "");
+  const mergeMut = useMutation({
+    mutationFn: ({ primary_id, duplicate_ids }: { primary_id: string; duplicate_ids: string[] }) =>
+      apiPost<StorySubmission>("/submissions/merge", { primary_id, duplicate_ids }),
+    onSuccess: (r) => {
+      invalidate();
+      setMergeKey(null);
+      toast.success(`Merged — ${r.contributors.length} submitter(s) credited on one tip.`);
+    },
+    onError: (e) => toast.error(errMsg(e, "Could not merge the duplicates.")),
+  });
+
+  // Count active (non-merged) tips per normalized URL so the "Duplicate" badge + merge offer
+  // reflect only tips that still need consolidating.
+  const activeByUrl = all.filter((s) => s.status !== "merged");
+  const dupCounts = activeByUrl.reduce<Record<string, number>>((acc, s) => {
+    const key = normUrl(s.url);
     if (key) acc[key] = (acc[key] ?? 0) + 1;
     return acc;
   }, {});
-  const dupCount = (url: string) => dupCounts[(url || "").trim().toLowerCase().replace(/\/+$/, "")] ?? 0;
+  const dupCount = (url: string) => dupCounts[normUrl(url)] ?? 0;
+
+  // The active tips in a URL's duplicate group — the candidates shown in the merge dialog.
+  const mergeGroup = mergeKey ? activeByUrl.filter((s) => normUrl(s.url) === mergeKey) : [];
+
+  const openMerge = (url: string) => {
+    const key = normUrl(url);
+    const group = activeByUrl.filter((s) => normUrl(s.url) === key);
+    // Default primary = the earliest-submitted tip in the group.
+    const primary = [...group].sort((a, b) => a.submitted_at.localeCompare(b.submitted_at))[0];
+    setMergeKey(key);
+    setMergePrimary(primary?.id ?? "");
+  };
 
   return (
     <DeskLayout>
@@ -192,7 +258,11 @@ export default function Submissions() {
                 }`}
                 data-testid={`filter-${f.value}`}
               >
-                {f.label} ({f.value === "all" ? data.length : data.filter((s) => s.status === f.value).length})
+                {f.label} (
+                {f.value === "all"
+                  ? data.filter((s) => s.status !== "merged").length
+                  : data.filter((s) => s.status === f.value).length}
+                )
               </button>
             ))}
           </div>
@@ -238,6 +308,7 @@ export default function Submissions() {
                       return n;
                     })
                   }
+                  onMerge={() => openMerge(s.url)}
                   onStatus={(status) => setStatus.mutate({ id: s.id, status })}
                   onSaveNote={(note) => saveNote.mutate({ id: s.id, note })}
                   onThank={() => thank.mutate(s.id)}
@@ -268,6 +339,59 @@ export default function Submissions() {
           </p>
         </div>
       )}
+
+      <Dialog open={mergeKey !== null} onOpenChange={(o) => !o && setMergeKey(null)}>
+        <DialogContent data-testid="merge-dialog">
+          <DialogHeader>
+            <DialogTitle>Merge duplicate tips</DialogTitle>
+            <DialogDescription>
+              Choose the tip to keep. The others are folded into it and marked “merged”, and every
+              submitter is credited on the kept tip so no one loses credit.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            {mergeGroup.map((s) => (
+              <label
+                key={s.id}
+                className="flex cursor-pointer items-start gap-3 rounded-md border border-border p-3 text-sm has-[:checked]:border-primary has-[:checked]:bg-primary/5"
+                data-testid={`merge-option-${s.id}`}
+              >
+                <input
+                  type="radio"
+                  name="merge-primary"
+                  checked={mergePrimary === s.id}
+                  onChange={() => setMergePrimary(s.id)}
+                  className="mt-1 size-4 cursor-pointer accent-primary"
+                  data-testid={`merge-primary-${s.id}`}
+                />
+                <span>
+                  <span className="font-medium">{s.name}</span>{" "}
+                  <span className="text-muted-foreground">· {new Date(s.submitted_at).toLocaleString()}</span>
+                  <br />
+                  <span className="text-xs break-all text-muted-foreground">{s.email}</span>
+                </span>
+              </label>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setMergeKey(null)} data-testid="merge-cancel">
+              Cancel
+            </Button>
+            <Button
+              disabled={mergeMut.isPending || !mergePrimary || mergeGroup.length < 2}
+              onClick={() =>
+                mergeMut.mutate({
+                  primary_id: mergePrimary,
+                  duplicate_ids: mergeGroup.filter((s) => s.id !== mergePrimary).map((s) => s.id),
+                })
+              }
+              data-testid="merge-confirm"
+            >
+              <Merge className="size-4" /> Merge {Math.max(mergeGroup.length - 1, 0)} into 1
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </DeskLayout>
   );
 }
@@ -278,6 +402,7 @@ function SubmissionCard({
   duplicates,
   selected,
   onToggleSelect,
+  onMerge,
   onStatus,
   onSaveNote,
   onThank,
@@ -290,6 +415,7 @@ function SubmissionCard({
   duplicates: number;
   selected: boolean;
   onToggleSelect: () => void;
+  onMerge: () => void;
   onStatus: (status: string) => void;
   onSaveNote: (note: string) => void;
   onThank: () => void;
@@ -299,6 +425,7 @@ function SubmissionCard({
 }) {
   const [note, setNote] = useState(s.note ?? "");
   const dirty = note !== (s.note ?? "");
+  const outlet = outletOf(s.url);
 
   return (
     <div className="rounded-md border border-border bg-card p-5" data-testid={`submission-${s.id}`}>
@@ -316,6 +443,11 @@ function SubmissionCard({
         <Badge variant={STATUS_VARIANT[s.status] ?? "secondary"} data-testid={`submission-status-${s.id}`}>
           {s.status}
         </Badge>
+        {outlet && (
+          <Badge variant="outline" className="gap-1" data-testid={`submission-outlet-${s.id}`}>
+            <Globe className="size-3" /> {outlet}
+          </Badge>
+        )}
         {s.thanked && (
           <Badge variant="outline" className="gap-1 text-primary">
             <Heart className="size-3 fill-current" /> Thanked
@@ -354,6 +486,17 @@ function SubmissionCard({
         </a>
       </p>
 
+      {s.contributors.length > 0 && (
+        <p
+          className="mt-2 flex flex-wrap items-center gap-1 text-xs text-muted-foreground"
+          data-testid={`submission-contributors-${s.id}`}
+        >
+          <Users className="size-3.5 text-accent" />
+          <span className="font-medium text-foreground">Also submitted by:</span>{" "}
+          {s.contributors.map((c) => c.name || c.email).join(", ")}
+        </p>
+      )}
+
       {s.used_in && s.used_ref && (
         <Link
           to={s.used_ref}
@@ -362,6 +505,20 @@ function SubmissionCard({
         >
           <LinkIcon className="size-3" /> Appeared in: {s.used_in}
         </Link>
+      )}
+
+      {canEdit && duplicates > 1 && (
+        <div className="mt-3">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={onMerge}
+            disabled={busy}
+            data-testid={`submission-merge-${s.id}`}
+          >
+            <Merge className="size-4" /> Merge duplicates
+          </Button>
+        </div>
       )}
 
       {canEdit && (

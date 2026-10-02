@@ -152,17 +152,25 @@ export interface CreatedUser {
   temp_password: string;
 }
 
+export interface Contributor {
+  name: string;
+  email: string;
+  submitted_at: string;
+}
+
 export interface StorySubmission {
   id: string;
   url: string;
   title: string;
   name: string;
   email: string;
-  status: string; // new | used | archived | rejected
+  status: string; // new | used | archived | rejected | merged
   thanked: boolean;
   note: string;
   used_in: string | null;
   used_ref: string | null;
+  contributors: Contributor[];
+  merged_into: string | null;
   submitted_at: string;
   updated_at: string | null;
 }

@@ -62,6 +62,19 @@ async def list_candidates():
     return out
 
 
+@router.get("/excluded-stories", response_model=List[CandidateStory])
+async def list_excluded_stories():
+    """Every briefing story the host has explicitly ruled out of weekly-episode consideration
+    (is_excluded == True), newest edition first — powers the Excluded review page and its Restore."""
+    docs = await db.briefings.find({"stories.is_excluded": True}).sort("date", -1).to_list(200)
+    out: List[CandidateStory] = []
+    for d in docs:
+        for s in d.get("stories", []):
+            if s.get("is_excluded"):
+                out.append(CandidateStory(date=d["date"], story=s))
+    return out
+
+
 @router.post("/candidates/clear", response_model=ClearCandidatesResponse)
 async def clear_candidates(body: Optional[ClearCandidatesRequest] = None, _edit=Depends(require_editor)):
     """Un-flag stories tagged as episode candidates. Scope by `date` (one edition/day), by an

@@ -4,12 +4,13 @@ thank-you email, or delete. Mounted behind the auth guard in server.py."""
 from datetime import datetime, timezone
 from typing import List
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from lib import email_digest
+from lib.auth import require_editor
 from lib.db import db
-from models.submission import StorySubmission, SubmissionUpdate
+from models.submission import MergeRequest, StorySubmission, SubmissionUpdate
 from routers.public import _fetch_title
 
 router = APIRouter(tags=["submissions"])
@@ -18,7 +19,7 @@ router = APIRouter(tags=["submissions"])
 class BulkIds(BaseModel):
     ids: List[str]
 
-_VALID = {"new", "used", "archived", "rejected"}
+_VALID = {"new", "used", "archived", "rejected", "merged"}
 
 
 @router.get("/submissions", response_model=List[StorySubmission])
@@ -45,6 +46,52 @@ async def backfill_titles():
             )
             updated += 1
     return {"updated": updated, "checked": len(docs)}
+
+
+@router.post("/submissions/merge", response_model=StorySubmission)
+async def merge_submissions(body: MergeRequest, _edit=Depends(require_editor)):
+    """Fold one or more duplicate tips into a single primary tip, crediting every submitter.
+    The primary keeps a de-duplicated `contributors` list (name/email/submitted_at of each merged
+    reader); the duplicates become status 'merged' with `merged_into` pointing at the primary, so
+    they drop out of the active inbox but stay on record (and visible under the 'Merged' filter)."""
+    primary = await db.submissions.find_one({"id": body.primary_id}, {"_id": 0})
+    if not primary:
+        raise HTTPException(status_code=404, detail="Primary submission not found")
+
+    now = datetime.now(timezone.utc).isoformat()
+    contributors: List[dict] = list(primary.get("contributors") or [])
+    seen = {(primary.get("email") or "").lower()}
+    seen.update((c.get("email") or "").lower() for c in contributors)
+
+    merged = 0
+    for did in body.duplicate_ids:
+        if did == body.primary_id:
+            continue
+        dup = await db.submissions.find_one({"id": did}, {"_id": 0})
+        if not dup or dup.get("status") == "merged":
+            continue
+        # credit the duplicate's own submitter plus anyone already credited on it
+        candidates = [
+            {"name": dup.get("name", ""), "email": dup.get("email", ""), "submitted_at": dup.get("submitted_at", "")}
+        ] + list(dup.get("contributors") or [])
+        for c in candidates:
+            em = (c.get("email") or "").lower()
+            if em and em not in seen:
+                seen.add(em)
+                contributors.append(
+                    {"name": c.get("name", ""), "email": c.get("email", ""), "submitted_at": c.get("submitted_at", "")}
+                )
+        await db.submissions.update_one(
+            {"id": did},
+            {"$set": {"status": "merged", "merged_into": body.primary_id, "updated_at": now}},
+        )
+        merged += 1
+
+    await db.submissions.update_one(
+        {"id": body.primary_id}, {"$set": {"contributors": contributors, "updated_at": now}}
+    )
+    doc = await db.submissions.find_one({"id": body.primary_id}, {"_id": 0})
+    return StorySubmission(**doc)
 
 
 @router.patch("/submissions/{sid}", response_model=StorySubmission)
