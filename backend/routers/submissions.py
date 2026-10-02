@@ -48,29 +48,28 @@ async def backfill_titles():
     return {"updated": updated, "checked": len(docs)}
 
 
-@router.post("/submissions/merge", response_model=StorySubmission)
-async def merge_submissions(body: MergeRequest, _edit=Depends(require_editor)):
-    """Fold one or more duplicate tips into a single primary tip, crediting every submitter.
-    The primary keeps a de-duplicated `contributors` list (name/email/submitted_at of each merged
-    reader); the duplicates become status 'merged' with `merged_into` pointing at the primary, so
-    they drop out of the active inbox but stay on record (and visible under the 'Merged' filter)."""
-    primary = await db.submissions.find_one({"id": body.primary_id}, {"_id": 0})
-    if not primary:
-        raise HTTPException(status_code=404, detail="Primary submission not found")
+def _norm_url(u: str) -> str:
+    """Normalize an article URL so tips pointing at the same story group together — mirrors the
+    frontend's normUrl (lowercased, whitespace-trimmed, trailing slashes removed)."""
+    return (u or "").strip().lower().rstrip("/")
 
+
+async def _apply_merge(primary: dict, duplicate_ids: List[str]) -> int:
+    """Fold the given duplicates into `primary`, crediting every submitter (de-duped by email,
+    carrying any contributors the duplicates already had). Marks each duplicate status 'merged'
+    with `merged_into` set. Returns how many were actually merged."""
     now = datetime.now(timezone.utc).isoformat()
     contributors: List[dict] = list(primary.get("contributors") or [])
     seen = {(primary.get("email") or "").lower()}
     seen.update((c.get("email") or "").lower() for c in contributors)
 
     merged = 0
-    for did in body.duplicate_ids:
-        if did == body.primary_id:
+    for did in duplicate_ids:
+        if did == primary["id"]:
             continue
         dup = await db.submissions.find_one({"id": did}, {"_id": 0})
         if not dup or dup.get("status") == "merged":
             continue
-        # credit the duplicate's own submitter plus anyone already credited on it
         candidates = [
             {"name": dup.get("name", ""), "email": dup.get("email", ""), "submitted_at": dup.get("submitted_at", "")}
         ] + list(dup.get("contributors") or [])
@@ -83,14 +82,82 @@ async def merge_submissions(body: MergeRequest, _edit=Depends(require_editor)):
                 )
         await db.submissions.update_one(
             {"id": did},
-            {"$set": {"status": "merged", "merged_into": body.primary_id, "updated_at": now}},
+            {"$set": {"status": "merged", "merged_into": primary["id"], "updated_at": now}},
         )
         merged += 1
 
-    await db.submissions.update_one(
-        {"id": body.primary_id}, {"$set": {"contributors": contributors, "updated_at": now}}
-    )
+    if merged:
+        await db.submissions.update_one(
+            {"id": primary["id"]}, {"$set": {"contributors": contributors, "updated_at": now}}
+        )
+    return merged
+
+
+@router.post("/submissions/merge", response_model=StorySubmission)
+async def merge_submissions(body: MergeRequest, _edit=Depends(require_editor)):
+    """Fold one or more duplicate tips into a single primary tip, crediting every submitter.
+    The primary keeps a de-duplicated `contributors` list (name/email/submitted_at of each merged
+    reader); the duplicates become status 'merged' with `merged_into` pointing at the primary, so
+    they drop out of the active inbox but stay on record (and visible under the 'Merged' filter)."""
+    primary = await db.submissions.find_one({"id": body.primary_id}, {"_id": 0})
+    if not primary:
+        raise HTTPException(status_code=404, detail="Primary submission not found")
+    await _apply_merge(primary, body.duplicate_ids)
     doc = await db.submissions.find_one({"id": body.primary_id}, {"_id": 0})
+    return StorySubmission(**doc)
+
+
+@router.post("/submissions/merge-all")
+async def merge_all_duplicates(_edit=Depends(require_editor)):
+    """One-click sweep: for every group of active (non-merged) tips sharing the same normalized
+    URL, keep the earliest-submitted as primary and fold the rest in (crediting each submitter).
+    Returns the number of groups consolidated and total tips merged."""
+    docs = await db.submissions.find({"status": {"$ne": "merged"}}, {"_id": 0}).to_list(2000)
+    groups: dict = {}
+    for d in docs:
+        key = _norm_url(d.get("url", ""))
+        if key:
+            groups.setdefault(key, []).append(d)
+
+    groups_merged = 0
+    merged = 0
+    for items in groups.values():
+        if len(items) < 2:
+            continue
+        items.sort(key=lambda x: x.get("submitted_at", ""))
+        primary = items[0]
+        n = await _apply_merge(primary, [i["id"] for i in items[1:]])
+        if n:
+            groups_merged += 1
+            merged += n
+    return {"groups_merged": groups_merged, "merged": merged}
+
+
+@router.post("/submissions/{sid}/unmerge", response_model=StorySubmission)
+async def unmerge_submission(sid: str, _edit=Depends(require_editor)):
+    """Split a merged duplicate back out into the active inbox (undo an accidental merge): restore
+    its status to 'new', clear `merged_into`, and drop its submitter from the primary's credited
+    contributors. Contributors carried in from other merges on the primary are left untouched."""
+    dup = await db.submissions.find_one({"id": sid}, {"_id": 0})
+    if not dup:
+        raise HTTPException(status_code=404, detail="Submission not found")
+    if dup.get("status") != "merged":
+        raise HTTPException(status_code=422, detail="This tip is not merged")
+
+    now = datetime.now(timezone.utc).isoformat()
+    primary_id = dup.get("merged_into")
+    if primary_id:
+        primary = await db.submissions.find_one({"id": primary_id}, {"_id": 0})
+        if primary:
+            dup_email = (dup.get("email") or "").lower()
+            kept = [c for c in (primary.get("contributors") or []) if (c.get("email") or "").lower() != dup_email]
+            await db.submissions.update_one(
+                {"id": primary_id}, {"$set": {"contributors": kept, "updated_at": now}}
+            )
+    await db.submissions.update_one(
+        {"id": sid}, {"$set": {"status": "new", "merged_into": None, "updated_at": now}}
+    )
+    doc = await db.submissions.find_one({"id": sid}, {"_id": 0})
     return StorySubmission(**doc)
 
 

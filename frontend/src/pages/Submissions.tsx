@@ -15,6 +15,7 @@ import {
   Merge,
   Users,
   Globe,
+  Split,
 } from "lucide-react";
 import DeskLayout from "@/components/DeskLayout";
 import { Badge } from "@/components/ui/badge";
@@ -179,6 +180,30 @@ export default function Submissions() {
     onError: (e) => toast.error(errMsg(e, "Could not merge the duplicates.")),
   });
 
+  const mergeAll = useMutation({
+    mutationFn: () => apiPost<{ groups_merged: number; merged: number }>("/submissions/merge-all"),
+    onSuccess: (r) => {
+      invalidate();
+      toast.success(
+        r.merged === 0
+          ? "No duplicates to merge"
+          : `Merged ${r.merged} tip${r.merged === 1 ? "" : "s"} across ${r.groups_merged} group${
+              r.groups_merged === 1 ? "" : "s"
+            }.`,
+      );
+    },
+    onError: (e) => toast.error(errMsg(e, "Could not merge duplicates.")),
+  });
+
+  const unmerge = useMutation({
+    mutationFn: (id: string) => apiPost<StorySubmission>(`/submissions/${id}/unmerge`),
+    onSuccess: () => {
+      invalidate();
+      toast.success("Tip split back out to the inbox.");
+    },
+    onError: (e) => toast.error(errMsg(e, "Could not un-merge the tip.")),
+  });
+
   // Count active (non-merged) tips per normalized URL so the "Duplicate" badge + merge offer
   // reflect only tips that still need consolidating.
   const activeByUrl = all.filter((s) => s.status !== "merged");
@@ -188,6 +213,8 @@ export default function Submissions() {
     return acc;
   }, {});
   const dupCount = (url: string) => dupCounts[normUrl(url)] ?? 0;
+  // How many distinct URLs still have 2+ active tips — drives the one-click "Merge all" sweep.
+  const dupGroupCount = Object.values(dupCounts).filter((n) => n > 1).length;
 
   // The active tips in a URL's duplicate group — the candidates shown in the merge dialog.
   const mergeGroup = mergeKey ? activeByUrl.filter((s) => normUrl(s.url) === mergeKey) : [];
@@ -225,7 +252,7 @@ export default function Submissions() {
           </label>
         )}
         {canEdit && (
-          <div className="mt-3">
+          <div className="mt-3 flex flex-wrap gap-2">
             <Button
               variant="outline"
               size="sm"
@@ -235,6 +262,20 @@ export default function Submissions() {
             >
               <LinkIcon className="size-4" /> {backfill.isPending ? "Fetching titles…" : "Backfill titles"}
             </Button>
+            {dupGroupCount > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={mergeAll.isPending}
+                onClick={() => mergeAll.mutate()}
+                data-testid="merge-all-button"
+              >
+                <Merge className="size-4" />{" "}
+                {mergeAll.isPending
+                  ? "Merging…"
+                  : `Merge all duplicates (${dupGroupCount} group${dupGroupCount === 1 ? "" : "s"})`}
+              </Button>
+            )}
           </div>
         )}
       </div>
@@ -309,6 +350,7 @@ export default function Submissions() {
                     })
                   }
                   onMerge={() => openMerge(s.url)}
+                  onUnmerge={() => unmerge.mutate(s.id)}
                   onStatus={(status) => setStatus.mutate({ id: s.id, status })}
                   onSaveNote={(note) => saveNote.mutate({ id: s.id, note })}
                   onThank={() => thank.mutate(s.id)}
@@ -403,6 +445,7 @@ function SubmissionCard({
   selected,
   onToggleSelect,
   onMerge,
+  onUnmerge,
   onStatus,
   onSaveNote,
   onThank,
@@ -416,6 +459,7 @@ function SubmissionCard({
   selected: boolean;
   onToggleSelect: () => void;
   onMerge: () => void;
+  onUnmerge: () => void;
   onStatus: (status: string) => void;
   onSaveNote: (note: string) => void;
   onThank: () => void;
@@ -507,7 +551,7 @@ function SubmissionCard({
         </Link>
       )}
 
-      {canEdit && duplicates > 1 && (
+      {canEdit && s.status !== "merged" && duplicates > 1 && (
         <div className="mt-3">
           <Button
             size="sm"
@@ -521,7 +565,24 @@ function SubmissionCard({
         </div>
       )}
 
-      {canEdit && (
+      {canEdit && s.status === "merged" && (
+        <div className="mt-4" data-testid={`submission-merged-${s.id}`}>
+          <p className="mb-2 text-xs text-muted-foreground">
+            Folded into another tip and credited there. Split it back out to restore it to the inbox.
+          </p>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={onUnmerge}
+            disabled={busy}
+            data-testid={`submission-unmerge-${s.id}`}
+          >
+            <Split className="size-4" /> Un-merge
+          </Button>
+        </div>
+      )}
+
+      {canEdit && s.status !== "merged" && (
         <>
           <Textarea
             value={note}
