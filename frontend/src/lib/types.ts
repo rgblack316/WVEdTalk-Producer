@@ -26,6 +26,7 @@ export interface Story {
   watch_next: string;
   sources: SourceLink[];
   is_candidate: boolean;
+  is_excluded: boolean;
   notes: string;
 }
 

@@ -30,7 +30,8 @@ story can be flagged as a podcast episode candidate with free-text prep notes.
   REPLACES that edition but preserves is_candidate/notes on stories whose headline survives.
 - GET /api/run-status drives the header progress banner (frontend polls every 5s while running).
 - GET /api/briefings (summaries), /api/briefings/latest, /api/briefings/{date} (full),
-  PATCH /api/briefings/{date}/stories/{story_id} (toggle candidate / save notes) — used both by
+  PATCH /api/briefings/{date}/stories/{story_id} (toggle candidate / EXCLUDE from weekly-episode
+  consideration / save notes; candidate and exclude are mutually exclusive) — used both by
   the StoryDetail page and the inline "Flag as candidate" toggle on each briefing story card
   (BriefingView, editors/admins only via the canFlag prop; never shown on the public share view),
   GET /api/candidates (all flagged stories across dates),

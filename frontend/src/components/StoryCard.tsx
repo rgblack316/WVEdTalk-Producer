@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
-import { ExternalLink, Star } from "lucide-react";
+import { ExternalLink, Star, Ban } from "lucide-react";
 import type { SourceLink, Story } from "@/lib/types";
 
 // A source is only a real article link if it's an absolute http(s) URL to another site — never
@@ -56,6 +56,7 @@ export function StoryCard({
   isPublic = false,
   canFlag = false,
   onToggleCandidate,
+  onToggleExclude,
 }: {
   story: Story;
   date: string;
@@ -63,6 +64,7 @@ export function StoryCard({
   isPublic?: boolean;
   canFlag?: boolean;
   onToggleCandidate?: () => void;
+  onToggleExclude?: () => void;
 }) {
   return (
     <article
@@ -131,6 +133,21 @@ export function StoryCard({
           >
             <Star className={`size-3 ${story.is_candidate ? "fill-current" : ""}`} />
             {story.is_candidate ? "Episode candidate" : "Flag as candidate"}
+          </button>
+        )}
+        {canFlag && (
+          <button
+            type="button"
+            onClick={onToggleExclude}
+            data-testid={`exclude-candidate-${story.id}`}
+            className={`inline-flex items-center gap-1 rounded-sm border px-2 py-0.5 text-xs transition-colors duration-150 ${
+              story.is_excluded
+                ? "border-destructive bg-destructive text-white"
+                : "border-border text-muted-foreground hover:border-destructive hover:text-foreground"
+            }`}
+          >
+            <Ban className="size-3" />
+            {story.is_excluded ? "Excluded" : "Exclude"}
           </button>
         )}
       </div>

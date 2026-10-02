@@ -114,6 +114,27 @@ export default function Submissions() {
     onError: (e) => toast.error(errMsg(e, "Could not delete the submission.")),
   });
 
+  const backfill = useMutation({
+    mutationFn: () => apiPost<{ updated: number; checked: number }>("/submissions/backfill-titles"),
+    onSuccess: (r) => {
+      invalidate();
+      toast.success(
+        r.updated === 0
+          ? "No missing titles to fetch"
+          : `Fetched ${r.updated} title${r.updated === 1 ? "" : "s"}`,
+      );
+    },
+    onError: (e) => toast.error(errMsg(e, "Could not backfill titles.")),
+  });
+
+  // Flag reader tips that share the same article URL (normalized) so duplicates are obvious.
+  const dupCounts = (data ?? []).reduce<Record<string, number>>((acc, s) => {
+    const key = (s.url || "").trim().toLowerCase().replace(/\/+$/, "");
+    if (key) acc[key] = (acc[key] ?? 0) + 1;
+    return acc;
+  }, {});
+  const dupCount = (url: string) => dupCounts[(url || "").trim().toLowerCase().replace(/\/+$/, "")] ?? 0;
+
   return (
     <DeskLayout>
       <div className="mb-8">
@@ -136,6 +157,19 @@ export default function Submissions() {
             />
             Auto-thank readers when their tip is used in a briefing or episode
           </label>
+        )}
+        {canEdit && (
+          <div className="mt-3">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={backfill.isPending}
+              onClick={() => backfill.mutate()}
+              data-testid="backfill-titles-button"
+            >
+              <LinkIcon className="size-4" /> {backfill.isPending ? "Fetching titles…" : "Backfill titles"}
+            </Button>
+          </div>
         )}
       </div>
 
@@ -194,6 +228,7 @@ export default function Submissions() {
                   key={s.id}
                   s={s}
                   canEdit={canEdit}
+                  duplicates={dupCount(s.url)}
                   selected={selected.has(s.id)}
                   onToggleSelect={() =>
                     setSelected((prev) => {
@@ -240,6 +275,7 @@ export default function Submissions() {
 function SubmissionCard({
   s,
   canEdit,
+  duplicates,
   selected,
   onToggleSelect,
   onStatus,
@@ -251,6 +287,7 @@ function SubmissionCard({
 }: {
   s: StorySubmission;
   canEdit: boolean;
+  duplicates: number;
   selected: boolean;
   onToggleSelect: () => void;
   onStatus: (status: string) => void;
@@ -282,6 +319,11 @@ function SubmissionCard({
         {s.thanked && (
           <Badge variant="outline" className="gap-1 text-primary">
             <Heart className="size-3 fill-current" /> Thanked
+          </Badge>
+        )}
+        {duplicates > 1 && (
+          <Badge variant="destructive" className="gap-1" data-testid={`submission-duplicate-${s.id}`}>
+            Duplicate ×{duplicates}
           </Badge>
         )}
         <span className="text-muted-foreground">{new Date(s.submitted_at).toLocaleString()}</span>

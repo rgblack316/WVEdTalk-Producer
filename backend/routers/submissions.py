@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from lib import email_digest
 from lib.db import db
 from models.submission import StorySubmission, SubmissionUpdate
+from routers.public import _fetch_title
 
 router = APIRouter(tags=["submissions"])
 
@@ -24,6 +25,26 @@ _VALID = {"new", "used", "archived", "rejected"}
 async def list_submissions():
     docs = await db.submissions.find({}, {"_id": 0}).sort("submitted_at", -1).to_list(1000)
     return [StorySubmission(**d) for d in docs]
+
+
+@router.post("/submissions/backfill-titles")
+async def backfill_titles():
+    """Fetch and store the article <title> for older submissions that have none (predating the
+    title feature). Best-effort per link; returns how many were updated."""
+    docs = await db.submissions.find(
+        {"$or": [{"title": {"$in": ["", None]}}, {"title": {"$exists": False}}]},
+        {"_id": 0, "id": 1, "url": 1},
+    ).to_list(1000)
+    updated = 0
+    for d in docs:
+        t = await _fetch_title(d.get("url", ""))
+        if t:
+            await db.submissions.update_one(
+                {"id": d["id"]},
+                {"$set": {"title": t, "updated_at": datetime.now(timezone.utc).isoformat()}},
+            )
+            updated += 1
+    return {"updated": updated, "checked": len(docs)}
 
 
 @router.patch("/submissions/{sid}", response_model=StorySubmission)

@@ -2,7 +2,7 @@ import { useParams, Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { ArrowLeft, Star } from "lucide-react";
+import { ArrowLeft, Star, Ban } from "lucide-react";
 import DeskLayout from "@/components/DeskLayout";
 import { SourceList, ScoreChip } from "@/components/StoryCard";
 import { Badge } from "@/components/ui/badge";
@@ -42,7 +42,7 @@ export default function StoryDetail() {
   }, [story, setNotes]);
 
   const update = useMutation({
-    mutationFn: (body: { is_candidate?: boolean; notes?: string }) =>
+    mutationFn: (body: { is_candidate?: boolean; is_excluded?: boolean; notes?: string }) =>
       apiPatch<Briefing>(`/briefings/${date}/stories/${storyId}`, body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["briefing", date] });
@@ -120,22 +120,38 @@ export default function StoryDetail() {
 
           {canEdit ? (
           <div className="mt-8 rounded-md border border-border bg-secondary/40 p-5" data-testid="podcast-prep-panel">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-2">
               <h3 className="font-heading text-lg font-bold">Podcast prep</h3>
-              <Button
-                variant={story.is_candidate ? "default" : "outline"}
-                size="sm"
-                onClick={() => {
-                  update.mutate({ is_candidate: !story.is_candidate });
-                  toast.success(
-                    story.is_candidate ? "Removed from candidates" : "Flagged as episode candidate",
-                  );
-                }}
-                data-testid="toggle-candidate-button"
-              >
-                <Star className={`size-4 ${story.is_candidate ? "fill-current" : ""}`} />
-                {story.is_candidate ? "Episode candidate" : "Flag as candidate"}
-              </Button>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  variant={story.is_candidate ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => {
+                    update.mutate({ is_candidate: !story.is_candidate });
+                    toast.success(
+                      story.is_candidate ? "Removed from candidates" : "Flagged as episode candidate",
+                    );
+                  }}
+                  data-testid="toggle-candidate-button"
+                >
+                  <Star className={`size-4 ${story.is_candidate ? "fill-current" : ""}`} />
+                  {story.is_candidate ? "Episode candidate" : "Flag as candidate"}
+                </Button>
+                <Button
+                  variant={story.is_excluded ? "destructive" : "outline"}
+                  size="sm"
+                  onClick={() => {
+                    update.mutate({ is_excluded: !story.is_excluded });
+                    toast.success(
+                      story.is_excluded ? "Exclusion removed" : "Excluded from consideration",
+                    );
+                  }}
+                  data-testid="toggle-exclude-button"
+                >
+                  <Ban className="size-4" />
+                  {story.is_excluded ? "Excluded" : "Exclude"}
+                </Button>
+              </div>
             </div>
             <Textarea
               className="mt-4 min-h-28 bg-background"

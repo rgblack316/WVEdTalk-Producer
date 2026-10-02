@@ -190,7 +190,7 @@ async def _gather_candidates() -> List[Dict[str, Any]]:
     out: List[Dict[str, Any]] = []
     for d in docs:
         for s in d.get("stories", []):
-            if s.get("is_candidate"):
+            if s.get("is_candidate") and not s.get("is_excluded"):
                 out.append(
                     {
                         "date": d.get("date", ""),

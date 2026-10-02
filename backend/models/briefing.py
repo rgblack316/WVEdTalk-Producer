@@ -39,6 +39,7 @@ class Story(BaseModel):
     sources: List[SourceLink] = Field(default_factory=list)
     # host workspace
     is_candidate: bool = False
+    is_excluded: bool = False  # host explicitly ruled this out of weekly-episode consideration
     notes: str = ""
 
 
@@ -92,6 +93,7 @@ class RunStatus(BaseModel):
 
 class StoryUpdate(BaseModel):
     is_candidate: Optional[bool] = None
+    is_excluded: Optional[bool] = None
     notes: Optional[str] = None
 
 

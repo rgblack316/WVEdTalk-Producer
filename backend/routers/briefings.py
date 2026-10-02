@@ -164,6 +164,12 @@ async def update_story(date: str, story_id: str, update: StoryUpdate, _edit=Depe
             found = True
             if update.is_candidate is not None:
                 s["is_candidate"] = update.is_candidate
+                if update.is_candidate:
+                    s["is_excluded"] = False  # a story can't be both prioritized and excluded
+            if update.is_excluded is not None:
+                s["is_excluded"] = update.is_excluded
+                if update.is_excluded:
+                    s["is_candidate"] = False
             if update.notes is not None:
                 s["notes"] = update.notes
     if not found:

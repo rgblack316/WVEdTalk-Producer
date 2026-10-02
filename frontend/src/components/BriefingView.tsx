@@ -72,6 +72,18 @@ export default function BriefingView({
     onError: () => toast.error("Could not update — please try again"),
   });
 
+  const toggleExclude = useMutation({
+    mutationFn: (s: Story) =>
+      apiPatch<Briefing>(`/briefings/${briefing.date}/stories/${s.id}`, { is_excluded: !s.is_excluded }),
+    onSuccess: (_d, s) => {
+      qc.invalidateQueries({ queryKey: ["briefing", briefing.date] });
+      qc.invalidateQueries({ queryKey: ["briefing", "latest"] });
+      qc.invalidateQueries({ queryKey: ["candidates"] });
+      toast.success(s.is_excluded ? "Exclusion removed" : "Excluded from consideration");
+    },
+    onError: () => toast.error("Could not update — please try again"),
+  });
+
   const filtered = useMemo(
     () =>
       briefing.stories.filter(
@@ -232,6 +244,7 @@ export default function BriefingView({
                   isPublic={isPublic}
                   canFlag={canFlag && !isPublic}
                   onToggleCandidate={() => toggleCandidate.mutate(story)}
+                  onToggleExclude={() => toggleExclude.mutate(story)}
                 />
               ))}
             </div>
