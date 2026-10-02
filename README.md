@@ -28,7 +28,14 @@ public share links.
 - **Public story submissions** — a public `/submit` reader-tip form (and an embeddable
   version for partner sites) protected by a hidden honeypot and optional **Cloudflare
   Turnstile**. Tips are auto-linked when used in a briefing/episode, with a moderation
-  dashboard (filter tabs, bulk reject, private notes, thank-you emails).
+  dashboard (filter tabs, bulk reject, private notes, thank-you emails, auto-scraped
+  article titles, and an **outlet/domain badge** on every tip). **Duplicate handling**:
+  same-link tips are flagged, and can be **merged into one** — keeping a credited list of
+  every submitter — one group at a time or in a single **"merge all duplicates"** sweep;
+  any accidental merge can be **un-merged** back to the inbox.
+- **Excluded & rejected review** — a dedicated `/excluded` page listing every briefing story
+  ruled out of episode consideration and every rejected reader tip, each with one-click
+  **Restore** to bring it back.
 - **Email digests + delivery tooling** — the full briefing is emailed to admin recipients
   and public subscribers. Sends record per-address outcomes, **alert admins on any
   failure**, support a **test send** (shows the exact provider error), and a **resend to
@@ -70,7 +77,7 @@ backend/           FastAPI app
   server.py        app + api_router (/api), lifespan (schedulers, seed admin)
 frontend/          Vite + React app
   src/pages/       Home, Archive, BriefingPage, StoryDetail, Candidates, Episodes,
-                   EpisodePage, Settings, Users, Submissions, SharedBriefing,
+                   EpisodePage, Settings, Users, Submissions, Excluded, SharedBriefing,
                    Subscribe, Unsubscribe, SubmitStory
   src/components/  DeskLayout, AuthGate, BriefingView, ScriptView, StoryCard,
                    TurnstileWidget, ui/*
