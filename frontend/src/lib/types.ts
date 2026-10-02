@@ -154,6 +154,7 @@ export interface CreatedUser {
 export interface StorySubmission {
   id: string;
   url: string;
+  title: string;
   name: string;
   email: string;
   status: string; // new | used | archived | rejected

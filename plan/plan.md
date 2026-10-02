@@ -1,75 +1,134 @@
-# WV Education News Desk — Plan
+# Running WVEdTalk News Desk on Your Own Server (Self-Hosting Migration)
 
-## What gets built
+The WVEdTalk News Desk is a statewide West Virginia education research and podcast-production
+app. This plan changes it so it runs entirely on a small private server the operator controls,
+with no dependency on Emergent's hosted AI, email, or deployment systems.
 
-A web app that runs the WV Education News Desk brief once a day, stores each briefing, and
-lets the host read today's edition, browse the archive, and pull stories into a podcast prep
-workspace.
+## Who it's for
 
-The research and writing is done by GPT-5.4 (OpenAI, via the Emergent universal key) with
-OpenAI's live web search turned on, so the model searches the open web at run time and returns
-real, clickable source links rather than remembered ones. The full editorial instruction set
-from the request — statewide coverage rule, geographic balance, coverage mix, Big Three
-balance, source hierarchy, verification rules, duplicate handling, classification labels, the
-no-news rule and the nine final editorial tests — is handed to the model verbatim as its
-standing brief, with the current calendar date injected on every run.
+The podcast operator who wants to run the News Desk on their own hardware or VPS — owning their
+API keys, their database, and their email delivery — instead of relying on Emergent-managed
+infrastructure. Assumes a single low-traffic server and one small editorial team.
 
-## What the host sees
+## What changes vs. what stays the same
 
-**Today's Briefing.** The day's edition in the exact required order: Big Three, Other
-Significant Stories, Developing Stories, State Policy & Politics, K–12 Education, Higher
-Education, Trends Worth Watching, Podcast Opportunities, Source Log. Big Three items carry
-Location, Classification, Importance /10, Podcast Potential /10, What Happened, Why It
-Matters, Podcast Angle, Questions to Investigate, and source links. If a run genuinely found
-little, the briefing shows a short edition and says so rather than padding.
+Every application feature stays exactly as it is today: daily briefings, the weekly episode
+producer with show-notes links, Podcast Prep (flagging, sorting, clearing), multi-user roles,
+public share links, the public story-submission portal, subscriber digests, alerts, scheduling,
+Markdown exports. Nothing about the user-facing product is removed or redesigned.
 
-**Archive.** Every past edition listed by date with its headline count and Big Three headlines,
-opening into the same full view.
+Three things that are currently provided by Emergent get replaced with services the operator
+owns:
 
-**Story detail.** Any story opens on its own page with the full editorial workup, its sources,
-and the controls below.
+1. **AI research (LLM).** Today the app uses Emergent's universal key to reach Gemini with live
+   Google Search grounding. It will instead use the operator's own Google Gemini API key (from
+   Google AI Studio). Google Search grounding — the core of the research quality — is preserved.
+2. **Email sending.** Today the app uses Emergent's managed email service. It will instead send
+   through the operator's own Resend account — using the operator's Resend API key and a sending
+   domain the operator verifies in Resend. All email features (digests, subscriber briefings,
+   failure alerts, thank-yous, test/resend) keep working, as do the existing anti-abuse safety
+   checks on outgoing mail.
+3. **Hosting/deployment.** Today the app is deployed through Emergent's pipeline. It will instead
+   run on the operator's server via a single `docker compose up`, including its own database.
 
-**Podcast prep workspace.** Each story can be flagged as an episode candidate and given free-text
-notes. A dedicated board collects every flagged story across all dates, grouped so the host can
-see the running shortlist in one place, with notes editable inline.
+Cloudflare Turnstile (the captcha on the public submission form) stays, using the operator's own
+Turnstile keys, and remains optional (falls back to spam-honeypot-only when keys are absent).
 
-**Run now.** A manual trigger alongside the schedule. The schedule alone means nothing to look
-at until tomorrow, and a re-run is needed when a story breaks mid-day. Runs show progress and
-land in the archive the same way.
+## What the operator must provide
 
-**Handoff to the second agent.** Since these results feed a downstream agent that writes weekly
-podcast content, each briefing is also retrievable as structured JSON (stories with their
-scores, classifications, locations, sources, plus the host's candidate flags and notes) from a
-stable per-date address. That is the contract the second agent reads.
+To say yes to this plan, the operator should be prepared to supply:
 
-## Decisions made — push back if any are wrong
+- A **Google Gemini API key** (Google AI Studio). Google Search grounding is billed to the
+  operator's own Google account per Google's pricing.
+- A **Resend account and API key**, plus a **sending domain verified in Resend** (adding the SPF
+  and DKIM DNS records Resend provides). Resend's free tier covers modest volume and paid tiers
+  are inexpensive as the subscriber list grows. Until a domain is verified, Resend allows test
+  sends only, so a verified domain is required for real subscriber delivery.
+- A **Linux server** (VPS or physical) able to run Docker and Docker Compose.
+- Optionally, a **domain name and HTTPS** if the desk should be reachable on the public internet
+  (needed for public share links, the submission portal, and email links to resolve correctly).
+- Optionally, **Cloudflare Turnstile keys** to keep the captcha active.
 
-1. **Schedule: 6:00 AM Eastern daily.** Covers the previous 24 hours and is ready before a
-   morning prep session. The app runs on a UTC clock and converts.
-2. **Model: GPT-5.4 with live web search at high context.** Chosen per the stated preference for
-   GPT-5.x; it is the current recommended model in that family and the one whose web search is
-   supported through the universal key. Cost is per run, and one scheduled run a day plus
-   occasional manual runs is the expected load.
-3. **A run takes minutes, not seconds.** Broad statewide research with verification is slow.
-   Runs happen in the background and the page shows a live status; nothing blocks on it.
-4. **One briefing per date.** A second run on the same date replaces that date's edition, rather
-   than creating a second entry. Candidate flags and notes on stories that survive are kept.
-5. **Developing-story tracking is fed by the archive.** Each run is shown the previous several
-   days' briefings so it can say what is new versus what was already known, instead of
-   re-reporting a continuing story as fresh.
-6. **No accounts or login.** Single-host tool; anyone with the link sees the desk.
-7. **The model's editorial output is not second-guessed by the app.** Scores, rankings and the
-   no-news call are the model's. The app stores and presents them; it does not re-rank.
-8. **Look: newsroom editorial.** Serif headlines, dense wire-service column layout, restrained
-   WV mountain palette, with the clean-dashboard discipline applied to the controls and the
-   candidate board so the reading surface stays uncluttered.
+## Operator experience (how running it feels)
 
-## Known limits
+- One configuration file holds every secret and setting (Gemini key, Resend API key and verified
+  from-address, database name,
+  the public URL, Turnstile keys, admin bootstrap). No Emergent-specific values remain.
+- `docker compose up -d` starts the whole system — the app and its database — on the server.
+- The app is reached in a browser at the server's address (or the operator's domain behind a
+  reverse proxy). First login uses the seeded `admin` / `admin` account, which the operator
+  changes immediately.
+- A setup guide walks through obtaining each key, filling the config, starting the stack, and
+  pointing a domain at it.
+- If a required setting is missing or malformed, the app reports it clearly at startup instead of
+  failing silently mid-run.
 
-- Source links come from live web search. The model is instructed to prefer primary sources and
-  to verify, but a link can still go stale or a paywall can block the host. Links are shown with
-  their outlet name so the host can judge before clicking.
-- Coverage of very small county boards depends on what those bodies publish on the open web. On
-  days when a district posts nothing, the briefing will say a region had no significant story
-  rather than inventing one.
-- Copy/markdown export of a briefing is not included in this build. It can be added later.
+## Implementation phases
+
+### Phase 1 — Self-hostable MVP (built now)
+
+- Swap the AI research path to the operator's own Google Gemini API key while preserving Google
+  Search grounding and structured/JSON output.
+- Swap email sending to the operator's own Resend account (their API key + verified sending
+  domain); all existing email flows and the existing outgoing-mail safety checks continue to work.
+- Make Turnstile use the operator's own keys, with the existing honeypot-only fallback when keys
+  are absent.
+- Package the app and a self-hosted database to launch together with a single command, using one
+  configuration file for all secrets, with a persistent data volume so data survives restarts.
+- Provide a written setup guide covering keys, configuration, startup, and how to put the app
+  behind a domain with HTTPS.
+- Remove runtime assumptions tied to Emergent so the app has no dependency on Emergent's systems
+  once configured.
+
+Result: the operator can stand up a fully working News Desk on their own server, with their own
+AI key, their own SMTP, and their own database.
+
+### Phase 2 — Operational hardening (later)
+
+- Scheduled database backups and a documented restore procedure.
+- Optional bundled reverse proxy with automatic HTTPS certificates, so a domain works without a
+  separate manual proxy setup.
+- Health checks and automatic restart of components, log rotation, and sizing guidance for a small
+  server.
+
+### Phase 3 — Portability and provider flexibility (later)
+
+- Pluggable email so the operator can choose Resend, another hosted provider, or a plain SMTP
+  server without code changes.
+- Optional managed database (e.g. a hosted MongoDB connection string) as an alternative to the
+  self-hosted one.
+- An assisted migration path to move existing briefings/episodes/subscribers from the current
+  hosted instance into the self-hosted one.
+- A simple update procedure to pull new versions and restart.
+
+## Assumptions
+
+These choices were made without confirmation and are open to change:
+
+- **LLM provider:** the operator's own Google Gemini API key (Google AI Studio), keeping Google
+  Search grounding. Not Vertex AI, and not a non-Google model (either of which would change the
+  research path — a non-Google model would lose built-in Search grounding).
+- **Grounding cost:** Google Search grounding is billed to the operator's Google account; usage
+  volume and cost are the operator's to manage.
+- **Email:** the operator's own Resend account (their `RESEND_API_KEY`) sending from a
+  Resend-verified domain, via Resend's own API (not the Emergent proxy, and not generic SMTP). The
+  operator adds Resend's SPF/DKIM DNS records to their domain; a verified domain is required before
+  real subscriber sends work. The app's existing outgoing-mail safety checks are retained.
+- **Packaging:** Docker Compose, launching the app plus a self-hosted database in one command,
+  with a persistent volume for data.
+- **Database:** self-hosted, running in a container on the same server; no managed/cloud database
+  in the MVP.
+- **HTTPS/domain:** the setup guide explains how to run the app behind a reverse proxy with a
+  domain and certificates, but the MVP does not force a specific proxy or auto-provision
+  certificates (that is Phase 2). Public share links, the submission portal, and email links
+  assume the operator sets a correct public URL.
+- **Turnstile:** kept, using the operator's own keys, and optional (honeypot-only when unset).
+- **Scheduling:** the existing in-process scheduler is kept (daily/weekly runs), so no separate
+  system cron is required.
+- **Scale:** a single low-traffic server for one editorial team; no multi-server or
+  high-availability setup.
+- **Starting data:** the self-hosted instance starts fresh with the seeded `admin` / `admin`
+  account (to be changed on first login). Migrating existing content from the hosted instance is
+  Phase 3, not the MVP.
+- **Model:** the same Gemini Pro model used today, selectable via configuration, with a documented
+  fallback model ID if the preview model is unavailable to the operator's project.

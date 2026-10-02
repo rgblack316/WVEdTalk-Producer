@@ -19,6 +19,7 @@ class SubmissionRequest(BaseModel):
 class StorySubmission(BaseModel):
     id: str
     url: str
+    title: str = ""  # fetched <title> of the submitted article (best-effort), shown on the dashboard
     name: str
     email: str
     status: str = "new"  # new | used | archived | rejected

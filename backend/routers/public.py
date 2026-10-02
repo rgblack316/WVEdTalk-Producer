@@ -6,14 +6,17 @@ import re
 import time
 import uuid
 from datetime import datetime, timezone
+from html import unescape
 from urllib.parse import parse_qs, urlparse
 
+import httpx
 from fastapi import APIRouter, HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse
 
 from lib import auth
 from lib import turnstile
 from lib.db import db
+from lib.desk import _is_private_host
 from models.briefing import Briefing
 from models.subscriber import SubscribeRequest, UnsubscribeRequest
 from models.submission import SubmissionRequest
@@ -74,11 +77,32 @@ def _valid_story_url(url: str) -> bool:
     return p.scheme in ("http", "https") and bool(p.netloc)
 
 
-async def _persist_submission(url: str, name: str, email: str) -> None:
+async def _fetch_title(url: str) -> str:
+    """Best-effort fetch of the submitted article's <title> for the dashboard (SSRF-guarded,
+    short timeout). Returns "" on any failure — a missing title never blocks a submission."""
+    try:
+        host = urlparse(url).hostname or ""
+        if not host or _is_private_host(host):
+            return ""
+        async with httpx.AsyncClient(
+            follow_redirects=True, max_redirects=5, timeout=6.0,
+            headers={"User-Agent": "Mozilla/5.0 (WV-Desk)"},
+        ) as client:
+            r = await client.get(url)
+        m = re.search(r"<title[^>]*>(.*?)</title>", r.text or "", re.I | re.S)
+        if not m:
+            return ""
+        return unescape(re.sub(r"\s+", " ", m.group(1)).strip())[:300]
+    except Exception:
+        return ""
+
+
+async def _persist_submission(url: str, name: str, email: str, title: str = "") -> None:
     await db.submissions.insert_one(
         {
             "id": str(uuid.uuid4()),
             "url": url[:2000],
+            "title": title[:300],
             "name": name[:120],
             "email": email.lower().strip(),
             "status": "new",
@@ -116,7 +140,7 @@ async def submit_story(body: SubmissionRequest, request: Request):
     if not name:
         raise HTTPException(status_code=422, detail="Please include your name.")
     email = str(body.email).lower().strip()
-    await _persist_submission(url, name, email)
+    await _persist_submission(url, name, email, await _fetch_title(url))
     await _persist_subscriber(email)  # submitting opts them into the daily briefing
     return {
         "ok": True,
@@ -219,7 +243,7 @@ async def embed_submit_story(request: Request):
             status_code=400,
             headers=cors,
         )
-    await _persist_submission(url, name, email)
+    await _persist_submission(url, name, email, await _fetch_title(url))
     await _persist_subscriber(email)
     return JSONResponse(
         {"ok": True, "message": "Thanks! Your story has been submitted for the desk to consider."}, headers=cors

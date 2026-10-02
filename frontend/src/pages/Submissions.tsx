@@ -291,12 +291,19 @@ function SubmissionCard({
         href={s.url}
         target="_blank"
         rel="noreferrer noopener"
-        className="inline-flex items-center gap-1 font-heading text-lg font-bold tracking-tight break-all transition-colors hover:text-primary"
+        className="inline-flex items-start gap-1 font-heading text-lg font-bold tracking-tight transition-colors hover:text-primary"
         data-testid={`submission-url-${s.id}`}
       >
-        {s.url}
-        <ExternalLink className="size-4 shrink-0" />
+        <span className={s.title ? "" : "break-all"} data-testid={`submission-title-${s.id}`}>
+          {s.title || s.url}
+        </span>
+        <ExternalLink className="mt-1 size-4 shrink-0" />
       </a>
+      {s.title && (
+        <p className="mt-0.5 text-xs break-all text-muted-foreground" data-testid={`submission-link-${s.id}`}>
+          {s.url}
+        </p>
+      )}
 
       <p className="mt-2 text-sm text-muted-foreground" data-testid={`submission-by-${s.id}`}>
         Submitted by <span className="font-medium text-foreground">{s.name}</span> ·{" "}
