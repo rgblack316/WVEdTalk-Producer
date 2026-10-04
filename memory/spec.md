@@ -261,10 +261,15 @@ None seeded. First real briefing generated for 2026-09-18. Demo watch terms ("co
   loaded, failed}}}`. After loading, it re-counts each collection in the live DB and returns an
   **integrity check**: per-collection `actual` (destination count) + `match` (replace → actual==source;
   merge → actual>=source and no failures) plus a top-level `integrity_ok`.
+- `POST /api/data/import/preview {mode, archive}` is a non-destructive **dry run**: per collection it
+  reports `to_add` / `to_update` / `to_delete` / `existing` / `resulting` (merge counts updates by match
+  key; replace deletes all then reloads) and writes nothing. 422 on a non-archive file.
 - **Frontend**: admin-only "Data export &amp; import" panel on Settings (`data-testid="data-io-panel"`).
   Export fetches the archive, builds a client-side Blob download named `wvedtalk-news-desk-<date>.json`, and
   shows the per-collection counts. Import takes a file, a Merge/Replace radio (Replace shows a warning and
-  arms a two-click "Confirm replace — erase and load" step), posts it, then renders a per-collection result
+  arms a two-click "Confirm replace — erase and load" step), a **Preview changes** button (dry run — shows
+  per-collection add/update/delete and existing→resulting counts without writing), then posts the load and
+  renders a per-collection result
   (with an integrity banner: green "passed" when every collection matches, red count of mismatches
   otherwise, and each row flags source-vs-destination mismatches) and `qc.invalidateQueries()` to refresh the
   app. Migration + raw-dump-request guidance is in README.

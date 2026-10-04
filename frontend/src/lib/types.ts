@@ -163,6 +163,15 @@ export interface ImportResult {
   results: Record<string, { in_archive: number; loaded: number; failed: number; actual: number; match: boolean }>;
 }
 
+export interface ImportPreview {
+  mode: string;
+  dry_run: boolean;
+  results: Record<
+    string,
+    { in_archive: number; existing: number; to_add: number; to_update: number; to_delete: number; resulting: number }
+  >;
+}
+
 export interface CreatedUser {
   user: User;
   temp_password: string;

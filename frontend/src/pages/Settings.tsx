@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { apiGet, apiPost, apiDelete, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/useAuth";
-import type { AuthState, DeskConfig, DigestSendResult, RunLogEntry, Subscriber, ExportArchive, ImportResult } from "@/lib/types";
+import type { AuthState, DeskConfig, DigestSendResult, RunLogEntry, Subscriber, ExportArchive, ImportResult, ImportPreview } from "@/lib/types";
 
 const DOW = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const pad = (n: number) => String(n).padStart(2, "0");
@@ -69,6 +69,7 @@ export default function Settings() {
   const [importMode, setImportMode] = useState<"merge" | "replace">("merge");
   const [replaceArmed, setReplaceArmed] = useState(false);
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
+  const [importPreview, setImportPreview] = useState<ImportPreview | null>(null);
 
   const exportData = useMutation({
     mutationFn: () => apiGet<ExportArchive>("/data/export"),
@@ -121,6 +122,28 @@ export default function Settings() {
       return;
     }
     importData.mutate({ archive, mode: importMode, confirm: importMode === "replace" });
+  };
+
+  const previewImport = useMutation({
+    mutationFn: (vars: { archive: unknown; mode: string }) =>
+      apiPost<ImportPreview>("/data/import/preview", vars),
+    onSuccess: (res) => setImportPreview(res),
+    onError: (e) => toast.error(errMsg(e)),
+  });
+
+  const runPreview = async () => {
+    if (!importFile) {
+      toast.error("Choose an export file first.");
+      return;
+    }
+    let archive: unknown;
+    try {
+      archive = JSON.parse(await importFile.text());
+    } catch {
+      toast.error("That file isn't valid JSON.");
+      return;
+    }
+    previewImport.mutate({ archive, mode: importMode });
   };
 
   const { data: runLog } = useQuery({
@@ -1046,6 +1069,7 @@ export default function Settings() {
                     setImportFile(e.target.files?.[0] ?? null);
                     setReplaceArmed(false);
                     setImportResult(null);
+                    setImportPreview(null);
                   }}
                   className="mt-3 block w-full text-sm text-muted-foreground file:mr-3 file:rounded-sm file:border file:border-border file:bg-secondary file:px-3 file:py-1.5 file:text-sm file:font-medium hover:file:bg-muted"
                   data-testid="import-file-input"
@@ -1101,22 +1125,52 @@ export default function Settings() {
                   </div>
                 )}
 
-                <Button
-                  className="mt-3"
-                  variant={importMode === "replace" && replaceArmed ? "destructive" : "default"}
-                  disabled={importData.isPending || !importFile}
-                  onClick={runImport}
-                  data-testid="import-load-button"
-                >
-                  <Upload className="size-4" />
-                  {importData.isPending
-                    ? "Loading…"
-                    : importMode === "replace"
-                      ? replaceArmed
-                        ? "Confirm replace — erase and load"
-                        : "Load archive (Replace)"
-                      : "Load archive (Merge)"}
-                </Button>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button
+                    variant="outline"
+                    disabled={previewImport.isPending || !importFile}
+                    onClick={runPreview}
+                    data-testid="import-preview-button"
+                  >
+                    <Eye className="size-4" />
+                    {previewImport.isPending ? "Checking…" : "Preview changes"}
+                  </Button>
+                  <Button
+                    variant={importMode === "replace" && replaceArmed ? "destructive" : "default"}
+                    disabled={importData.isPending || !importFile}
+                    onClick={runImport}
+                    data-testid="import-load-button"
+                  >
+                    <Upload className="size-4" />
+                    {importData.isPending
+                      ? "Loading…"
+                      : importMode === "replace"
+                        ? replaceArmed
+                          ? "Confirm replace — erase and load"
+                          : "Load archive (Replace)"
+                        : "Load archive (Merge)"}
+                  </Button>
+                </div>
+
+                {importPreview && (
+                  <div className="mt-4 rounded-sm border border-dashed border-border p-3 text-xs" data-testid="import-preview">
+                    <p className="flex items-center gap-1.5 font-semibold">
+                      <Eye className="size-4 text-primary" /> Dry run — what loading would change ({importPreview.mode}). Nothing has been written yet.
+                    </p>
+                    <ul className="mt-2 space-y-0.5">
+                      {Object.entries(importPreview.results).map(([name, r]) => (
+                        <li key={name} className="flex justify-between gap-4" data-testid={`import-preview-${name}`}>
+                          <span>{name}</span>
+                          <span className="text-muted-foreground">
+                            +{r.to_add} new
+                            {r.to_update > 0 && `, ${r.to_update} updated`}
+                            {r.to_delete > 0 && <span className="text-destructive">, {r.to_delete} deleted</span>} · {r.existing} → {r.resulting}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
 
                 {importResult && (
                   <div className="mt-4 rounded-sm border border-border p-3 text-xs" data-testid="import-result">

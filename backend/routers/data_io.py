@@ -118,3 +118,51 @@ async def import_data(body: ImportRequest):
 
     integrity_ok = all(r["match"] for r in results.values())
     return {"mode": mode, "integrity_ok": integrity_ok, "results": results}
+
+
+@router.post("/data/import/preview")
+async def preview_import(body: ImportRequest):
+    """Dry run — report what loading this archive WOULD change, without writing anything.
+    Per collection: records to add, to update (match an existing record), to delete (replace mode
+    clears first), and the resulting count. Confirmation is not required; nothing is modified."""
+    mode = (body.mode or "merge").lower()
+    if mode not in {"merge", "replace"}:
+        raise HTTPException(status_code=422, detail="Mode must be 'merge' or 'replace'")
+    archive = body.archive or {}
+    if archive.get("format") != ARCHIVE_FORMAT or not isinstance(archive.get("collections"), dict):
+        raise HTTPException(
+            status_code=422,
+            detail="This file is not a News Desk export archive (missing or wrong format).",
+        )
+
+    source = archive["collections"]
+    results: Dict[str, dict] = {}
+    for name, keys in COLLECTIONS.items():
+        docs = [d for d in (source.get(name) or []) if isinstance(d, dict)]
+        existing = await db[name].count_documents({})
+        if mode == "replace":
+            to_add, to_update, to_delete, resulting = len(docs), 0, existing, len(docs)
+        else:
+            proj = {k: 1 for k in keys}
+            proj["_id"] = 0
+            existing_keys = set()
+            for d in await db[name].find({}, proj).to_list(1_000_000):
+                if all(d.get(k) is not None for k in keys):
+                    existing_keys.add(tuple(d.get(k) for k in keys))
+            to_update = sum(
+                1
+                for d in docs
+                if all(d.get(k) is not None for k in keys) and tuple(d.get(k) for k in keys) in existing_keys
+            )
+            to_add = len(docs) - to_update
+            to_delete = 0
+            resulting = existing + to_add
+        results[name] = {
+            "in_archive": len(docs),
+            "existing": existing,
+            "to_add": to_add,
+            "to_update": to_update,
+            "to_delete": to_delete,
+            "resulting": resulting,
+        }
+    return {"mode": mode, "dry_run": True, "results": results}
