@@ -158,6 +158,42 @@ curl -H "X-Desk-Passcode: $APP_PASSCODE" \
   https://your-app/api/briefings/2026-09-20
 ```
 
+## Migrating off Emergent / self-hosting (data export & import)
+
+An admin-only **Data export & import** panel lives on the Settings page for moving the News Desk's
+data to your own server (or keeping an off-platform backup).
+
+1. **Capture production data.** Sign in to the **published Emergent site** as an admin, open
+   **Settings → Data export & import**, and click **Download a full copy**. Because the app reads and
+   writes the live database, the archive reflects production at the moment you take it. It is a single,
+   human-readable JSON file (one section per collection — briefings, episodes, submissions,
+   subscribers, users, settings/schedule, run history, delivery records — plus a header with the date
+   and per-collection counts). User accounts are included with their **hashed** passwords (plaintext is
+   never stored or exported), so everyone logs in unchanged after the move.
+2. **Stand up the self-hosted app.** Follow *Getting started (local)* above against your own MongoDB,
+   and set the secrets in `backend/.env` yourself — `SESSION_SECRET`, `MONGO_URL`/`DB_NAME`,
+   `EMERGENT_LLM_KEY`, email/CAPTCHA keys. These are configuration, **not** part of the export (by
+   design, for security).
+3. **Load the data.** Sign in to the self-hosted app as an admin, open the same panel, choose the
+   downloaded file, pick a mode, and load:
+   - **Merge** (default) — add/replace records by their id; anything already present that isn't in the
+     archive is left untouched.
+   - **Replace** — clear each collection first, then load an exact copy. This is destructive and asks
+     for an explicit confirmation before it runs.
+   A per-collection summary reports how many records loaded (and any that failed).
+4. **Sign in fresh.** Login sessions do not transfer (the session signing secret differs per
+   environment), which is expected and harmless — everyone signs in again with their existing
+   credentials.
+
+### Requesting a raw native database dump from Emergent
+
+The in-app export is portable JSON. If you'd instead prefer a **byte-for-byte native MongoDB dump**
+(e.g. a `mongodump` BSON archive), that lives in Emergent's managed database and is provided by the
+platform, not by this app. Request it through Emergent support / your account contact, asking for a
+`mongodump` of the app's database for the deployed environment. Use it to restore with `mongorestore`
+against your own MongoDB. The in-app JSON export and a native dump are complementary — either can
+rehydrate a self-hosted instance.
+
 ## Notes
 
 - Environment secrets and database data are **not** included in the repository.

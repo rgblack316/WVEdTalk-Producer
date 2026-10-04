@@ -148,6 +148,20 @@ export interface AuthState {
   user: User | null;
 }
 
+export interface ExportArchive {
+  format: string;
+  version: number;
+  exported_at: string;
+  db_name: string;
+  counts: Record<string, number>;
+  collections: Record<string, unknown[]>;
+}
+
+export interface ImportResult {
+  mode: string;
+  results: Record<string, { in_archive: number; loaded: number; failed: number }>;
+}
+
 export interface CreatedUser {
   user: User;
   temp_password: string;

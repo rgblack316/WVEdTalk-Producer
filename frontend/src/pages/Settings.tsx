@@ -1,14 +1,14 @@
 import { useState, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Mail, Eye, Trash2, Send, Gauge, ShieldCheck, Timer, KeyRound, Users, Link2, Code2, Copy, CalendarClock, History, Megaphone, FlaskConical, RotateCcw } from "lucide-react";
+import { Mail, Eye, Trash2, Send, Gauge, ShieldCheck, Timer, KeyRound, Users, Link2, Code2, Copy, CalendarClock, History, Megaphone, FlaskConical, RotateCcw, Database, Download, Upload, AlertTriangle } from "lucide-react";
 import DeskLayout from "@/components/DeskLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { apiGet, apiPost, apiDelete, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/useAuth";
-import type { AuthState, DeskConfig, DigestSendResult, RunLogEntry, Subscriber } from "@/lib/types";
+import type { AuthState, DeskConfig, DigestSendResult, RunLogEntry, Subscriber, ExportArchive, ImportResult } from "@/lib/types";
 
 const DOW = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const pad = (n: number) => String(n).padStart(2, "0");
@@ -62,6 +62,66 @@ export default function Settings() {
     staleTime: 5 * 60 * 1000,
   });
   const isAdmin = auth?.user?.role === "admin";
+
+  // --- Data export & import (admin-only) ---
+  const [exportCounts, setExportCounts] = useState<Record<string, number> | null>(null);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importMode, setImportMode] = useState<"merge" | "replace">("merge");
+  const [replaceArmed, setReplaceArmed] = useState(false);
+  const [importResult, setImportResult] = useState<ImportResult | null>(null);
+
+  const exportData = useMutation({
+    mutationFn: () => apiGet<ExportArchive>("/data/export"),
+    onSuccess: (archive) => {
+      const blob = new Blob([JSON.stringify(archive, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      const date = (archive.exported_at || new Date().toISOString()).slice(0, 10);
+      a.href = url;
+      a.download = `wvedtalk-news-desk-${date}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setExportCounts(archive.counts);
+      const total = Object.values(archive.counts).reduce((a2, b) => a2 + b, 0);
+      toast.success(`Downloaded a full copy — ${total} records across ${Object.keys(archive.counts).length} collections.`);
+    },
+    onError: (e) => toast.error(errMsg(e)),
+  });
+
+  const importData = useMutation({
+    mutationFn: (vars: { archive: unknown; mode: string; confirm: boolean }) =>
+      apiPost<ImportResult>("/data/import", vars),
+    onSuccess: (res) => {
+      setImportResult(res);
+      setReplaceArmed(false);
+      qc.invalidateQueries();
+      const loaded = Object.values(res.results).reduce((a2, b) => a2 + b.loaded, 0);
+      toast.success(`Loaded ${loaded} records into this instance (${res.mode}).`);
+    },
+    onError: (e) => {
+      setReplaceArmed(false);
+      toast.error(errMsg(e));
+    },
+  });
+
+  const runImport = async () => {
+    if (!importFile) {
+      toast.error("Choose an export file first.");
+      return;
+    }
+    let archive: unknown;
+    try {
+      archive = JSON.parse(await importFile.text());
+    } catch {
+      toast.error("That file isn't valid JSON.");
+      return;
+    }
+    if (importMode === "replace" && !replaceArmed) {
+      setReplaceArmed(true);
+      return;
+    }
+    importData.mutate({ archive, mode: importMode, confirm: importMode === "replace" });
+  };
 
   const { data: runLog } = useQuery({
     queryKey: ["run-log"],
@@ -923,6 +983,159 @@ export default function Settings() {
               </div>
             )}
           </section>
+
+          {isAdmin && (
+            <section
+              className="rounded-md border border-border bg-card p-5 md:col-span-2"
+              data-testid="data-io-panel"
+            >
+              <h3 className="flex items-center gap-2 font-heading text-lg font-bold">
+                <Database className="size-5 text-primary" /> Data export &amp; import
+              </h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Download a complete, portable copy of this News Desk's database — every briefing, episode,
+                reader submission, subscriber, user account, setting, run-history and delivery record in one
+                JSON file. Accounts are included with their hashed passwords, so everyone logs in unchanged
+                after a move (plaintext passwords are never exported, and login sessions don't carry over —
+                everyone signs in fresh). API keys and the session secret are configuration, not data, and
+                are set up separately on the new server.
+              </p>
+
+              {/* Export */}
+              <div className="mt-5 rounded-sm border border-border bg-background p-4" data-testid="export-block">
+                <p className="flex items-center gap-1.5 text-sm font-semibold">
+                  <Download className="size-4 text-primary" /> Download a full copy
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Run this while signed in to the live site to capture production data. The archive is a
+                  point-in-time snapshot named with today's date.
+                </p>
+                <Button
+                  className="mt-3"
+                  disabled={exportData.isPending}
+                  onClick={() => exportData.mutate()}
+                  data-testid="export-download-button"
+                >
+                  <Download className="size-4" />
+                  {exportData.isPending ? "Preparing…" : "Download a full copy"}
+                </Button>
+                {exportCounts && (
+                  <div className="mt-3 text-xs text-muted-foreground" data-testid="export-counts">
+                    Included:{" "}
+                    {Object.entries(exportCounts)
+                      .map(([k, v]) => `${v} ${k}`)
+                      .join(" · ")}
+                  </div>
+                )}
+              </div>
+
+              {/* Import */}
+              <div className="mt-4 rounded-sm border border-border bg-background p-4" data-testid="import-block">
+                <p className="flex items-center gap-1.5 text-sm font-semibold">
+                  <Upload className="size-4 text-primary" /> Load an archive into this instance
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Choose a file produced by the export above, pick how to load it, then load. Use this on your
+                  self-hosted instance after signing in as an admin.
+                </p>
+
+                <input
+                  type="file"
+                  accept="application/json,.json"
+                  onChange={(e) => {
+                    setImportFile(e.target.files?.[0] ?? null);
+                    setReplaceArmed(false);
+                    setImportResult(null);
+                  }}
+                  className="mt-3 block w-full text-sm text-muted-foreground file:mr-3 file:rounded-sm file:border file:border-border file:bg-secondary file:px-3 file:py-1.5 file:text-sm file:font-medium hover:file:bg-muted"
+                  data-testid="import-file-input"
+                />
+
+                <div className="mt-3 flex flex-col gap-2 text-sm">
+                  <label className="inline-flex items-center gap-2">
+                    <input
+                      type="radio"
+                      name="import-mode"
+                      checked={importMode === "merge"}
+                      onChange={() => {
+                        setImportMode("merge");
+                        setReplaceArmed(false);
+                      }}
+                      className="size-4 accent-primary"
+                      data-testid="import-mode-merge"
+                    />
+                    <span>
+                      <span className="font-medium">Merge</span>{" "}
+                      <span className="text-muted-foreground">— add/replace records by id; keep anything already here.</span>
+                    </span>
+                  </label>
+                  <label className="inline-flex items-center gap-2">
+                    <input
+                      type="radio"
+                      name="import-mode"
+                      checked={importMode === "replace"}
+                      onChange={() => {
+                        setImportMode("replace");
+                        setReplaceArmed(false);
+                      }}
+                      className="size-4 accent-destructive"
+                      data-testid="import-mode-replace"
+                    />
+                    <span>
+                      <span className="font-medium text-destructive">Replace</span>{" "}
+                      <span className="text-muted-foreground">— clear each collection first, then load an exact copy.</span>
+                    </span>
+                  </label>
+                </div>
+
+                {importMode === "replace" && (
+                  <div
+                    className="mt-3 flex items-start gap-2 rounded-sm border border-destructive/40 bg-destructive/5 p-3 text-xs text-destructive"
+                    data-testid="replace-warning"
+                  >
+                    <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+                    <span>
+                      Replace permanently erases the existing data in each collection before loading — this
+                      cannot be undone, and it may sign you out if your own account changes.
+                    </span>
+                  </div>
+                )}
+
+                <Button
+                  className="mt-3"
+                  variant={importMode === "replace" && replaceArmed ? "destructive" : "default"}
+                  disabled={importData.isPending || !importFile}
+                  onClick={runImport}
+                  data-testid="import-load-button"
+                >
+                  <Upload className="size-4" />
+                  {importData.isPending
+                    ? "Loading…"
+                    : importMode === "replace"
+                      ? replaceArmed
+                        ? "Confirm replace — erase and load"
+                        : "Load archive (Replace)"
+                      : "Load archive (Merge)"}
+                </Button>
+
+                {importResult && (
+                  <div className="mt-4 rounded-sm border border-border p-3 text-xs" data-testid="import-result">
+                    <p className="font-semibold">Loaded ({importResult.mode}):</p>
+                    <ul className="mt-1 space-y-0.5">
+                      {Object.entries(importResult.results).map(([name, r]) => (
+                        <li key={name} className="flex justify-between gap-4" data-testid={`import-result-${name}`}>
+                          <span>{name}</span>
+                          <span className="text-muted-foreground">
+                            {r.loaded} loaded{r.failed > 0 && <span className="text-destructive"> · {r.failed} failed</span>} / {r.in_archive} in file
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            </section>
+          )}
         </div>
       )}
     </DeskLayout>

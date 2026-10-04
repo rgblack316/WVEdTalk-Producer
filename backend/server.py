@@ -24,6 +24,7 @@ from routers.settings import router as settings_router
 from routers.users import router as users_router
 from routers.public import router as public_router
 from routers.submissions import router as submissions_router
+from routers.data_io import router as data_io_router
 
 
 # Startup runs before the yield, shutdown after it. Add your own setup/teardown here.
@@ -60,6 +61,7 @@ api_router.include_router(settings_router, dependencies=_guard)
 api_router.include_router(episodes_router, dependencies=_guard)
 api_router.include_router(submissions_router, dependencies=_guard)
 api_router.include_router(users_router, dependencies=[Depends(require_admin)])
+api_router.include_router(data_io_router, dependencies=[Depends(require_admin)])  # full DB export/import, admin-only
 
 # Include the router in the main app
 app.include_router(api_router)
