@@ -1120,13 +1120,34 @@ export default function Settings() {
 
                 {importResult && (
                   <div className="mt-4 rounded-sm border border-border p-3 text-xs" data-testid="import-result">
-                    <p className="font-semibold">Loaded ({importResult.mode}):</p>
-                    <ul className="mt-1 space-y-0.5">
+                    <p
+                      className={`flex items-center gap-1.5 font-semibold ${
+                        importResult.integrity_ok ? "text-emerald-700 dark:text-emerald-400" : "text-destructive"
+                      }`}
+                      data-testid="import-integrity"
+                    >
+                      {importResult.integrity_ok ? (
+                        <ShieldCheck className="size-4" />
+                      ) : (
+                        <AlertTriangle className="size-4" />
+                      )}
+                      {importResult.integrity_ok
+                        ? `Integrity check passed — every collection matches (${importResult.mode}).`
+                        : `Integrity check: ${
+                            Object.values(importResult.results).filter((r) => !r.match).length
+                          } collection(s) don't match — review below.`}
+                    </p>
+                    <ul className="mt-2 space-y-0.5">
                       {Object.entries(importResult.results).map(([name, r]) => (
                         <li key={name} className="flex justify-between gap-4" data-testid={`import-result-${name}`}>
-                          <span>{name}</span>
+                          <span className={r.match ? "" : "font-medium text-destructive"}>
+                            {name}
+                            {!r.match && " ⚠"}
+                          </span>
                           <span className="text-muted-foreground">
-                            {r.loaded} loaded{r.failed > 0 && <span className="text-destructive"> · {r.failed} failed</span>} / {r.in_archive} in file
+                            {r.loaded} loaded
+                            {r.failed > 0 && <span className="text-destructive"> · {r.failed} failed</span>} · now{" "}
+                            <span className={r.match ? "" : "font-medium text-destructive"}>{r.actual}</span> in db / {r.in_archive} in file
                           </span>
                         </li>
                       ))}

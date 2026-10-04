@@ -104,6 +104,17 @@ async def import_data(body: ImportRequest):
                 loaded += 1
             except Exception:
                 failed += 1
-        results[name] = {"in_archive": len(docs), "loaded": loaded, "failed": failed}
+        actual = await db[name].count_documents({})
+        # Replace yields an exact copy (actual == source); Merge should contain at least everything
+        # in the archive. Either way, no record may have failed to load.
+        match = failed == 0 and (actual == len(docs) if mode == "replace" else actual >= len(docs))
+        results[name] = {
+            "in_archive": len(docs),
+            "loaded": loaded,
+            "failed": failed,
+            "actual": actual,
+            "match": match,
+        }
 
-    return {"mode": mode, "results": results}
+    integrity_ok = all(r["match"] for r in results.values())
+    return {"mode": mode, "integrity_ok": integrity_ok, "results": results}

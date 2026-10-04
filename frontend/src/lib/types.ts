@@ -159,7 +159,8 @@ export interface ExportArchive {
 
 export interface ImportResult {
   mode: string;
-  results: Record<string, { in_archive: number; loaded: number; failed: number }>;
+  integrity_ok: boolean;
+  results: Record<string, { in_archive: number; loaded: number; failed: number; actual: number; match: boolean }>;
 }
 
 export interface CreatedUser {

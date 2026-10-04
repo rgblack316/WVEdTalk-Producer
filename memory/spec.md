@@ -258,12 +258,16 @@ None seeded. First real briefing generated for 2026-09-18. Demo watch terms ("co
 - `POST /api/data/import {mode, confirm, archive}` loads an archive: **merge** (replace/add by match key,
   leave the rest) or **replace** (delete_many each collection first, then load — requires `confirm:true`,
   else 400). Validates `archive.format` (422 on a non-archive file). Returns `{mode, results{coll:{in_archive,
-  loaded, failed}}}`.
+  loaded, failed}}}`. After loading, it re-counts each collection in the live DB and returns an
+  **integrity check**: per-collection `actual` (destination count) + `match` (replace → actual==source;
+  merge → actual>=source and no failures) plus a top-level `integrity_ok`.
 - **Frontend**: admin-only "Data export &amp; import" panel on Settings (`data-testid="data-io-panel"`).
   Export fetches the archive, builds a client-side Blob download named `wvedtalk-news-desk-<date>.json`, and
   shows the per-collection counts. Import takes a file, a Merge/Replace radio (Replace shows a warning and
   arms a two-click "Confirm replace — erase and load" step), posts it, then renders a per-collection result
-  and `qc.invalidateQueries()` to refresh the app. Migration + raw-dump-request guidance is in README.
+  (with an integrity banner: green "passed" when every collection matches, red count of mismatches
+  otherwise, and each row flags source-vs-destination mismatches) and `qc.invalidateQueries()` to refresh the
+  app. Migration + raw-dump-request guidance is in README.
 - **Per-episode toggle**: each episode has `support_included`; `POST /api/episodes/{week_of}/support
   {enabled}` adds/removes the segment on that one script and re-derives chapters. EpisodePage shows an
   Add/Remove support read button. `chapterize_episode` no longer forces the segment (preserves the
