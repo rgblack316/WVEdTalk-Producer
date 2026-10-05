@@ -8,7 +8,8 @@ import { Button } from "@/components/ui/button";
 import { apiGet } from "@/lib/api";
 import type { BriefingSummary } from "@/lib/types";
 
-const PER_PAGE = 10;
+const PER_PAGE_OPTIONS = [10, 25, 50];
+const PER_PAGE_STORAGE_KEY = "wvedtalk.archive.perPage";
 
 function formatDate(date: string) {
   const [y, m, d] = date.split("-").map(Number);
@@ -22,37 +23,82 @@ function formatDate(date: string) {
   });
 }
 
+// A compact page list: first, last, current and its neighbours, with "…" filling the gaps.
+function pageList(current: number, count: number): (number | "ellipsis")[] {
+  const keep = new Set<number>([0, count - 1, current, current - 1, current + 1]);
+  const sorted = [...keep].filter((p) => p >= 0 && p < count).sort((a, b) => a - b);
+  const out: (number | "ellipsis")[] = [];
+  let prev = -1;
+  for (const p of sorted) {
+    if (prev >= 0 && p - prev > 1) out.push("ellipsis");
+    out.push(p);
+    prev = p;
+  }
+  return out;
+}
+
 export default function Archive() {
   const { data, isLoading } = useQuery({
     queryKey: ["briefings"],
     queryFn: () => apiGet<BriefingSummary[]>("/briefings"),
   });
 
+  // Remember the chosen page size between visits.
+  const [perPage, setPerPage] = useState<number>(() => {
+    const saved = typeof window !== "undefined" ? Number(window.localStorage.getItem(PER_PAGE_STORAGE_KEY)) : NaN;
+    return PER_PAGE_OPTIONS.includes(saved) ? saved : 10;
+  });
+  useEffect(() => {
+    window.localStorage.setItem(PER_PAGE_STORAGE_KEY, String(perPage));
+  }, [perPage]);
+
   const [page, setPage] = useState(0);
   const total = data?.length ?? 0;
-  const pageCount = Math.max(1, Math.ceil(total / PER_PAGE));
+  const pageCount = Math.max(1, Math.ceil(total / perPage));
 
-  // Keep the page in range if the data shrinks (e.g. after a refetch).
+  // Keep the page in range if the data shrinks or the page size grows.
   useEffect(() => {
     if (page > pageCount - 1) setPage(pageCount - 1);
   }, [page, pageCount]);
 
   const pageItems = useMemo(
-    () => (data ?? []).slice(page * PER_PAGE, page * PER_PAGE + PER_PAGE),
-    [data, page],
+    () => (data ?? []).slice(page * perPage, page * perPage + perPage),
+    [data, page, perPage],
   );
 
-  const from = total === 0 ? 0 : page * PER_PAGE + 1;
-  const to = Math.min(page * PER_PAGE + PER_PAGE, total);
+  const from = total === 0 ? 0 : page * perPage + 1;
+  const to = Math.min(page * perPage + perPage, total);
 
   return (
     <DeskLayout>
-      <div className="mb-8">
-        <p className="text-xs tracking-[0.2em] text-accent uppercase">Archive</p>
-        <h2 className="font-heading text-3xl font-bold tracking-tight">Past editions</h2>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Every daily briefing, newest first. Each edition opens to its full statewide workup.
-        </p>
+      <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="text-xs tracking-[0.2em] text-accent uppercase">Archive</p>
+          <h2 className="font-heading text-3xl font-bold tracking-tight">Past editions</h2>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Every daily briefing, newest first. Each edition opens to its full statewide workup.
+          </p>
+        </div>
+        {total > PER_PAGE_OPTIONS[0] && (
+          <label className="flex items-center gap-2 text-xs text-muted-foreground" data-testid="archive-per-page-label">
+            Per page
+            <select
+              value={perPage}
+              onChange={(e) => {
+                setPerPage(Number(e.target.value));
+                setPage(0);
+              }}
+              className="rounded-sm border border-border bg-card px-2 py-1 text-sm text-foreground"
+              data-testid="archive-per-page"
+            >
+              {PER_PAGE_OPTIONS.map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
       </div>
 
       {isLoading ? (
@@ -87,13 +133,13 @@ export default function Archive() {
 
           {pageCount > 1 && (
             <div
-              className="mt-6 flex items-center justify-between gap-4 border-t border-border pt-4"
+              className="mt-6 flex flex-wrap items-center justify-between gap-4 border-t border-border pt-4"
               data-testid="archive-pagination"
             >
               <span className="text-xs text-muted-foreground" data-testid="archive-range">
                 Showing {from}–{to} of {total}
               </span>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-1.5">
                 <Button
                   variant="outline"
                   size="sm"
@@ -103,9 +149,25 @@ export default function Archive() {
                 >
                   <ChevronLeft className="size-4" /> Previous
                 </Button>
-                <span className="text-xs text-muted-foreground tabular-nums" data-testid="archive-page-indicator">
-                  Page {page + 1} of {pageCount}
-                </span>
+                {pageList(page, pageCount).map((item, i) =>
+                  item === "ellipsis" ? (
+                    <span key={`e-${i}`} className="px-1 text-xs text-muted-foreground" aria-hidden>
+                      …
+                    </span>
+                  ) : (
+                    <Button
+                      key={item}
+                      variant={item === page ? "default" : "outline"}
+                      size="sm"
+                      className="min-w-9 tabular-nums"
+                      aria-current={item === page ? "page" : undefined}
+                      onClick={() => setPage(item)}
+                      data-testid={`archive-page-btn-${item + 1}`}
+                    >
+                      {item + 1}
+                    </Button>
+                  ),
+                )}
                 <Button
                   variant="outline"
                   size="sm"

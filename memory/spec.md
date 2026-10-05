@@ -51,8 +51,9 @@ story can be flagged as a podcast episode candidate with free-text prep notes.
 - /api/briefings/{date} is the stable machine-readable contract for the downstream weekly agent.
 
 ## Frontend routes
-- `/` Today (latest briefing), `/archive` (past editions, **10 per page** with Previous/Next
-  pagination — client-side slice of `/briefings`), `/candidates` (podcast prep board — a Candidates/Positive
+- `/` Today (latest briefing), `/archive` (past editions — a **Per page** dropdown of 10/25/50
+  (persisted in localStorage) with Previous/Next plus **numbered page buttons** (compact, with an …
+  ellipsis for large page counts); client-side slice of `/briefings`), `/candidates` (podcast prep board — a Candidates/Positive
   view filter: Candidates shows is_candidate flags with clear/undo controls, Positive shows is_positive
   flags with no clear controls; both sort by date/podcast/importance), `/excluded` (excluded stories +
   rejected tips), `/briefings/:date` (full edition), `/briefings/:date/stories/:storyId` (detail + prep
