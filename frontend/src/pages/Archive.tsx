@@ -10,6 +10,7 @@ import type { BriefingSummary } from "@/lib/types";
 
 const PER_PAGE_OPTIONS = [10, 25, 50];
 const PER_PAGE_STORAGE_KEY = "wvedtalk.archive.perPage";
+const ORDER_STORAGE_KEY = "wvedtalk.archive.order";
 
 function formatDate(date: string) {
   const [y, m, d] = date.split("-").map(Number);
@@ -52,6 +53,15 @@ export default function Archive() {
     window.localStorage.setItem(PER_PAGE_STORAGE_KEY, String(perPage));
   }, [perPage]);
 
+  // Read order: the API returns newest-first; "oldest" simply reverses it. Remembered across visits.
+  const [order, setOrder] = useState<"newest" | "oldest">(() => {
+    const saved = typeof window !== "undefined" ? window.localStorage.getItem(ORDER_STORAGE_KEY) : null;
+    return saved === "oldest" ? "oldest" : "newest";
+  });
+  useEffect(() => {
+    window.localStorage.setItem(ORDER_STORAGE_KEY, order);
+  }, [order]);
+
   const [page, setPage] = useState(0);
   const total = data?.length ?? 0;
   const pageCount = Math.max(1, Math.ceil(total / perPage));
@@ -61,9 +71,13 @@ export default function Archive() {
     if (page > pageCount - 1) setPage(pageCount - 1);
   }, [page, pageCount]);
 
+  const ordered = useMemo(
+    () => (order === "newest" ? data ?? [] : [...(data ?? [])].reverse()),
+    [data, order],
+  );
   const pageItems = useMemo(
-    () => (data ?? []).slice(page * perPage, page * perPage + perPage),
-    [data, page, perPage],
+    () => ordered.slice(page * perPage, page * perPage + perPage),
+    [ordered, page, perPage],
   );
 
   const from = total === 0 ? 0 : page * perPage + 1;
@@ -79,26 +93,48 @@ export default function Archive() {
             Every daily briefing, newest first. Each edition opens to its full statewide workup.
           </p>
         </div>
-        {total > PER_PAGE_OPTIONS[0] && (
-          <label className="flex items-center gap-2 text-xs text-muted-foreground" data-testid="archive-per-page-label">
-            Per page
-            <select
-              value={perPage}
-              onChange={(e) => {
-                setPerPage(Number(e.target.value));
-                setPage(0);
-              }}
-              className="rounded-sm border border-border bg-card px-2 py-1 text-sm text-foreground"
-              data-testid="archive-per-page"
-            >
-              {PER_PAGE_OPTIONS.map((n) => (
-                <option key={n} value={n}>
-                  {n}
-                </option>
+        <div className="flex flex-wrap items-center gap-4">
+          {total > 1 && (
+            <div className="flex items-center gap-1 rounded-md border border-border p-0.5" data-testid="archive-order">
+              {([["newest", "Newest first"], ["oldest", "Oldest first"]] as const).map(([key, label]) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => {
+                    setOrder(key);
+                    setPage(0);
+                  }}
+                  data-testid={`order-${key}`}
+                  className={`rounded px-2.5 py-1 text-xs transition-colors duration-150 ${
+                    order === key ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {label}
+                </button>
               ))}
-            </select>
-          </label>
-        )}
+            </div>
+          )}
+          {total > PER_PAGE_OPTIONS[0] && (
+            <label className="flex items-center gap-2 text-xs text-muted-foreground" data-testid="archive-per-page-label">
+              Per page
+              <select
+                value={perPage}
+                onChange={(e) => {
+                  setPerPage(Number(e.target.value));
+                  setPage(0);
+                }}
+                className="rounded-sm border border-border bg-card px-2 py-1 text-sm text-foreground"
+                data-testid="archive-per-page"
+              >
+                {PER_PAGE_OPTIONS.map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+        </div>
       </div>
 
       {isLoading ? (
