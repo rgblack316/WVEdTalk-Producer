@@ -671,7 +671,7 @@ export default function Settings() {
             </p>
             <ul className="mt-4 space-y-2" data-testid="run-log-list">
               {runLog && runLog.length > 0 ? (
-                runLog.map((r) => (
+                runLog.slice(0, 10).map((r) => (
                   <li
                     key={r.id}
                     className="flex flex-wrap items-center justify-between gap-2 rounded-sm border border-border bg-background px-3 py-2 text-sm"
