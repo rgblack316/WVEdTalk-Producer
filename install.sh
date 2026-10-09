@@ -72,8 +72,16 @@ fill_if_blank() {
 
 prepare_env() {
   if [ ! -f .env ]; then
-    cp .env.example .env
-    c_ok "Created .env from .env.example."
+    if [ -f env.example ]; then
+      cp env.example .env
+      c_ok "Created .env from env.example."
+    elif [ -f .env.example ]; then
+      cp .env.example .env
+      c_ok "Created .env from .env.example."
+    else
+      c_err "No env template found (expected env.example). Re-clone the repository."
+      exit 1
+    fi
   else
     c_info ".env already exists — leaving it untouched."
   fi

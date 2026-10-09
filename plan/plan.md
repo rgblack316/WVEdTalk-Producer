@@ -49,7 +49,7 @@ Three containers, defined in `docker-compose.yml` (added this pass):
   relative `/api/...` (same contract as the Vite dev proxy). Publishes `HTTP_PORT` (default 80).
 
 Supporting files added this pass: `backend/Dockerfile`, `frontend/Dockerfile`,
-`frontend/nginx.conf`, `backend/.dockerignore`, `frontend/.dockerignore`, root `.env.example`
+`frontend/nginx.conf`, `backend/.dockerignore`, `frontend/.dockerignore`, root `env.example`
 (compose config), `.dockerignore`.
 
 > Interim note: the backend image currently still installs `emergentintegrations` (via an
@@ -100,10 +100,10 @@ A new panel on the existing Settings page, matching current desk styling, groupe
 ### Phase 1 — Scaffolding + tooling (THIS PASS, no app-code changes)
 - Rewrite this `plan/plan.md` (done).
 - Add `docker-compose.yml`, `backend/Dockerfile`, `frontend/Dockerfile`, `frontend/nginx.conf`,
-  `.dockerignore`s, root `.env.example`.
+  `.dockerignore`s, root `env.example`.
 - Add `install.sh` (first-time Docker bring-up, secret generation, health wait) and `upgrade.sh`
   (pre-upgrade Mongo backup, rebuild, recreate, prune).
-- The current code still uses `EMERGENT_*`; `.env.example` documents both the **current** keys
+- The current code still uses `EMERGENT_*`; `env.example` documents both the **current** keys
   (to run today) and the **target** self-hosted keys (used after Phase 2–5).
 
 ### Phase 2 — LLM provider abstraction (`backend/lib/llm.py`)
@@ -175,7 +175,7 @@ secret-encryption key.
 
 ### `install.sh` (first-time bring-up)
 1. Verifies `docker` and `docker compose` are available.
-2. Creates `.env` from `.env.example` if missing.
+2. Creates `.env` from `env.example` if missing.
 3. Auto-generates `SESSION_SECRET` and `APP_PASSCODE` if still blank/placeholder
    (`openssl rand -hex 32`, python fallback).
 4. `docker compose up -d --build`.
