@@ -1,16 +1,17 @@
+import { useState, useMemo } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ArrowLeft, Copy, Download, Clock, Loader2, ListTree, Megaphone, Link2 } from "lucide-react";
+import { ArrowLeft, Copy, Download, Clock, Loader2, ListTree, Megaphone, Link2, ShieldCheck, AlertTriangle, Eye, EyeOff, ClipboardCheck } from "lucide-react";
 import DeskLayout from "@/components/DeskLayout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ScoreChip, SourceList } from "@/components/StoryCard";
+import { ScoreChip, SourceList, isExternalUrl } from "@/components/StoryCard";
 import { ScriptView } from "@/components/ScriptView";
 import { apiGet, apiPost, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/useAuth";
 import { episodeToMarkdown } from "@/lib/episode";
-import type { WeeklyEpisode, DeskConfig } from "@/lib/types";
+import type { WeeklyEpisode, DeskConfig, SourceLink } from "@/lib/types";
 
 function fmt(date: string) {
   const [y, m, d] = date.split("-").map(Number);
@@ -61,6 +62,24 @@ export default function EpisodePage() {
     staleTime: 60000,
   });
   const hideUnverified = !!config?.hide_unverified_sources;
+  const [hideUnverifiedLocal, setHideUnverifiedLocal] = useState(false);
+
+  // Every source link in the episode (each selected story's sources + the show-notes list) and the
+  // subset flagged unverified — powers the dead-link report banner at the top of the page.
+  const unverifiedCount = useMemo(() => {
+    if (!episode) return 0;
+    const links: SourceLink[] = [
+      ...episode.selected_stories.flatMap((s) => s.sources),
+      ...episode.episode_links,
+    ];
+    return links.filter((l) => isExternalUrl(l.url) && l.verified === false).length;
+  }, [episode]);
+
+  // Only the verified show-notes links, for the one-click "copy clean list" into episode descriptions.
+  const cleanLinks = useMemo(
+    () => (episode?.episode_links ?? []).filter((l) => isExternalUrl(l.url) && l.verified !== false),
+    [episode],
+  );
 
   const chapterize = useMutation({
     mutationFn: () => apiPost<WeeklyEpisode>(`/episodes/${week}/chapterize`),
@@ -91,6 +110,36 @@ export default function EpisodePage() {
     onError: (e) =>
       toast.error(e instanceof ApiError ? String((e.body as { detail?: string })?.detail ?? e.message) : String(e)),
   });
+
+  const verifyLinks = useMutation({
+    mutationFn: () => apiPost<WeeklyEpisode>(`/episodes/${week}/verify-links`),
+    onSuccess: (d) => {
+      qc.invalidateQueries({ queryKey: ["episode", week] });
+      qc.invalidateQueries({ queryKey: ["unverified-count"] });
+      const u = [...d.selected_stories.flatMap((s) => s.sources), ...d.episode_links].filter(
+        (l) => l.verified === false,
+      ).length;
+      toast.success(u ? `Re-verified — ${u} link${u === 1 ? "" : "s"} still unverified` : "Re-verified — all sources reachable");
+    },
+    onError: (e) =>
+      toast.error(e instanceof ApiError ? String((e.body as { detail?: string })?.detail ?? e.message) : String(e)),
+  });
+
+  const copyCleanLinks = async () => {
+    if (!cleanLinks.length) {
+      toast.error("No verified links to copy");
+      return;
+    }
+    const text = cleanLinks
+      .map((s) => `${s.title || s.url}${s.outlet ? ` — ${s.outlet}` : ""}\n${s.url}`)
+      .join("\n\n");
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success(`Copied ${cleanLinks.length} verified link${cleanLinks.length === 1 ? "" : "s"}`);
+    } catch {
+      toast.error("Clipboard unavailable");
+    }
+  };
 
   const copyScript = async () => {
     if (!episode) return;
@@ -141,8 +190,45 @@ export default function EpisodePage() {
               <Button variant="outline" size="sm" onClick={downloadDoc} data-testid="download-episode-button">
                 <Download className="size-4" /> Download document
               </Button>
+              <Button variant="outline" size="sm" onClick={copyCleanLinks} data-testid="copy-clean-links-button">
+                <ClipboardCheck className="size-4" /> Copy verified links
+              </Button>
+              {canEdit && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={verifyLinks.isPending}
+                  onClick={() => verifyLinks.mutate()}
+                  data-testid="verify-episode-links-button"
+                >
+                  {verifyLinks.isPending ? <Loader2 className="size-4 animate-spin" /> : <ShieldCheck className="size-4" />}
+                  {verifyLinks.isPending ? "Re-verifying…" : "Re-verify links"}
+                </Button>
+              )}
             </div>
           </div>
+
+          {unverifiedCount > 0 && (
+            <div
+              className="mb-6 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-4 py-2.5 text-sm"
+              data-testid="episode-deadlink-report"
+            >
+              <AlertTriangle className="size-4 shrink-0 text-amber-600 dark:text-amber-400" />
+              <span className="font-medium">
+                <span data-testid="episode-unverified-count" className="tabular-nums">{unverifiedCount}</span>{" "}
+                unverified source link{unverifiedCount === 1 ? "" : "s"} in this episode — verify before citing on air.
+              </span>
+              <button
+                type="button"
+                onClick={() => setHideUnverifiedLocal((v) => !v)}
+                data-testid="episode-hide-unverified-toggle"
+                className="inline-flex items-center gap-1 rounded-sm border border-amber-500/50 px-2 py-0.5 text-xs text-amber-700 transition-colors duration-150 hover:bg-amber-500/20 dark:text-amber-300"
+              >
+                {hideUnverifiedLocal ? <Eye className="size-3" /> : <EyeOff className="size-3" />}
+                {hideUnverifiedLocal ? "Show unverified" : "Hide unverified"}
+              </button>
+            </div>
+          )}
 
           {episode.editorial_summary && (
             <section className="mb-10">
@@ -189,7 +275,7 @@ export default function EpisodePage() {
                     )}
                     {s.sources.length > 0 && (
                       <div className="mt-3 border-t border-border pt-3">
-                        <SourceList sources={s.sources} hideUnverified={hideUnverified} />
+                        <SourceList sources={s.sources} hideUnverified={hideUnverified || hideUnverifiedLocal} />
                       </div>
                     )}
                   </article>
@@ -268,7 +354,12 @@ export default function EpisodePage() {
                 )}
               </div>
             </div>
-            <ScriptView script={episode.recording_script} chapters={episode.chapters} links={episode.episode_links} />
+            <ScriptView
+              script={episode.recording_script}
+              chapters={episode.chapters}
+              links={episode.episode_links}
+              forceHideUnverified={hideUnverifiedLocal}
+            />
           </section>
         </div>
       ) : (

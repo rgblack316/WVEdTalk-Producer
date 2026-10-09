@@ -56,9 +56,13 @@ story can be flagged as a podcast episode candidate with free-text prep notes.
 - Two origins of URLs: (1) **Google Search grounding citations** — redirect links
   (`vertexaisearch.cloud.google.com/...`) that `resolve_links`/`_resolve_one` follow to the publisher URL;
   trusted as `verified=True`. (2) **Model-authored URLs** in the LLM's JSON `sources`/`source_log` — Gemini
-  often fabricates well-formed but non-existent URLs, so each is probed for reachability by
-  `desk._check_reachable` (HEAD, GET fallback, SSRF-guarded); reachable → `verified=True`, otherwise kept
-  with `verified=False` (we mark, not drop — a 403/anti-bot block can also read as unverified).
+  often fabricates well-formed but non-existent URLs, so each is probed by `desk._check_reachable`
+  (GET, follows redirects, SSRF-guarded). Reachable (status < 400) is NOT sufficient: `_looks_like_article`
+  then runs a content check — it rejects (a) a dead article URL the server bounces to the bare site root,
+  and (b) a soft-404 landing whose `<title>`/`<h1>` reads "page not found" / "article not found" / etc.
+  (phrases matched only in title/h1, never the body, so a real story mentioning an error isn't flagged).
+  Non-HTML primary docs (PDFs) pass. Pass → `verified=True`, else kept with `verified=False`
+  (we mark, not drop — a 403/anti-bot block can also read as unverified).
 - `_is_valid_source_url`/`_valid_sources` still DROP shape-invalid links (empty/relative, unresolved
   vertexaisearch stubs, our own app host). Reachability only sets the `verified` flag.
 - UI: `StoryCard.SourceList` and `ScriptView` render an amber "⚠ Unverified" badge when `verified === false`
@@ -79,6 +83,16 @@ story can be flagged as a podcast episode candidate with free-text prep notes.
   Settings button arms a two-click confirm (destructive).
 - **Verify a single story**: `POST /api/briefings/{date}/stories/{story_id}/verify-links` (editor)
   re-resolves just that story's sources; a "Re-verify links" button sits under the Sources list on StoryDetail.
+- **Verify one episode**: `POST /api/episodes/{week_of}/verify-links` (editor) re-resolves + re-verifies the
+  episode's source log, every selected-story's sources, and the show-notes list. `EpisodePage` wires it to a
+  "Re-verify links" button and invalidates both `["episode",week]` and `["unverified-count"]`.
+- **Per-episode controls on `EpisodePage`**: (a) a **dead-link report** banner at the top counts
+  `verified===false` links across selected-story sources + episode_links; (b) a **Hide/Show unverified**
+  toggle (local `hideUnverifiedLocal`, OR-combined with the global config, passed to `SourceList` and to
+  `ScriptView` via its `forceHideUnverified` prop) hides unverified links in this view only; (c) a
+  **Copy verified links** button copies only `verified!==false` show-notes links to the clipboard.
+- **Nav unverified badge**: `GET /api/unverified-count` powers an amber count badge in the main nav; it
+  now sits on the **Archive** nav item (moved from Settings) in `DeskLayout`.
 - **Verify a single episode**: `POST /api/episodes/{week_of}/verify-links` (editor) re-resolves that
   episode's source log, selected-story sources, and show-notes links; "Re-verify links" button in the
   Episodes "Recording Script" header.

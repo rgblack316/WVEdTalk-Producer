@@ -13,10 +13,12 @@ export function ScriptView({
   script,
   chapters,
   links,
+  forceHideUnverified = false,
 }: {
   script: string;
   chapters?: string[];
   links?: SourceLink[];
+  forceHideUnverified?: boolean;
 }) {
   const lines = (script || "").split("\n");
   const { data: config } = useQuery({
@@ -24,7 +26,7 @@ export function ScriptView({
     queryFn: () => apiGet<DeskConfig>("/settings"),
     staleTime: 60000,
   });
-  const hideUnverified = !!config?.hide_unverified_sources;
+  const hideUnverified = forceHideUnverified || !!config?.hide_unverified_sources;
   const validLinks = (links ?? [])
     .filter((s) => isExternalUrl(s?.url))
     .filter((s) => !(hideUnverified && s?.verified === false));

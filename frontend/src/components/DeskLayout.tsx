@@ -159,7 +159,7 @@ export default function DeskLayout({ children }: { children: React.ReactNode }) 
                         {positiveCount}
                       </span>
                     )}
-                    {n.to === "/settings" && unverifiedCount > 0 && (
+                    {n.to === "/archive" && unverifiedCount > 0 && (
                       <span
                         className="ml-1.5 inline-flex min-w-[1.125rem] items-center justify-center rounded-full bg-amber-500 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white"
                         data-testid="unverified-count-badge"

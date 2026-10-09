@@ -365,10 +365,59 @@ async def _resolve_one(client, url: str, cache: Dict[str, str]) -> str:
     return final
 
 
+# Phrases that mark a soft-404 / "article gone" landing page. We only look for these inside the
+# page's <title> and <h1> zones (never the article body) so a real story that merely mentions an
+# error does not get flagged.
+_SOFT_404 = (
+    "page not found", "404 not found", "error 404", "404 error",
+    "page cannot be found", "page can't be found", "page you requested",
+    "page you are looking for", "page you were looking for", "no longer available",
+    "article not found", "story not found", "content not found", "not available",
+    "page isn't available", "page is not available", "page not available",
+    "couldn't find", "could not be found", "cannot be found", "we can't find",
+    "we cannot find", "page has moved", "page may have been removed",
+    "nothing was found", "oops", "access denied", "subscribe to continue",
+)
+
+
+def _strip_tags(s: str) -> str:
+    return re.sub(r"<[^>]+>", " ", s or "")
+
+
+def _looks_like_article(requested: str, final: str, body: str) -> bool:
+    """A page that returns HTTP 200 is not necessarily the article the link claims to be. Reject two
+    common decoys that read as 'reachable' but are not the story: (1) a dead article URL the server
+    silently bounces to the publisher's homepage, and (2) a soft-404 / 'page not found' landing that
+    answers 200. Everything else (including non-HTML primary docs like PDFs) is treated as a hit."""
+    try:
+        req_path = urllib.parse.urlparse(requested).path.strip("/")
+        fin_path = urllib.parse.urlparse(final).path.strip("/")
+    except Exception:
+        return True
+    # A real article URL had a path, but we were redirected to the bare site root → not the story.
+    if len(req_path) >= 2 and not fin_path:
+        return False
+    low = (body or "").lower()
+    if not low:
+        return True
+    zones = []
+    mt = re.search(r"<title[^>]*>(.*?)</title>", low, re.S)
+    if mt:
+        zones.append(_strip_tags(mt.group(1)))
+    for mh in re.finditer(r"<h1[^>]*>(.*?)</h1>", low, re.S):
+        zones.append(_strip_tags(mh.group(1)))
+    blob = " ".join(zones)
+    if not blob.strip():
+        return True
+    return not any(sig in blob for sig in _SOFT_404)
+
+
 async def _check_reachable(client, url: str, cache: Dict[str, bool]) -> bool:
-    """Confirm a model-authored URL actually resolves to a live page (status < 400). HEAD first,
-    GET fallback for servers that reject HEAD. A failure/403/404 => treat as unverified (we keep the
-    link but flag it), since Gemini frequently fabricates plausible-looking but non-existent URLs."""
+    """Confirm a model-authored URL resolves to a live page that is actually the article it claims to
+    be — not just any 200. We GET (following redirects), require status < 400, and then run a content
+    check (`_looks_like_article`) that rejects homepage bounces and soft-404 landing pages. A failure,
+    403/404, homepage redirect or 'page not found' body => unverified (we keep the link but flag it),
+    since Gemini frequently fabricates plausible-looking URLs that resolve to a section front or 404."""
     if not url:
         return False
     if url in cache:
@@ -379,16 +428,10 @@ async def _check_reachable(client, url: str, cache: Dict[str, bool]) -> bool:
         return False
     ok = False
     try:
-        r = await client.head(url)
-        if r.status_code >= 400:
-            r = await client.get(url)
-        ok = r.status_code < 400
+        r = await client.get(url)
+        ok = r.status_code < 400 and _looks_like_article(url, str(r.url), r.text)
     except Exception:
-        try:
-            r = await client.get(url)
-            ok = r.status_code < 400
-        except Exception:
-            ok = False
+        ok = False
     cache[url] = ok
     return ok
 
