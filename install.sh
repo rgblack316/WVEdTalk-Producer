@@ -13,7 +13,7 @@
 # =============================================================================
 set -euo pipefail
 
-REPO_URL="${REPO_URL:-https://github.com/YOUR-ORG/wvedtalk.git}"
+REPO_URL="${REPO_URL:-https://github.com/rgblack316/WVEdTalk-Producer.git}"
 INSTALL_DIR="${INSTALL_DIR:-}"
 
 log()  { echo "[WVEdTalk] $*"; }
