@@ -50,6 +50,20 @@ story can be flagged as a podcast episode candidate with free-text prep notes.
   cache so it stays in sync).
 - /api/briefings/{date} is the stable machine-readable contract for the downstream weekly agent.
 
+## Source links (grounding, resolution & verification)
+- Daily briefings (`lib/desk._resolve_sources`) and weekly episodes (`lib/producer`, via `desk.resolve_links`)
+  share one resolver. `SourceLink` carries `title, url, outlet, verified` (TS mirror has `verified?`).
+- Two origins of URLs: (1) **Google Search grounding citations** — redirect links
+  (`vertexaisearch.cloud.google.com/...`) that `resolve_links`/`_resolve_one` follow to the publisher URL;
+  trusted as `verified=True`. (2) **Model-authored URLs** in the LLM's JSON `sources`/`source_log` — Gemini
+  often fabricates well-formed but non-existent URLs, so each is probed for reachability by
+  `desk._check_reachable` (HEAD, GET fallback, SSRF-guarded); reachable → `verified=True`, otherwise kept
+  with `verified=False` (we mark, not drop — a 403/anti-bot block can also read as unverified).
+- `_is_valid_source_url`/`_valid_sources` still DROP shape-invalid links (empty/relative, unresolved
+  vertexaisearch stubs, our own app host). Reachability only sets the `verified` flag.
+- UI: `StoryCard.SourceList` and `ScriptView` render an amber "⚠ Unverified" badge when `verified === false`
+  (legacy links default to verified, no badge).
+
 ## Frontend routes
 - `/` Today (latest briefing), `/archive` (past editions — a **Newest/Oldest first** order toggle
   (persisted) plus a **Per page** dropdown of 10/25/50 (persisted in localStorage) with Previous/Next

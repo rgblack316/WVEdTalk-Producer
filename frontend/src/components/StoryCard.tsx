@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
-import { ExternalLink, Star, Ban, Sparkles } from "lucide-react";
+import { ExternalLink, Star, Ban, Sparkles, AlertTriangle } from "lucide-react";
 import type { SourceLink, Story } from "@/lib/types";
 
 // A source is only a real article link if it's an absolute http(s) URL to another site — never
@@ -41,6 +41,16 @@ export function SourceList({ sources }: { sources: SourceLink[] }) {
             <span>
               {s.title || s.url}
               {s.outlet && <span className="text-muted-foreground"> — {s.outlet}</span>}
+              {s.verified === false && (
+                <Badge
+                  variant="outline"
+                  className="ml-1.5 gap-1 border-amber-500/50 py-0 text-[10px] text-amber-600 dark:text-amber-400"
+                  title="We couldn't confirm this link resolves to a live page — verify before citing."
+                  data-testid="source-unverified"
+                >
+                  <AlertTriangle className="size-2.5" /> Unverified
+                </Badge>
+              )}
             </span>
           </a>
         </li>

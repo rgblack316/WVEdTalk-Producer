@@ -1,4 +1,4 @@
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, AlertTriangle } from "lucide-react";
 import { isExternalUrl } from "@/components/StoryCard";
 import type { SourceLink } from "@/lib/types";
 
@@ -76,6 +76,15 @@ export function ScriptView({
                   <span>
                     {src.title || src.url}
                     {src.outlet && <span className="text-muted-foreground"> — {src.outlet}</span>}
+                    {src.verified === false && (
+                      <span
+                        className="ml-1.5 inline-flex items-center gap-1 rounded-sm border border-amber-500/50 px-1 py-0 text-[10px] text-amber-600 dark:text-amber-400"
+                        title="We couldn't confirm this link resolves to a live page — verify before citing."
+                        data-testid="episode-link-unverified"
+                      >
+                        <AlertTriangle className="size-2.5" /> Unverified
+                      </span>
+                    )}
                   </span>
                 </a>
               </li>

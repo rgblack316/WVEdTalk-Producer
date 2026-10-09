@@ -4,6 +4,7 @@ export interface SourceLink {
   title: string;
   url: string;
   outlet: string;
+  verified?: boolean;
 }
 
 export interface Story {

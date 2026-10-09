@@ -15,6 +15,7 @@ class SourceLink(BaseModel):
     title: str = ""
     url: str = ""
     outlet: str = ""
+    verified: bool = True  # False = we couldn't confirm the page is reachable (likely LLM-fabricated)
 
 
 class Story(BaseModel):

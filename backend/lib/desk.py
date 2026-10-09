@@ -365,14 +365,46 @@ async def _resolve_one(client, url: str, cache: Dict[str, str]) -> str:
     return final
 
 
+async def _check_reachable(client, url: str, cache: Dict[str, bool]) -> bool:
+    """Confirm a model-authored URL actually resolves to a live page (status < 400). HEAD first,
+    GET fallback for servers that reject HEAD. A failure/403/404 => treat as unverified (we keep the
+    link but flag it), since Gemini frequently fabricates plausible-looking but non-existent URLs."""
+    if not url:
+        return False
+    if url in cache:
+        return cache[url]
+    host = urllib.parse.urlparse(url).hostname or ""
+    if not host or _is_private_host(host):
+        cache[url] = False
+        return False
+    ok = False
+    try:
+        r = await client.head(url)
+        if r.status_code >= 400:
+            r = await client.get(url)
+        ok = r.status_code < 400
+    except Exception:
+        try:
+            r = await client.get(url)
+            ok = r.status_code < 400
+        except Exception:
+            ok = False
+    cache[url] = ok
+    return ok
+
+
 async def resolve_links(links: List[SourceLink]) -> None:
-    """Resolve Google grounding redirects to publisher URLs and fill missing outlets. Reusable."""
+    """Resolve Google grounding redirects to publisher URLs, fill missing outlets, and verify
+    reachability. Google-grounded citations (redirects we successfully follow to a publisher page)
+    are trusted as verified; other (model-authored) URLs are probed and marked verified only if the
+    page is reachable. Nothing is dropped here — unreachable links are kept with verified=False."""
     import httpx
 
     links = [l for l in links if l]
     if not links:
         return
     cache: Dict[str, str] = {}
+    reach: Dict[str, bool] = {}
     async with httpx.AsyncClient(
         follow_redirects=True,
         max_redirects=5,
@@ -380,10 +412,17 @@ async def resolve_links(links: List[SourceLink]) -> None:
         headers={"User-Agent": "Mozilla/5.0 (WV-Desk)"},
     ) as client:
         async def fix(link):
-            resolved = await _resolve_one(client, link.url, cache)
+            original = link.url or ""
+            grounded = "vertexaisearch.cloud.google.com" in original
+            resolved = await _resolve_one(client, original, cache)
             link.url = resolved
             if not link.outlet:
                 link.outlet = _domain(resolved)
+            if grounded and "vertexaisearch" not in resolved and resolved != original:
+                # A Google grounding citation we followed to a real publisher page — trusted.
+                link.verified = True
+            else:
+                link.verified = await _check_reachable(client, resolved, reach)
 
         await asyncio.gather(*(fix(link) for link in links), return_exceptions=True)
 

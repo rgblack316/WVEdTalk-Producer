@@ -333,7 +333,12 @@ def _collect_links(source_log, stories) -> List[SourceLink]:
                 continue
             seen.add(url)
             out.append(
-                SourceLink(url=url, title=getattr(s, "title", "") or "", outlet=getattr(s, "outlet", "") or "")
+                SourceLink(
+                    url=url,
+                    title=getattr(s, "title", "") or "",
+                    outlet=getattr(s, "outlet", "") or "",
+                    verified=bool(getattr(s, "verified", True)),
+                )
             )
 
     _add(source_log)
