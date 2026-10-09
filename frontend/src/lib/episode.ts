@@ -1,4 +1,9 @@
-import type { WeeklyEpisode } from "@/lib/types";
+import type { WeeklyEpisode, SourceLink } from "@/lib/types";
+
+function srcLine(src: SourceLink): string {
+  const tag = src.grounded ? " _(Grounded)_" : src.verified === false ? " _(Unverified)_" : "";
+  return `- [${src.title || src.url}](${src.url})${src.outlet ? ` — ${src.outlet}` : ""}${tag}`;
+}
 
 export function episodeToMarkdown(e: WeeklyEpisode): string {
   const L: string[] = [];
@@ -24,9 +29,7 @@ export function episodeToMarkdown(e: WeeklyEpisode): string {
     if (s.why_it_matters) L.push(`**Why It Matters.** ${s.why_it_matters}`, ``);
     if (s.sources.length) {
       L.push(`**Strongest Sources:**`);
-      s.sources.forEach((src) =>
-        L.push(`- [${src.title || src.url}](${src.url})${src.outlet ? ` — ${src.outlet}` : ""}`),
-      );
+      s.sources.forEach((src) => L.push(srcLine(src)));
       L.push(``);
     }
   });
@@ -59,9 +62,7 @@ export function episodeToMarkdown(e: WeeklyEpisode): string {
   const links = e.episode_links && e.episode_links.length ? e.episode_links : e.source_log;
   if (links.length) {
     L.push(`## Links to New Sources for This Week:`, ``);
-    links.forEach((src) =>
-      L.push(`- [${src.title || src.url}](${src.url})${src.outlet ? ` — ${src.outlet}` : ""}`),
-    );
+    links.forEach((src) => L.push(srcLine(src)));
     L.push(``);
   }
   L.push(`---`, `*Produced with ${e.model} using live web research.*`);

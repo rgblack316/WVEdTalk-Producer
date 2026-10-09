@@ -63,6 +63,9 @@ story can be flagged as a podcast episode candidate with free-text prep notes.
   vertexaisearch stubs, our own app host). Reachability only sets the `verified` flag.
 - UI: `StoryCard.SourceList` and `ScriptView` render an amber "⚠ Unverified" badge when `verified === false`
   and an emerald "Grounded" badge when `grounded === true` (legacy links default to verified/not-grounded).
+  On the weekly episode page (`EpisodePage`) both surfaces carry these badges: the selected-story
+  ("articles chosen") sources reuse `SourceList`, and the bottom "Links to New Sources" list is `ScriptView`.
+  The episode Markdown export (`lib/episode.ts`) appends `_(Grounded)_` / `_(Unverified)_` tags to every source line.
   `grounded` is sticky across re-checks (preserved even once the stored URL is the resolved publisher link).
 - **Hide-unverified toggle**: `desk_config.hide_unverified_sources` (`POST /api/settings/hide-unverified {enabled}`,
   Settings "Source links" panel, admin). When on, `SourceList`/`ScriptView` drop `verified === false` links from

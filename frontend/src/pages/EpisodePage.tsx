@@ -1,16 +1,16 @@
 import { useParams, Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ArrowLeft, Copy, Download, ExternalLink, Clock, Loader2, ListTree, Megaphone, Link2 } from "lucide-react";
+import { ArrowLeft, Copy, Download, Clock, Loader2, ListTree, Megaphone, Link2 } from "lucide-react";
 import DeskLayout from "@/components/DeskLayout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ScoreChip } from "@/components/StoryCard";
+import { ScoreChip, SourceList } from "@/components/StoryCard";
 import { ScriptView } from "@/components/ScriptView";
 import { apiGet, apiPost, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/useAuth";
 import { episodeToMarkdown } from "@/lib/episode";
-import type { WeeklyEpisode } from "@/lib/types";
+import type { WeeklyEpisode, DeskConfig } from "@/lib/types";
 
 function fmt(date: string) {
   const [y, m, d] = date.split("-").map(Number);
@@ -55,6 +55,12 @@ export default function EpisodePage() {
     queryFn: () => apiGet<WeeklyEpisode>(`/episodes/${week}`),
     retry: false,
   });
+  const { data: config } = useQuery({
+    queryKey: ["config"],
+    queryFn: () => apiGet<DeskConfig>("/settings"),
+    staleTime: 60000,
+  });
+  const hideUnverified = !!config?.hide_unverified_sources;
 
   const chapterize = useMutation({
     mutationFn: () => apiPost<WeeklyEpisode>(`/episodes/${week}/chapterize`),
@@ -182,19 +188,9 @@ export default function EpisodePage() {
                       </p>
                     )}
                     {s.sources.length > 0 && (
-                      <ul className="mt-3 space-y-1 border-t border-border pt-3">
-                        {s.sources.map((src, j) => (
-                          <li key={src.url || j} className="text-sm">
-                            <a href={src.url} target="_blank" rel="noreferrer" className="inline-flex items-start gap-1.5 text-primary hover:underline">
-                              <ExternalLink className="mt-1 size-3 shrink-0" />
-                              <span>
-                                {src.title || src.url}
-                                {src.outlet && <span className="text-muted-foreground"> — {src.outlet}</span>}
-                              </span>
-                            </a>
-                          </li>
-                        ))}
-                      </ul>
+                      <div className="mt-3 border-t border-border pt-3">
+                        <SourceList sources={s.sources} hideUnverified={hideUnverified} />
+                      </div>
                     )}
                   </article>
                 ))}
