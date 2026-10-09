@@ -13,7 +13,16 @@ public share links.
 
 - **Daily Briefing** — statewide research (The Big Three, K–12, Higher Ed, State Policy,
   Trends, Podcast Opportunities, Source Log) following a strict editorial ruleset, with
-  per-story importance/podcast scores and verified source links.
+  per-story importance/podcast scores and **content-verified** source links.
+- **Source-link verification** — every model-authored link is fetched and checked that it is
+  really the article it claims to be, not just any page that returns HTTP 200. A link is flagged
+  **Unverified** (amber badge, never auto-deleted) when it 404s, is unreachable, silently bounces
+  to the publisher's homepage, is a soft-404 "page not found" landing, or resolves to a real but
+  **wrong** story whose page is missing the claimed headline words. Google-grounded citations show a
+  **Grounded** badge and are trusted. Tools: a desk-wide one-pass **re-check all**, an admin
+  **purge dead links**, a per-story and a **per-episode "Re-verify links"** button, a per-episode
+  **dead-link report** + **Hide/Show unverified** toggle + **Copy verified links**, a global
+  hide-unverified setting, and an amber unverified-count badge on the **Archive** nav item.
 - **Weekly Podcast Producer** — a 15–20 min recording script with a verbatim host intro,
   `## Chapter` headers, per-story segment timers, and producer notes, generated Fridays.
   Uses a **hybrid** approach: host-flagged Podcast Prep candidates are prioritized
@@ -196,6 +205,12 @@ rehydrate a self-hosted instance.
 
 ## Notes
 
+- **Source-link verification is a heuristic, non-destructive gate.** The desk fetches each
+  model-authored link and marks it `verified=False` (keeps it, badges it amber) unless it returns a
+  live page that passes a homepage-bounce check, a soft-404 title/h1 check, and a title-match check
+  (at least half of the claimed headline's distinctive words appear on the page). This deliberately
+  errs toward flagging rather than hiding — a reworded real headline or an anti-bot 403 can read as
+  unverified, so links are never auto-removed; an admin can purge them explicitly.
 - Environment secrets and database data are **not** included in the repository.
 - Scheduled jobs run in-process against an admin-configured schedule (defaults: daily briefing
   22:00, weekly episode Fridays 16:00, in the configured home timezone; each fires only if that

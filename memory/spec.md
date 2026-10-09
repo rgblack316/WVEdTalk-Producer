@@ -61,8 +61,11 @@ story can be flagged as a podcast episode candidate with free-text prep notes.
   then runs a content check — it rejects (a) a dead article URL the server bounces to the bare site root,
   and (b) a soft-404 landing whose `<title>`/`<h1>` reads "page not found" / "article not found" / etc.
   (phrases matched only in title/h1, never the body, so a real story mentioning an error isn't flagged).
-  Non-HTML primary docs (PDFs) pass. Pass → `verified=True`, else kept with `verified=False`
-  (we mark, not drop — a 403/anti-bot block can also read as unverified).
+  Finally `_title_matches` rejects a real-but-WRONG article: it requires >=50% of the distinctive words
+  (len>=4, non-stopword) of the link's claimed `title` to appear in the page's visible text; skipped when
+  the title has <3 distinctive words or the body is empty/non-HTML. `_fetch_page` GETs each URL once and
+  caches (status, final_url, body) so all three checks share one round-trip. Non-HTML primary docs (PDFs)
+  pass. Pass → `verified=True`, else kept with `verified=False` (we mark, not drop).
 - `_is_valid_source_url`/`_valid_sources` still DROP shape-invalid links (empty/relative, unresolved
   vertexaisearch stubs, our own app host). Reachability only sets the `verified` flag.
 - UI: `StoryCard.SourceList` and `ScriptView` render an amber "⚠ Unverified" badge when `verified === false`

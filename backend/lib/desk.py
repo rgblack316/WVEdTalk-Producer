@@ -412,42 +412,89 @@ def _looks_like_article(requested: str, final: str, body: str) -> bool:
     return not any(sig in blob for sig in _SOFT_404)
 
 
-async def _check_reachable(client, url: str, cache: Dict[str, bool]) -> bool:
-    """Confirm a model-authored URL resolves to a live page that is actually the article it claims to
-    be — not just any 200. We GET (following redirects), require status < 400, and then run a content
-    check (`_looks_like_article`) that rejects homepage bounces and soft-404 landing pages. A failure,
-    403/404, homepage redirect or 'page not found' body => unverified (we keep the link but flag it),
-    since Gemini frequently fabricates plausible-looking URLs that resolve to a section front or 404."""
-    if not url:
-        return False
+async def _fetch_page(client, url: str, cache: Dict[str, tuple]) -> tuple:
+    """GET a URL once (following redirects) and cache (status, final_url, body) keyed by URL, so the
+    status/article/title checks all reuse a single network round-trip per distinct link."""
     if url in cache:
         return cache[url]
-    host = urllib.parse.urlparse(url).hostname or ""
-    if not host or _is_private_host(host):
-        cache[url] = False
-        return False
-    ok = False
+    result = (0, url, "")
     try:
         r = await client.get(url)
-        ok = r.status_code < 400 and _looks_like_article(url, str(r.url), r.text)
+        result = (r.status_code, str(r.url), r.text)
     except Exception:
-        ok = False
-    cache[url] = ok
-    return ok
+        result = (0, url, "")
+    cache[url] = result
+    return result
+
+
+# Short/common words carry no discriminating power for a title match; "west"/"virginia"/"wv" appear
+# on nearly every WV education page, so excluding them keeps the ratio meaningful.
+_TITLE_STOP = {
+    "the", "a", "an", "and", "or", "of", "to", "in", "on", "for", "with", "at", "by", "from",
+    "as", "is", "are", "was", "were", "be", "been", "it", "its", "this", "that", "these", "those",
+    "but", "not", "has", "have", "had", "will", "would", "can", "could", "after", "over", "into",
+    "amid", "new", "says", "said", "report", "reports", "about", "more", "than", "west", "virginia",
+    "wv", "county", "school", "schools", "education",
+}
+
+
+def _sig_words(text: str) -> List[str]:
+    """Distinctive lowercase tokens (len >= 4, non-stopword) used to compare a claimed title to a page."""
+    return [w for w in re.findall(r"[a-z0-9]+", (text or "").lower()) if len(w) >= 4 and w not in _TITLE_STOP]
+
+
+def _title_matches(title: str, body: str) -> bool:
+    """Guard against wrong-article links that still resolve to a real story: check that the headline
+    the model claimed actually appears on the page. We take the distinctive words of `title` and
+    require at least half of them to appear somewhere in the page's visible text. Skipped (returns
+    True) when the title has too few distinctive words to judge, or the body is empty/non-HTML —
+    this is a heuristic that only flags clear mismatches, never near-misses from a reworded headline."""
+    terms = set(_sig_words(title))
+    if len(terms) < 3:
+        return True
+    text = _strip_tags(body).lower()
+    if not text.strip():
+        return True
+    present = sum(1 for t in terms if t in text)
+    return present / len(terms) >= 0.5
+
+
+async def _check_reachable(client, url: str, title: str, cache: Dict[str, tuple]) -> bool:
+    """Confirm a model-authored URL resolves to a live page that is actually the article it claims to
+    be — not just any 200. We GET (following redirects), require status < 400, then run a content
+    check (`_looks_like_article`, rejects homepage bounces and soft-404 landings) and a title match
+    (`_title_matches`, rejects a real-but-wrong article whose page lacks the claimed headline). Any
+    failure => unverified (we keep the link but flag it), since Gemini frequently fabricates
+    plausible-looking URLs that resolve to a section front, a 404, or an unrelated story."""
+    if not url:
+        return False
+    host = urllib.parse.urlparse(url).hostname or ""
+    if not host or _is_private_host(host):
+        return False
+    status, final, body = await _fetch_page(client, url, cache)
+    if status <= 0 or status >= 400:
+        return False
+    if not _looks_like_article(url, final, body):
+        return False
+    if not _title_matches(title, body):
+        return False
+    return True
 
 
 async def resolve_links(links: List[SourceLink]) -> None:
     """Resolve Google grounding redirects to publisher URLs, fill missing outlets, and verify
     reachability. Google-grounded citations (redirects we successfully follow to a publisher page)
     are trusted as verified; other (model-authored) URLs are probed and marked verified only if the
-    page is reachable. Nothing is dropped here — unreachable links are kept with verified=False."""
+    page is reachable AND actually the claimed article (not a homepage bounce, soft-404, or an
+    unrelated real story — see `_check_reachable`). Nothing is dropped here — links that fail any of
+    those checks are kept with verified=False."""
     import httpx
 
     links = [l for l in links if l]
     if not links:
         return
     cache: Dict[str, str] = {}
-    reach: Dict[str, bool] = {}
+    pages: Dict[str, tuple] = {}
     async with httpx.AsyncClient(
         follow_redirects=True,
         max_redirects=5,
@@ -471,7 +518,7 @@ async def resolve_links(links: List[SourceLink]) -> None:
                 # A Google grounding citation we followed to a real publisher page — trusted.
                 link.verified = True
             else:
-                link.verified = await _check_reachable(client, resolved, reach)
+                link.verified = await _check_reachable(client, resolved, link.title, pages)
 
         await asyncio.gather(*(fix(link) for link in links), return_exceptions=True)
 
