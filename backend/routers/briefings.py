@@ -29,35 +29,143 @@ def _clean(doc: dict) -> dict:
     return doc
 
 
+def _links_from(items) -> List[SourceLink]:
+    return [SourceLink(**s) for s in (items or []) if isinstance(s, dict)]
+
+
+async def _recheck_briefing(d: dict) -> tuple[int, int]:
+    all_links: List[SourceLink] = []
+    sl = _links_from(d.get("source_log"))
+    stories = {i: _links_from(s.get("sources")) for i, s in enumerate(d.get("stories") or [])}
+    for objs in stories.values():
+        all_links.extend(objs)
+    all_links.extend(sl)
+    if not all_links:
+        return 0, 0
+    await desk.resolve_links(all_links)
+    set_doc = {"source_log": [o.model_dump() for o in sl]}
+    for i, objs in stories.items():
+        set_doc[f"stories.{i}.sources"] = [o.model_dump() for o in objs]
+    await db.briefings.update_one({"date": d["date"]}, {"$set": set_doc})
+    return len(all_links), sum(1 for o in all_links if not o.verified)
+
+
+async def _recheck_episode(e: dict) -> tuple[int, int]:
+    all_links: List[SourceLink] = []
+    sl = _links_from(e.get("source_log"))
+    el = _links_from(e.get("episode_links"))
+    stories = {i: _links_from(s.get("sources")) for i, s in enumerate(e.get("selected_stories") or [])}
+    for objs in stories.values():
+        all_links.extend(objs)
+    all_links.extend(sl)
+    all_links.extend(el)
+    if not all_links:
+        return 0, 0
+    await desk.resolve_links(all_links)
+    set_doc = {"source_log": [o.model_dump() for o in sl], "episode_links": [o.model_dump() for o in el]}
+    for i, objs in stories.items():
+        set_doc[f"selected_stories.{i}.sources"] = [o.model_dump() for o in objs]
+    await db.episodes.update_one({"week_of": e["week_of"]}, {"$set": set_doc})
+    return len(all_links), sum(1 for o in all_links if not o.verified)
+
+
+@router.get("/unverified-count")
+async def unverified_count():
+    """Rough desk-wide count of source links currently flagged unverified (verified == False) across
+    briefings and episodes — powers the nav badge."""
+    n = 0
+    async for d in db.briefings.find({}, {"_id": 0, "source_log": 1, "stories.sources": 1}):
+        for s in d.get("source_log") or []:
+            if s.get("verified") is False:
+                n += 1
+        for st in d.get("stories") or []:
+            for x in st.get("sources") or []:
+                if x.get("verified") is False:
+                    n += 1
+    async for e in db.episodes.find({}, {"_id": 0, "episode_links": 1}):
+        for s in e.get("episode_links") or []:
+            if s.get("verified") is False:
+                n += 1
+    return {"count": n}
+
+
 @router.post("/briefings/recheck-sources")
 async def recheck_sources(_admin=Depends(require_admin)):
     """Admin one-pass maintenance: re-resolve and re-verify every source link across ALL past
-    briefings (source log + each story's sources), persisting updated verified/grounded/outlet flags.
-    Returns how many briefings and links were checked, and how many are now unverified."""
-    docs = await db.briefings.find({}).sort("date", -1).to_list(2000)
-    briefings_done = 0
-    links_checked = 0
-    unverified = 0
-    for d in docs:
-        all_links: List[SourceLink] = []
-        sl_objs = [SourceLink(**s) for s in (d.get("source_log") or []) if isinstance(s, dict)]
-        story_objs: dict = {}
+    briefings AND weekly episodes (source logs, story sources, episode link lists). Returns how many
+    briefings/episodes and links were checked, and how many are now unverified."""
+    briefings = episodes = links = unverified = 0
+    for d in await db.briefings.find({}).sort("date", -1).to_list(2000):
+        n, u = await _recheck_briefing(d)
+        if n:
+            briefings += 1
+            links += n
+            unverified += u
+    for e in await db.episodes.find({}).to_list(2000):
+        n, u = await _recheck_episode(e)
+        if n:
+            episodes += 1
+            links += n
+            unverified += u
+    return {"briefings": briefings, "episodes": episodes, "links_checked": links, "unverified": unverified}
+
+
+def _drop_unverified(items) -> tuple[list, int]:
+    kept = [s for s in (items or []) if not (isinstance(s, dict) and s.get("verified") is False)]
+    return kept, len(items or []) - len(kept)
+
+
+@router.post("/briefings/purge-unverified")
+async def purge_unverified(_admin=Depends(require_admin)):
+    """Admin: permanently delete every link currently flagged unverified (verified == False) from all
+    briefings and episodes. Destructive — confirm in the UI first. Returns how many links were removed."""
+    removed = briefings = episodes = 0
+    for d in await db.briefings.find({}).to_list(2000):
+        sl, r = _drop_unverified(d.get("source_log"))
+        set_doc = {"source_log": sl}
+        n = r
         for i, s in enumerate(d.get("stories") or []):
-            objs = [SourceLink(**x) for x in (s.get("sources") or []) if isinstance(x, dict)]
-            story_objs[i] = objs
-            all_links.extend(objs)
-        all_links.extend(sl_objs)
-        if not all_links:
-            continue
-        await desk.resolve_links(all_links)
-        set_doc = {"source_log": [o.model_dump() for o in sl_objs]}
-        for i, objs in story_objs.items():
-            set_doc[f"stories.{i}.sources"] = [o.model_dump() for o in objs]
-        await db.briefings.update_one({"date": d["date"]}, {"$set": set_doc})
-        briefings_done += 1
-        links_checked += len(all_links)
-        unverified += sum(1 for o in all_links if not o.verified)
-    return {"briefings": briefings_done, "links_checked": links_checked, "unverified": unverified}
+            kept, rr = _drop_unverified(s.get("sources"))
+            if rr:
+                set_doc[f"stories.{i}.sources"] = kept
+                n += rr
+        if n:
+            await db.briefings.update_one({"date": d["date"]}, {"$set": set_doc})
+            removed += n
+            briefings += 1
+    for e in await db.episodes.find({}).to_list(2000):
+        sl, r1 = _drop_unverified(e.get("source_log"))
+        el, r2 = _drop_unverified(e.get("episode_links"))
+        set_doc = {"source_log": sl, "episode_links": el}
+        n = r1 + r2
+        for i, s in enumerate(e.get("selected_stories") or []):
+            kept, rr = _drop_unverified(s.get("sources"))
+            if rr:
+                set_doc[f"selected_stories.{i}.sources"] = kept
+                n += rr
+        if n:
+            await db.episodes.update_one({"week_of": e["week_of"]}, {"$set": set_doc})
+            removed += n
+            episodes += 1
+    return {"removed": removed, "briefings": briefings, "episodes": episodes}
+
+
+@router.post("/briefings/{date}/stories/{story_id}/verify-links", response_model=Briefing)
+async def verify_story_links(date: str, story_id: str, _edit=Depends(require_editor)):
+    """Re-resolve and re-verify a single story's source links on demand (from its detail page)."""
+    doc = await db.briefings.find_one({"date": date})
+    if not doc:
+        raise HTTPException(status_code=404, detail=f"No briefing for {date}")
+    for i, s in enumerate(doc.get("stories") or []):
+        if s.get("id") == story_id:
+            objs = _links_from(s.get("sources"))
+            await desk.resolve_links(objs)
+            await db.briefings.update_one(
+                {"date": date}, {"$set": {f"stories.{i}.sources": [o.model_dump() for o in objs]}}
+            )
+            fresh = await db.briefings.find_one({"date": date})
+            return Briefing(**_clean(fresh))
+    raise HTTPException(status_code=404, detail="Story not found")
 
 
 @router.get("/briefings", response_model=List[BriefingSummary])

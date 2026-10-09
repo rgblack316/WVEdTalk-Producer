@@ -64,7 +64,9 @@ export default function Settings() {
   const isAdmin = auth?.user?.role === "admin";
 
   // --- Source links: hide-unverified toggle + all-briefings re-check (admin-only) ---
-  const [recheckResult, setRecheckResult] = useState<{ briefings: number; links_checked: number; unverified: number } | null>(null);
+  const [recheckResult, setRecheckResult] = useState<{ briefings: number; episodes: number; links_checked: number; unverified: number } | null>(null);
+  const [purgeArmed, setPurgeArmed] = useState(false);
+  const [purgeResult, setPurgeResult] = useState<{ removed: number; briefings: number; episodes: number } | null>(null);
 
   const toggleHideUnverified = useMutation({
     mutationFn: (enabled: boolean) => apiPost<DeskConfig>("/settings/hide-unverified", { enabled }),
@@ -76,14 +78,33 @@ export default function Settings() {
   });
 
   const recheckSources = useMutation({
-    mutationFn: () => apiPost<{ briefings: number; links_checked: number; unverified: number }>("/briefings/recheck-sources"),
+    mutationFn: () => apiPost<{ briefings: number; episodes: number; links_checked: number; unverified: number }>("/briefings/recheck-sources"),
     onSuccess: (r) => {
       setRecheckResult(r);
       qc.invalidateQueries({ queryKey: ["briefing"] });
       qc.invalidateQueries({ queryKey: ["briefings"] });
-      toast.success(`Re-checked ${r.links_checked} link(s) across ${r.briefings} briefing(s).`);
+      qc.invalidateQueries({ queryKey: ["episode"] });
+      qc.invalidateQueries({ queryKey: ["unverified-count"] });
+      toast.success(`Re-checked ${r.links_checked} link(s) across ${r.briefings} briefing(s) + ${r.episodes} episode(s).`);
     },
     onError: (e) => toast.error(errMsg(e)),
+  });
+
+  const purgeUnverified = useMutation({
+    mutationFn: () => apiPost<{ removed: number; briefings: number; episodes: number }>("/briefings/purge-unverified"),
+    onSuccess: (r) => {
+      setPurgeResult(r);
+      setPurgeArmed(false);
+      qc.invalidateQueries({ queryKey: ["briefing"] });
+      qc.invalidateQueries({ queryKey: ["briefings"] });
+      qc.invalidateQueries({ queryKey: ["episode"] });
+      qc.invalidateQueries({ queryKey: ["unverified-count"] });
+      toast.success(`Removed ${r.removed} unverified link(s).`);
+    },
+    onError: (e) => {
+      setPurgeArmed(false);
+      toast.error(errMsg(e));
+    },
   });
 
   // --- Data export & import (admin-only) ---
@@ -1073,11 +1094,38 @@ export default function Settings() {
                 </Button>
                 {recheckResult && (
                   <p className="mt-3 text-xs text-muted-foreground" data-testid="recheck-result">
-                    Checked {recheckResult.links_checked} link(s) across {recheckResult.briefings} briefing(s) —{" "}
+                    Checked {recheckResult.links_checked} link(s) across {recheckResult.briefings} briefing(s) and {recheckResult.episodes} episode(s) —{" "}
                     <span className={recheckResult.unverified > 0 ? "font-medium text-amber-600 dark:text-amber-400" : ""}>
                       {recheckResult.unverified} now unverified
                     </span>
                     .
+                  </p>
+                )}
+              </div>
+
+              <div className="mt-4 border-t border-border pt-4">
+                <p className="text-sm font-semibold text-destructive">Remove unverified links</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Permanently deletes every link currently flagged unverified from all briefings and episodes.
+                  This cannot be undone.
+                </p>
+                <Button
+                  className="mt-3"
+                  variant={purgeArmed ? "destructive" : "outline"}
+                  disabled={purgeUnverified.isPending}
+                  onClick={() => (purgeArmed ? purgeUnverified.mutate() : setPurgeArmed(true))}
+                  data-testid="purge-unverified-button"
+                >
+                  {purgeUnverified.isPending ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
+                  {purgeUnverified.isPending
+                    ? "Removing…"
+                    : purgeArmed
+                      ? "Confirm — permanently delete unverified links"
+                      : "Remove unverified links"}
+                </Button>
+                {purgeResult && (
+                  <p className="mt-3 text-xs text-muted-foreground" data-testid="purge-result">
+                    Removed {purgeResult.removed} unverified link(s) across {purgeResult.briefings} briefing(s) and {purgeResult.episodes} episode(s).
                   </p>
                 )}
               </div>

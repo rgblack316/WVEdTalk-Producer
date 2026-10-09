@@ -2,13 +2,13 @@ import { useParams, Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { ArrowLeft, Star, Ban, Sparkles } from "lucide-react";
+import { ArrowLeft, Star, Ban, Sparkles, Search } from "lucide-react";
 import DeskLayout from "@/components/DeskLayout";
 import { SourceList, ScoreChip } from "@/components/StoryCard";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { apiGet, apiPatch } from "@/lib/api";
+import { apiGet, apiPatch, apiPost } from "@/lib/api";
 import { useAuth } from "@/lib/useAuth";
 import type { Briefing, DeskConfig, Story } from "@/lib/types";
 import { SECTION_LABELS } from "@/lib/types";
@@ -56,6 +56,16 @@ export default function StoryDetail() {
       qc.invalidateQueries({ queryKey: ["positive-stories"] });
     },
     onError: () => toast.error("Could not save — try again."),
+  });
+
+  const verifyLinks = useMutation({
+    mutationFn: () => apiPost<Briefing>(`/briefings/${date}/stories/${storyId}/verify-links`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["briefing", date] });
+      qc.invalidateQueries({ queryKey: ["unverified-count"] });
+      toast.success("Links re-verified.");
+    },
+    onError: () => toast.error("Could not re-verify links — try again."),
   });
 
   return (
@@ -122,6 +132,18 @@ export default function StoryDetail() {
           {story.sources?.length > 0 && (
             <Field label="Sources">
               <SourceList sources={story.sources} hideUnverified={hideUnverified} />
+              {canEdit && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="mt-3"
+                  disabled={verifyLinks.isPending}
+                  onClick={() => verifyLinks.mutate()}
+                  data-testid="verify-links-button"
+                >
+                  <Search className="size-4" /> {verifyLinks.isPending ? "Checking…" : "Re-verify links"}
+                </Button>
+              )}
             </Field>
           )}
 

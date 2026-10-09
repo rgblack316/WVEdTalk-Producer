@@ -64,6 +64,13 @@ export default function DeskLayout({ children }: { children: React.ReactNode }) 
   });
   const positiveCount = positiveStories?.length ?? 0;
 
+  const { data: unverified } = useQuery({
+    queryKey: ["unverified-count"],
+    queryFn: () => apiGet<{ count: number }>("/unverified-count"),
+    staleTime: 30000,
+  });
+  const unverifiedCount = unverified?.count ?? 0;
+
   const isAdmin = auth?.user?.role === "admin";
   const isViewer = auth?.user?.role === "viewer";
   const canEdit = auth?.user?.role === "admin" || auth?.user?.role === "editor";
@@ -150,6 +157,15 @@ export default function DeskLayout({ children }: { children: React.ReactNode }) 
                         title={`${positiveCount} positive-note ${positiveCount === 1 ? "story" : "stories"} flagged`}
                       >
                         {positiveCount}
+                      </span>
+                    )}
+                    {n.to === "/settings" && unverifiedCount > 0 && (
+                      <span
+                        className="ml-1.5 inline-flex min-w-[1.125rem] items-center justify-center rounded-full bg-amber-500 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white"
+                        data-testid="unverified-count-badge"
+                        title={`${unverifiedCount} source link${unverifiedCount === 1 ? "" : "s"} flagged unverified`}
+                      >
+                        {unverifiedCount}
                       </span>
                     )}
                   </Link>

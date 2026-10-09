@@ -68,9 +68,16 @@ story can be flagged as a podcast episode candidate with free-text prep notes.
   Settings "Source links" panel, admin). When on, `SourceList`/`ScriptView` drop `verified === false` links from
   briefings & episode notes. `BriefingView`/`StoryDetail` read config and pass `hideUnverified` down (public
   SharedBriefing never filters); `ScriptView` reads config itself (authed pages only).
-- **Re-check all**: `POST /api/briefings/recheck-sources` (admin) re-resolves + re-verifies every source link across
-  all past briefings in one pass, returns `{briefings, links_checked, unverified}`. Button in the Settings
-  "Source links" panel.
+- **Re-check all**: `POST /api/briefings/recheck-sources` (admin) re-resolves + re-verifies every source
+  link across all past briefings AND weekly episodes in one pass, returns `{briefings, episodes,
+  links_checked, unverified}`. Button in the Settings "Source links" panel.
+- **Remove dead links**: `POST /api/briefings/purge-unverified` (admin) permanently deletes every link
+  flagged `verified===false` from briefings + episodes, returns `{removed, briefings, episodes}`; the
+  Settings button arms a two-click confirm (destructive).
+- **Verify a single story**: `POST /api/briefings/{date}/stories/{story_id}/verify-links` (editor)
+  re-resolves just that story's sources; a "Re-verify links" button sits under the Sources list on StoryDetail.
+- **Unverified count**: `GET /api/unverified-count` → `{count}` (briefing source logs + story sources +
+  episode link lists); DeskLayout shows an amber count badge on the Settings nav tab.
 
 ## Frontend routes
 - `/` Today (latest briefing), `/archive` (past editions — a **Newest/Oldest first** order toggle
