@@ -1,6 +1,8 @@
-import { ExternalLink, AlertTriangle } from "lucide-react";
+import { ExternalLink, AlertTriangle, Search } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import { isExternalUrl } from "@/components/StoryCard";
-import type { SourceLink } from "@/lib/types";
+import { apiGet } from "@/lib/api";
+import type { SourceLink, DeskConfig } from "@/lib/types";
 
 // Renders the recording script with chapter headers: any line formatted as "## Title"
 // (emitted by the producer between story segments) becomes a styled chapter heading and
@@ -17,7 +19,15 @@ export function ScriptView({
   links?: SourceLink[];
 }) {
   const lines = (script || "").split("\n");
-  const validLinks = (links ?? []).filter((s) => isExternalUrl(s?.url));
+  const { data: config } = useQuery({
+    queryKey: ["config"],
+    queryFn: () => apiGet<DeskConfig>("/settings"),
+    staleTime: 60000,
+  });
+  const hideUnverified = !!config?.hide_unverified_sources;
+  const validLinks = (links ?? [])
+    .filter((s) => isExternalUrl(s?.url))
+    .filter((s) => !(hideUnverified && s?.verified === false));
   return (
     <div>
       {chapters && chapters.length > 0 && (
@@ -76,6 +86,15 @@ export function ScriptView({
                   <span>
                     {src.title || src.url}
                     {src.outlet && <span className="text-muted-foreground"> — {src.outlet}</span>}
+                    {src.grounded && (
+                      <span
+                        className="ml-1.5 inline-flex items-center gap-1 rounded-sm border border-emerald-500/50 px-1 py-0 text-[10px] text-emerald-600 dark:text-emerald-400"
+                        title="Sourced directly from a Google Search result"
+                        data-testid="episode-link-grounded"
+                      >
+                        <Search className="size-2.5" /> Grounded
+                      </span>
+                    )}
                     {src.verified === false && (
                       <span
                         className="ml-1.5 inline-flex items-center gap-1 rounded-sm border border-amber-500/50 px-1 py-0 text-[10px] text-amber-600 dark:text-amber-400"

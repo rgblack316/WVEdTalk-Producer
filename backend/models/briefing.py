@@ -16,6 +16,7 @@ class SourceLink(BaseModel):
     url: str = ""
     outlet: str = ""
     verified: bool = True  # False = we couldn't confirm the page is reachable (likely LLM-fabricated)
+    grounded: bool = False  # True = came directly from a Google Search grounding citation
 
 
 class Story(BaseModel):

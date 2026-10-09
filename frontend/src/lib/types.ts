@@ -5,6 +5,7 @@ export interface SourceLink {
   url: string;
   outlet: string;
   verified?: boolean;
+  grounded?: boolean;
 }
 
 export interface Story {
@@ -96,6 +97,7 @@ export interface DeskConfig {
   script_length: string;
   auto_lock_minutes: number;
   auto_thank_on_use: boolean;
+  hide_unverified_sources: boolean;
   support_segment: string;
   support_default_on: boolean;
   timezone: string;

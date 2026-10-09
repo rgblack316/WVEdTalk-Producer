@@ -418,6 +418,12 @@ async def resolve_links(links: List[SourceLink]) -> None:
             link.url = resolved
             if not link.outlet:
                 link.outlet = _domain(resolved)
+            # "grounded" is sticky: once a link is known to have come from a Google Search citation we
+            # keep that even on re-checks (when the stored URL is already the resolved publisher link).
+            if grounded and "vertexaisearch" not in resolved:
+                link.grounded = True
+            else:
+                link.grounded = bool(getattr(link, "grounded", False))
             if grounded and "vertexaisearch" not in resolved and resolved != original:
                 # A Google grounding citation we followed to a real publisher page — trusted.
                 link.verified = True

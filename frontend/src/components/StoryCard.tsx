@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
-import { ExternalLink, Star, Ban, Sparkles, AlertTriangle } from "lucide-react";
+import { ExternalLink, Star, Ban, Sparkles, AlertTriangle, Search } from "lucide-react";
 import type { SourceLink, Story } from "@/lib/types";
 
 // A source is only a real article link if it's an absolute http(s) URL to another site — never
@@ -24,8 +24,10 @@ export function ScoreChip({ label, value }: { label: string; value: number | nul
   );
 }
 
-export function SourceList({ sources }: { sources: SourceLink[] }) {
-  const items = (sources ?? []).filter((s) => isExternalUrl(s?.url));
+export function SourceList({ sources, hideUnverified = false }: { sources: SourceLink[]; hideUnverified?: boolean }) {
+  const items = (sources ?? [])
+    .filter((s) => isExternalUrl(s?.url))
+    .filter((s) => !(hideUnverified && s?.verified === false));
   if (!items.length) return null;
   return (
     <ul className="space-y-1" data-testid="story-source-list">
@@ -41,6 +43,16 @@ export function SourceList({ sources }: { sources: SourceLink[] }) {
             <span>
               {s.title || s.url}
               {s.outlet && <span className="text-muted-foreground"> — {s.outlet}</span>}
+              {s.grounded && (
+                <Badge
+                  variant="outline"
+                  className="ml-1.5 gap-1 border-emerald-500/50 py-0 text-[10px] text-emerald-600 dark:text-emerald-400"
+                  title="Sourced directly from a Google Search result"
+                  data-testid="source-grounded"
+                >
+                  <Search className="size-2.5" /> Grounded
+                </Badge>
+              )}
               {s.verified === false && (
                 <Badge
                   variant="outline"
@@ -65,6 +77,7 @@ export function StoryCard({
   featured = false,
   isPublic = false,
   canFlag = false,
+  hideUnverified = false,
   onToggleCandidate,
   onToggleExclude,
   onTogglePositive,
@@ -74,6 +87,7 @@ export function StoryCard({
   featured?: boolean;
   isPublic?: boolean;
   canFlag?: boolean;
+  hideUnverified?: boolean;
   onToggleCandidate?: () => void;
   onToggleExclude?: () => void;
   onTogglePositive?: () => void;
@@ -195,7 +209,7 @@ export function StoryCard({
       )}
       {featured && story.sources?.length > 0 && (
         <div className="mt-4 border-t border-border pt-3">
-          <SourceList sources={story.sources.slice(0, 4)} />
+          <SourceList sources={story.sources.slice(0, 4)} hideUnverified={hideUnverified} />
         </div>
       )}
     </article>

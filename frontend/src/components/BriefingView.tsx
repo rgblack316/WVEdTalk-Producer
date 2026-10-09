@@ -56,6 +56,7 @@ export default function BriefingView({
     enabled: !isPublic, // /settings is authed — skip it on the public share view
   });
   const watchTerms = config?.watch_terms ?? [];
+  const hideUnverified = !!config?.hide_unverified_sources;
 
   // Flag/unflag a story as an episode candidate straight from the briefing (editors/admins only —
   // gated by canFlag, which the public share view never sets). Mirrors the toggle on StoryDetail.
@@ -255,6 +256,7 @@ export default function BriefingView({
                   featured={featured}
                   isPublic={isPublic}
                   canFlag={canFlag && !isPublic}
+                  hideUnverified={hideUnverified}
                   onToggleCandidate={() => toggleCandidate.mutate(story)}
                   onToggleExclude={() => toggleExclude.mutate(story)}
                   onTogglePositive={() => togglePositive.mutate(story)}
@@ -341,7 +343,7 @@ export default function BriefingView({
       {!filtering && briefing.source_log.length > 0 && (
         <section className="mb-6" data-testid="section-source-log">
           <SectionHeading>Source Log</SectionHeading>
-          <SourceList sources={briefing.source_log} />
+          <SourceList sources={briefing.source_log} hideUnverified={hideUnverified} />
         </section>
       )}
 

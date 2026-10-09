@@ -62,7 +62,15 @@ story can be flagged as a podcast episode candidate with free-text prep notes.
 - `_is_valid_source_url`/`_valid_sources` still DROP shape-invalid links (empty/relative, unresolved
   vertexaisearch stubs, our own app host). Reachability only sets the `verified` flag.
 - UI: `StoryCard.SourceList` and `ScriptView` render an amber "⚠ Unverified" badge when `verified === false`
-  (legacy links default to verified, no badge).
+  and an emerald "Grounded" badge when `grounded === true` (legacy links default to verified/not-grounded).
+  `grounded` is sticky across re-checks (preserved even once the stored URL is the resolved publisher link).
+- **Hide-unverified toggle**: `desk_config.hide_unverified_sources` (`POST /api/settings/hide-unverified {enabled}`,
+  Settings "Source links" panel, admin). When on, `SourceList`/`ScriptView` drop `verified === false` links from
+  briefings & episode notes. `BriefingView`/`StoryDetail` read config and pass `hideUnverified` down (public
+  SharedBriefing never filters); `ScriptView` reads config itself (authed pages only).
+- **Re-check all**: `POST /api/briefings/recheck-sources` (admin) re-resolves + re-verifies every source link across
+  all past briefings in one pass, returns `{briefings, links_checked, unverified}`. Button in the Settings
+  "Source links" panel.
 
 ## Frontend routes
 - `/` Today (latest briefing), `/archive` (past editions — a **Newest/Oldest first** order toggle

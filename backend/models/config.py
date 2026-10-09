@@ -42,6 +42,7 @@ class DeskConfig(BaseModel):
     script_length: str = "standard"  # concise | standard | full
     auto_lock_minutes: int = 0  # 0 = off
     auto_thank_on_use: bool = False  # auto-email a reader when their tip is auto-linked as used
+    hide_unverified_sources: bool = False  # hide links we couldn't verify from briefings & episode notes
     support_segment: str = DEFAULT_SUPPORT_SEGMENT  # editable "Value 4 Value" outro text
     support_default_on: bool = True  # include the support read on newly produced episodes
     # Automatic run schedule, interpreted in the desk's home timezone (DST-aware).
@@ -70,6 +71,10 @@ class AutoLockUpdate(BaseModel):
 
 
 class AutoThankUpdate(BaseModel):
+    enabled: bool
+
+
+class HideUnverifiedUpdate(BaseModel):
     enabled: bool
 
 

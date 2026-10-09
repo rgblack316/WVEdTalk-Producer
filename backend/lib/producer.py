@@ -338,6 +338,7 @@ def _collect_links(source_log, stories) -> List[SourceLink]:
                     title=getattr(s, "title", "") or "",
                     outlet=getattr(s, "outlet", "") or "",
                     verified=bool(getattr(s, "verified", True)),
+                    grounded=bool(getattr(s, "grounded", False)),
                 )
             )
 

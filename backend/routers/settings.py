@@ -13,6 +13,7 @@ from models.config import (
     AutoThankUpdate,
     DeskConfig,
     DigestSendResult,
+    HideUnverifiedUpdate,
     NextRuns,
     RecipientCreate,
     RunLogEntry,
@@ -117,6 +118,14 @@ async def set_support(body: SupportUpdate):
 async def set_auto_thank(body: AutoThankUpdate):
     cfg = await _load()
     cfg.auto_thank_on_use = body.enabled
+    await _save(cfg)
+    return cfg
+
+
+@router.post("/settings/hide-unverified", response_model=DeskConfig)
+async def set_hide_unverified(body: HideUnverifiedUpdate):
+    cfg = await _load()
+    cfg.hide_unverified_sources = body.enabled
     await _save(cfg)
     return cfg
 

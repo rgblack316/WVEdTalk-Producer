@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { apiGet, apiPatch } from "@/lib/api";
 import { useAuth } from "@/lib/useAuth";
-import type { Briefing, Story } from "@/lib/types";
+import type { Briefing, DeskConfig, Story } from "@/lib/types";
 import { SECTION_LABELS } from "@/lib/types";
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
@@ -34,6 +34,12 @@ export default function StoryDetail() {
     queryFn: () => apiGet<Briefing>(`/briefings/${date}`),
     retry: false,
   });
+  const { data: config } = useQuery({
+    queryKey: ["config"],
+    queryFn: () => apiGet<DeskConfig>("/settings"),
+    staleTime: 60000,
+  });
+  const hideUnverified = !!config?.hide_unverified_sources;
 
   const story: Story | undefined = data?.stories.find((s) => s.id === storyId);
   const [notes, setNotes] = useState("");
@@ -115,7 +121,7 @@ export default function StoryDetail() {
 
           {story.sources?.length > 0 && (
             <Field label="Sources">
-              <SourceList sources={story.sources} />
+              <SourceList sources={story.sources} hideUnverified={hideUnverified} />
             </Field>
           )}
 

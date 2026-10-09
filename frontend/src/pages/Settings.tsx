@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Mail, Eye, Trash2, Send, Gauge, ShieldCheck, Timer, KeyRound, Users, Link2, Code2, Copy, CalendarClock, History, Megaphone, FlaskConical, RotateCcw, Database, Download, Upload, AlertTriangle } from "lucide-react";
+import { Mail, Eye, Trash2, Send, Gauge, ShieldCheck, Timer, KeyRound, Users, Link2, Code2, Copy, CalendarClock, History, Megaphone, FlaskConical, RotateCcw, Database, Download, Upload, AlertTriangle, Search, Loader2 } from "lucide-react";
 import DeskLayout from "@/components/DeskLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -62,6 +62,29 @@ export default function Settings() {
     staleTime: 5 * 60 * 1000,
   });
   const isAdmin = auth?.user?.role === "admin";
+
+  // --- Source links: hide-unverified toggle + all-briefings re-check (admin-only) ---
+  const [recheckResult, setRecheckResult] = useState<{ briefings: number; links_checked: number; unverified: number } | null>(null);
+
+  const toggleHideUnverified = useMutation({
+    mutationFn: (enabled: boolean) => apiPost<DeskConfig>("/settings/hide-unverified", { enabled }),
+    onSuccess: (cfg) => {
+      qc.setQueryData(["config"], cfg);
+      toast.success(cfg.hide_unverified_sources ? "Unverified links are now hidden." : "Unverified links are shown.");
+    },
+    onError: (e) => toast.error(errMsg(e)),
+  });
+
+  const recheckSources = useMutation({
+    mutationFn: () => apiPost<{ briefings: number; links_checked: number; unverified: number }>("/briefings/recheck-sources"),
+    onSuccess: (r) => {
+      setRecheckResult(r);
+      qc.invalidateQueries({ queryKey: ["briefing"] });
+      qc.invalidateQueries({ queryKey: ["briefings"] });
+      toast.success(`Re-checked ${r.links_checked} link(s) across ${r.briefings} briefing(s).`);
+    },
+    onError: (e) => toast.error(errMsg(e)),
+  });
 
   // --- Data export & import (admin-only) ---
   const [exportCounts, setExportCounts] = useState<Record<string, number> | null>(null);
@@ -1006,6 +1029,60 @@ export default function Settings() {
               </div>
             )}
           </section>
+
+          {isAdmin && (
+            <section
+              className="rounded-md border border-border bg-card p-5 md:col-span-2"
+              data-testid="source-links-panel"
+            >
+              <h3 className="flex items-center gap-2 font-heading text-lg font-bold">
+                <Search className="size-5 text-primary" /> Source links
+              </h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Gemini sometimes writes plausible-looking but non-existent URLs. The desk resolves Google
+                Search grounding links to their real publisher page and probes every other link; anything
+                it can't confirm is flagged <span className="font-medium text-amber-600 dark:text-amber-400">Unverified</span>.
+                Links pulled straight from Google Search show a <span className="font-medium text-emerald-600 dark:text-emerald-400">Grounded</span> badge.
+              </p>
+
+              <label className="mt-4 inline-flex cursor-pointer items-center gap-2 text-sm" data-testid="hide-unverified-toggle">
+                <input
+                  type="checkbox"
+                  checked={!!data?.hide_unverified_sources}
+                  onChange={(e) => toggleHideUnverified.mutate(e.target.checked)}
+                  className="size-4 cursor-pointer accent-primary"
+                />
+                Hide unverified links from briefings &amp; episode notes
+              </label>
+
+              <div className="mt-4 border-t border-border pt-4">
+                <p className="text-sm font-semibold">Re-check all past briefings</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Re-resolves and re-verifies every source link across all past editions in one pass. This
+                  can take a moment if you have a long history.
+                </p>
+                <Button
+                  className="mt-3"
+                  variant="outline"
+                  disabled={recheckSources.isPending}
+                  onClick={() => recheckSources.mutate()}
+                  data-testid="recheck-sources-button"
+                >
+                  {recheckSources.isPending ? <Loader2 className="size-4 animate-spin" /> : <Search className="size-4" />}
+                  {recheckSources.isPending ? "Re-checking…" : "Re-check all source links"}
+                </Button>
+                {recheckResult && (
+                  <p className="mt-3 text-xs text-muted-foreground" data-testid="recheck-result">
+                    Checked {recheckResult.links_checked} link(s) across {recheckResult.briefings} briefing(s) —{" "}
+                    <span className={recheckResult.unverified > 0 ? "font-medium text-amber-600 dark:text-amber-400" : ""}>
+                      {recheckResult.unverified} now unverified
+                    </span>
+                    .
+                  </p>
+                )}
+              </div>
+            </section>
+          )}
 
           {isAdmin && (
             <section
