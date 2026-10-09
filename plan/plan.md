@@ -84,7 +84,25 @@ A new panel on the existing Settings page, matching current desk styling, groupe
   - "Send test email via SMTP" button.
 - **Turnstile** (move the existing site/secret keys here too, for consistency).
 
-### 3.2 Secret handling rules
+### 3.2 First-run setup wizard (replaces the `admin`/`admin` seed)
+Shipping a known default login (`admin`/`admin`) is a weak default for a self-host. Replace the
+auto-seed with a **first-run onboarding page** shown whenever the `users` collection is empty:
+
+- The backend exposes `GET /api/setup/status` → `{needs_setup: bool}` and, while `needs_setup` is
+  true, **every guarded route except the setup + import endpoints returns 409/redirect to setup** so
+  the instance can't be used until an owner is established.
+- The page offers two mutually exclusive paths:
+  1. **Create the first admin** — name, email, password (min length enforced). `POST /api/setup/admin`
+     creates the sole admin and signs them in. One-shot: the endpoint refuses once any user exists.
+  2. **Import an existing backup** — upload a JSON archive from the Data export/import tool. Because
+     the archive already carries user accounts with **hashed** passwords, a successful import restores
+     the original admin(s), and everyone signs in with their prior credentials — ideal for a
+     migration off Emergent. Reuses the existing import logic (`routers/data_io.py`), gated so it only
+     runs during first-run (empty DB) without admin auth, then locks.
+- Remove `ensure_seed_admin()` (and the `admin`/`admin` constants) from startup; `install.sh` output
+  points the operator at the setup page instead of a default login.
+
+### 3.3 Secret handling rules
 - Secrets are **write-only from the UI**: the API accepts a new value but **never returns the
   stored secret**; GET responses return a masked boolean/`"••••set"` indicator + last-4 only.
 - Stored **encrypted at rest** using a key derived from `SESSION_SECRET` (Fernet/AES-GCM), so a DB
@@ -134,6 +152,9 @@ A new panel on the existing Settings page, matching current desk styling, groupe
   test email (resend|smtp)" endpoints.
 - Frontend: new Integrations panel in `pages/Settings.tsx` with masked inputs, provider selects,
   and test buttons; add matching TS interfaces in `lib/types.ts`.
+- **First-run onboarding (§3.2):** add `GET /api/setup/status`, `POST /api/setup/admin`, and a
+  first-run-only import path; add a `SetupWizard` page/guard on the frontend; remove
+  `ensure_seed_admin()` and the `admin`/`admin` constants so no default login ever ships.
 
 ### Phase 5 — Hard cut cleanup
 - Remove `emergentintegrations` from `requirements.txt` and the `--extra-index-url` line from
@@ -153,7 +174,8 @@ A new panel on the existing Settings page, matching current desk styling, groupe
 | `EMERGENT_EMAIL_KEY` | `EMAIL_PROVIDER` + `RESEND_API_KEY` **or** `SMTP_HOST`/`SMTP_PORT`/`SMTP_USERNAME`/`SMTP_PASSWORD`/`SMTP_STARTTLS` | Resend default, SMTP fallback |
 | (n/a) | `EMAIL_FROM`, `EMAIL_FROM_NAME`, `EMAIL_REPLY_TO` | explicit sender identity (no managed sender) |
 | `MONGO_URL`, `DB_NAME` | same | compose forces `MONGO_URL=mongodb://mongo:27017` |
-| `SESSION_SECRET`, `APP_PASSCODE`, `APP_URL`, `CORS_ORIGINS` | same | unchanged |
+| `SESSION_SECRET`, `APP_URL`, `CORS_ORIGINS` | same | unchanged |
+| `APP_PASSCODE` | same (**optional**) | machine credential for the `X-Desk-Passcode` header; leave blank to disable programmatic access entirely (`_service_ok` returns False when unset). Not needed for a self-host with no downstream automation — human email/password logins are unaffected. |
 | `TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY` | same (also editable in Settings) | unchanged |
 
 All of the provider values above become **optional in env** once set in the Settings page (§3),
@@ -173,23 +195,34 @@ secret-encryption key.
 
 ## 7. install.sh / upgrade.sh
 
-### `install.sh` (first-time bring-up)
-1. Verifies `docker` and `docker compose` are available.
-2. Creates `.env` from `env.example` if missing.
-3. Auto-generates `SESSION_SECRET` and `APP_PASSCODE` if still blank/placeholder
-   (`openssl rand -hex 32`, python fallback).
-4. `docker compose up -d --build`.
-5. Polls `http://localhost:${HTTP_PORT}/api/schedule/next` until healthy (timeout with guidance).
-6. Prints the URL and the seeded bootstrap login (`admin` / `admin`) and next steps
-   (open Settings → Integrations to add AI + email keys).
+Both scripts auto-install Docker on a fresh Ubuntu/Debian host (they add Docker's official apt
+repo and install Engine + the Compose plugin, enable the service, and add the invoking user to the
+`docker` group) — the operator does **not** pre-install Docker. They run as a normal user and use
+`sudo` only where required, with a `docker_cmd` helper that falls back to `sudo docker` until the
+new group membership takes effect. Non-apt OSes get a clear "install Docker manually, then re-run".
 
-### `upgrade.sh` (pull new code + migrate)
-1. Verifies Docker, warns if `.env` missing.
-2. **Pre-upgrade backup**: `mongodump` inside the mongo container into `./backups/<timestamp>/`.
-3. Optional `git pull` (flag `--pull`).
-4. `docker compose up -d --build` (rebuilds changed images, recreates containers).
-5. `docker image prune -f` to reclaim space.
-6. Health poll + summary; prints how to roll back (restore the dumped backup + `git checkout`).
+### `install.sh` (first-time bring-up)
+1. Resolves the real (non-root) user even under `sudo`; requires `sudo`; gates to Ubuntu/Debian.
+2. Installs host packages (`ca-certificates curl git openssl gnupg`) and **Docker Engine + Compose**
+   if missing; enables the daemon; adds the user to the `docker` group.
+3. **Clones the repo** into `~/wvedtalk` (override via `REPO_URL`/`INSTALL_DIR`) — *or* runs in place
+   if invoked from inside an existing checkout (so "clone first, then run" also works).
+4. Creates `.env` from `env.example` and generates `SESSION_SECRET` (`openssl rand -hex 32`).
+   **`APP_PASSCODE` is left blank** (optional machine credential — see §5), not auto-generated.
+5. `docker compose up -d --build`, then polls `http://localhost:${HTTP_PORT}/api/schedule/next`.
+6. Prints the URL and directs the operator to the **first-run setup page** (create admin or import a
+   backup — §3.2), then Settings → Integrations for AI + email keys. No default login is printed.
+
+### `upgrade.sh` (pull new code + rebuild)
+1. Locates the install (`~/wvedtalk` or `APP_DIR`, or the current checkout); requires Docker + `.env`.
+2. **Refuses unsafe git states**: aborts on uncommitted local changes, detached HEAD, a branch that
+   is *ahead* of the remote, or a *diverged* branch; exits cleanly if already up to date.
+3. **Mandatory pre-upgrade backup**: `mongodump --archive --gzip` from the running mongo container
+   into `backups/pre-upgrade-<timestamp>/`, plus a copy of `.env`; aborts if the dump is empty or
+   mongo isn't running (never upgrades without a safety net).
+4. `git pull --ff-only`, then `docker compose up -d --build`, then `docker image prune -f`.
+5. Health poll + summary, and prints the exact `mongorestore` one-liner to roll back. The MongoDB
+   named volume is never touched, so data persists across upgrades.
 
 Both scripts are idempotent and safe to re-run.
 

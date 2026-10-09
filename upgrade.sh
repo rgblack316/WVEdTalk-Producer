@@ -1,121 +1,101 @@
 #!/usr/bin/env bash
 # =============================================================================
-# WV Education News Desk — upgrade / update (Docker + docker-compose)
+# WV Education News Desk — Upgrade
 #
-# Usage:   ./upgrade.sh [--pull] [--no-backup]
-#            --pull       git pull the latest code before rebuilding
-#            --no-backup  skip the pre-upgrade MongoDB dump (not recommended)
-# Re-runnable: yes.
+# Safely updates an existing installation WITHOUT touching the MongoDB volume.
+# Refuses to overwrite uncommitted/local git work or a diverged branch, and
+# always takes a pre-upgrade database backup first.
+#
+# Run from the install dir (defaults to ~/wvedtalk), or set APP_DIR:
+#   ./upgrade.sh
+#   APP_DIR=/opt/wvedtalk ./upgrade.sh
 # =============================================================================
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$SCRIPT_DIR"
+APP_DIR="${APP_DIR:-$HOME/wvedtalk}"
+[ -f docker-compose.yml ] && [ -d .git ] && APP_DIR="$(pwd)"   # allow running in place
+TIMESTAMP="$(date '+%Y-%m-%d_%H-%M-%S')"
+DB_BACKUP_DIR="$APP_DIR/backups/pre-upgrade-$TIMESTAMP"
 
-c_info() { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
-c_ok()   { printf '\033[1;32m✓\033[0m %s\n' "$*"; }
-c_warn() { printf '\033[1;33m!\033[0m %s\n' "$*"; }
-c_err()  { printf '\033[1;31m✗\033[0m %s\n' "$*" >&2; }
+log()  { echo "[WVEdTalk] $*"; }
+fail() { echo "ERROR: $*" >&2; exit 1; }
 
-DO_PULL=0
-DO_BACKUP=1
-for arg in "$@"; do
-  case "$arg" in
-    --pull) DO_PULL=1 ;;
-    --no-backup) DO_BACKUP=0 ;;
-    *) c_err "Unknown option: $arg"; exit 2 ;;
-  esac
+[ -d "$APP_DIR/.git" ] || fail "Git repository not found: $APP_DIR (set APP_DIR to your install path)"
+cd "$APP_DIR"
+
+command -v docker >/dev/null 2>&1 || fail "Docker is not installed. Run install.sh, or install Docker manually."
+docker_cmd() { if docker info >/dev/null 2>&1; then docker "$@"; else sudo docker "$@"; fi; }
+docker_cmd compose version >/dev/null 2>&1 || fail "Docker Compose is not available."
+[ -f .env ] || fail "No .env in $APP_DIR. Refusing to continue."
+
+echo
+echo "=========================================="
+echo " WV Education News Desk — Upgrade"
+echo "=========================================="
+echo
+echo "Current revision: $(git rev-parse --short HEAD)"
+docker_cmd compose ps
+
+# ---- refuse unsafe git states ----------------------------------------------
+if [ -n "$(git status --porcelain)" ]; then
+  echo; echo "Local git changes detected:"; git status --short
+  fail "Upgrade cancelled. Commit, stash, or discard these changes first."
+fi
+CURRENT_BRANCH="$(git branch --show-current)"
+[ -z "$CURRENT_BRANCH" ] && fail "Repository is in detached HEAD state. Refusing to upgrade automatically."
+
+log "Checking the remote for updates..."
+git fetch --prune origin
+REMOTE_REF="origin/$CURRENT_BRANCH"
+git show-ref --verify --quiet "refs/remotes/$REMOTE_REF" || fail "No matching remote branch '$REMOTE_REF'."
+
+AHEAD="$(git rev-list --count "$REMOTE_REF..HEAD")"
+BEHIND="$(git rev-list --count "HEAD..$REMOTE_REF")"
+[ "$AHEAD" -gt 0 ] && [ "$BEHIND" -gt 0 ] && fail "Local branch and remote have diverged. Resolve the git history manually."
+[ "$AHEAD" -gt 0 ] && fail "Local branch has $AHEAD commit(s) not on the remote. No changes made."
+if [ "$BEHIND" -eq 0 ]; then
+  log "Already up to date. No rebuild necessary."
+  docker_cmd compose ps
+  exit 0
+fi
+echo "Remote has $BEHIND new commit(s)."
+
+# ---- mandatory pre-upgrade DB backup ---------------------------------------
+mkdir -p "$DB_BACKUP_DIR"
+DB_NAME="$(awk -F= '$1=="DB_NAME"{print substr($0,index($0,"=")+1);exit}' .env | tr -d '"')"
+DB_NAME="${DB_NAME:-wvedtalk}"
+if docker_cmd compose ps --services --filter "status=running" | grep -q '^mongo$'; then
+  log "Creating pre-upgrade MongoDB backup ($DB_NAME)..."
+  docker_cmd compose exec -T mongo mongodump --db "$DB_NAME" --archive --gzip > "$DB_BACKUP_DIR/mongodb.archive.gz"
+  [ -s "$DB_BACKUP_DIR/mongodb.archive.gz" ] || fail "The database backup is empty. Upgrade cancelled."
+  echo "  Backup: $DB_BACKUP_DIR/mongodb.archive.gz"
+else
+  fail "MongoDB is not running, so a safety backup cannot be taken. Upgrade cancelled."
+fi
+cp -p .env "$DB_BACKUP_DIR/.env"
+
+# ---- fast-forward + rebuild -------------------------------------------------
+log "Pulling latest code..."
+git pull --ff-only
+log "Rebuilding and recreating containers..."
+docker_cmd compose up -d --build
+docker_cmd image prune -f >/dev/null 2>&1 || true
+
+HTTP_PORT="$(awk -F= '$1=="HTTP_PORT"{print substr($0,index($0,"=")+1);exit}' .env | tr -d '"')"
+HTTP_PORT="${HTTP_PORT:-80}"
+log "Waiting for the app at http://localhost:${HTTP_PORT} ..."
+for _ in $(seq 1 60); do
+  curl -fsS "http://localhost:${HTTP_PORT}/api/schedule/next" >/dev/null 2>&1 && break
+  sleep 3
 done
 
-DC=""
-detect_compose() {
-  if docker compose version >/dev/null 2>&1; then
-    DC="docker compose"
-  elif command -v docker-compose >/dev/null 2>&1; then
-    DC="docker-compose"
-  else
-    c_err "docker compose not found. Install it first."
-    exit 1
-  fi
-}
-
-require_docker() {
-  command -v docker >/dev/null 2>&1 || { c_err "docker not found."; exit 1; }
-  docker info >/dev/null 2>&1 || { c_err "Docker daemon not running."; exit 1; }
-  detect_compose
-  [ -f .env ] || c_warn ".env not found — the stack may not start. Run ./install.sh first."
-}
-
-HTTP_PORT="$(grep -E '^HTTP_PORT=' .env 2>/dev/null | head -n1 | cut -d= -f2- | tr -d '"' || true)"
-HTTP_PORT="${HTTP_PORT:-80}"
-DB_NAME="$(grep -E '^DB_NAME=' .env 2>/dev/null | head -n1 | cut -d= -f2- | tr -d '"' || true)"
-DB_NAME="${DB_NAME:-wvedtalk}"
-
-backup_mongo() {
-  [ "$DO_BACKUP" -eq 1 ] || { c_warn "Skipping pre-upgrade backup (--no-backup)."; return 0; }
-  local ts dir
-  ts="$(date +%Y%m%d-%H%M%S)"
-  dir="backups/${ts}"
-  mkdir -p "$dir"
-  if ! $DC ps --status running 2>/dev/null | grep -q mongo; then
-    c_warn "Mongo container is not running yet — skipping backup (nothing to dump)."
-    return 0
-  fi
-  c_info "Backing up MongoDB '${DB_NAME}' to ${dir} ..."
-  # Dump inside the container, then copy the archive out to the host.
-  if $DC exec -T mongo sh -c "mongodump --db='${DB_NAME}' --archive=/tmp/wvedtalk.dump --gzip" >/dev/null 2>&1; then
-    local cid
-    cid="$($DC ps -q mongo)"
-    docker cp "${cid}:/tmp/wvedtalk.dump" "${dir}/wvedtalk.dump.gz"
-    $DC exec -T mongo rm -f /tmp/wvedtalk.dump >/dev/null 2>&1 || true
-    c_ok "Backup written: ${dir}/wvedtalk.dump.gz  (restore with: mongorestore --gzip --archive=... --drop)"
-  else
-    c_warn "mongodump failed — continuing without a fresh backup. Review before proceeding if this matters."
-  fi
-}
-
-wait_healthy() {
-  local url="http://localhost:${HTTP_PORT}/api/schedule/next"
-  c_info "Waiting for the app to become healthy at ${url} ..."
-  local i
-  for i in $(seq 1 60); do
-    curl -fsS "$url" >/dev/null 2>&1 && { c_ok "App is responding."; return 0; }
-    sleep 3
-  done
-  c_warn "App did not respond within ~3 minutes. Check:  $DC logs -f backend"
-  return 1
-}
-
-main() {
-  c_info "WV Education News Desk — upgrade"
-  require_docker
-
-  if [ "$DO_PULL" -eq 1 ]; then
-    if command -v git >/dev/null 2>&1 && [ -d .git ]; then
-      c_info "Pulling latest code (git pull) ..."
-      git pull --ff-only
-    else
-      c_warn "--pull requested but this is not a git checkout; skipping."
-    fi
-  fi
-
-  backup_mongo
-
-  c_info "Rebuilding and recreating containers ..."
-  $DC up -d --build
-
-  c_info "Pruning old/dangling images ..."
-  docker image prune -f >/dev/null 2>&1 || true
-
-  if wait_healthy; then
-    echo
-    c_ok "Upgrade complete."
-    echo "  Open: http://localhost:${HTTP_PORT}"
-    echo "  Rollback: restore the latest backups/<ts>/wvedtalk.dump.gz and 'git checkout <previous-tag>', then re-run ./upgrade.sh"
-  else
-    c_err "Upgrade finished but the app is not healthy. Inspect logs and consider rolling back."
-    exit 1
-  fi
-}
-
-main "$@"
+echo
+echo "=========================================="
+echo " Upgrade complete — revision $(git rev-parse --short HEAD)"
+echo "=========================================="
+docker_cmd compose ps
+echo
+echo "Restore this pre-upgrade backup if needed:"
+echo "  gunzip -c \"$DB_BACKUP_DIR/mongodb.archive.gz\" | docker compose exec -T mongo mongorestore --archive --gzip --drop"
+echo "MongoDB data stays in its Docker volume; this script never removes it."
+echo

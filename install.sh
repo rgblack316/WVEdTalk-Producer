@@ -1,135 +1,152 @@
 #!/usr/bin/env bash
 # =============================================================================
-# WV Education News Desk — first-time installer (Docker + docker-compose)
+# WV Education News Desk — Initial Installation (Docker + Compose)
 #
-# Usage:   ./install.sh
-# Re-runnable: yes (idempotent — safe to run again to repair/restart the stack).
+# Fresh Ubuntu/Debian helper. Installs Docker Engine + Compose if missing,
+# clones the repository (or runs in place if you already cloned it), creates
+# .env, generates the session secret, and starts the Docker Compose stack.
+#
+# Run as your NORMAL user (not root); it uses sudo only where needed:
+#   ./install.sh
+# Override defaults with env vars:
+#   REPO_URL=... INSTALL_DIR=/opt/wvedtalk ./install.sh
 # =============================================================================
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$SCRIPT_DIR"
+REPO_URL="${REPO_URL:-https://github.com/YOUR-ORG/wvedtalk.git}"
+INSTALL_DIR="${INSTALL_DIR:-}"
 
-# ---- pretty output ----------------------------------------------------------
-c_info() { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
-c_ok()   { printf '\033[1;32m✓\033[0m %s\n' "$*"; }
-c_warn() { printf '\033[1;33m!\033[0m %s\n' "$*"; }
-c_err()  { printf '\033[1;31m✗\033[0m %s\n' "$*" >&2; }
+log()  { echo "[WVEdTalk] $*"; }
+fail() { echo "ERROR: $*" >&2; exit 1; }
 
-# ---- docker compose shim (v2 `docker compose` or legacy `docker-compose`) ----
-DC=""
-detect_compose() {
-  if docker compose version >/dev/null 2>&1; then
-    DC="docker compose"
-  elif command -v docker-compose >/dev/null 2>&1; then
-    DC="docker-compose"
-  else
-    c_err "docker compose not found. Install Docker Engine + the compose plugin first:"
-    c_err "  https://docs.docker.com/engine/install/ and https://docs.docker.com/compose/install/"
-    exit 1
-  fi
+# ---- resolve the real (non-root) user even when run via sudo ----------------
+if [ "${EUID}" -eq 0 ]; then
+  TARGET_USER="${SUDO_USER:-root}"
+  TARGET_HOME="$(getent passwd "$TARGET_USER" | cut -d: -f6)"
+else
+  TARGET_USER="$(id -un)"
+  TARGET_HOME="$HOME"
+fi
+[ "$TARGET_USER" = "root" ] && fail "Run this as your normal user, not root. It uses sudo when needed."
+
+command -v sudo >/dev/null 2>&1 || fail "sudo is required. Install it: apt-get update && apt-get install -y sudo"
+sudo -v
+
+# ---- are we already inside a checkout? --------------------------------------
+if [ -f docker-compose.yml ] && { [ -f env.example ] || [ -f .env ]; }; then
+  INSTALL_DIR="$(pwd)"
+  IN_PLACE=1
+  log "Running inside an existing checkout: $INSTALL_DIR"
+else
+  IN_PLACE=0
+  [ -z "$INSTALL_DIR" ] && INSTALL_DIR="$TARGET_HOME/wvedtalk"
+fi
+
+# ---- OS gate (auto Docker install is apt/Ubuntu/Debian only) ----------------
+command -v apt-get >/dev/null 2>&1 || fail "Auto-install supports Ubuntu/Debian (apt). On other systems install Docker manually, then re-run."
+[ -r /etc/os-release ] && . /etc/os-release || fail "Cannot determine the operating system."
+case "${ID:-}" in
+  ubuntu|debian) ;;
+  *) fail "Unsupported OS: ${PRETTY_NAME:-unknown}. Supports Ubuntu/Debian. Install Docker manually, then re-run." ;;
+esac
+
+echo
+echo "=========================================="
+echo " WV Education News Desk — Installation"
+echo "=========================================="
+echo
+log "Installing/checking host packages..."
+sudo apt-get update
+sudo DEBIAN_FRONTEND=noninteractive apt-get install -y ca-certificates curl git openssl gnupg
+
+install_docker_repo() {
+  local arch codename
+  arch="$(dpkg --print-architecture)"
+  codename="${VERSION_CODENAME:-$(lsb_release -cs 2>/dev/null || echo stable)}"
+  sudo install -m 0755 -d /etc/apt/keyrings
+  sudo rm -f /etc/apt/keyrings/docker.asc
+  sudo curl -fsSL "https://download.docker.com/linux/${ID}/gpg" -o /etc/apt/keyrings/docker.asc
+  sudo chmod a+r /etc/apt/keyrings/docker.asc
+  echo "deb [arch=${arch} signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/${ID} ${codename} stable" \
+    | sudo tee /etc/apt/sources.list.d/docker.list >/dev/null
+  sudo apt-get update
 }
 
-require_docker() {
-  if ! command -v docker >/dev/null 2>&1; then
-    c_err "docker not found. Install Docker Engine first: https://docs.docker.com/engine/install/"
-    exit 1
+# ---- Docker Engine + Compose ------------------------------------------------
+if ! command -v docker >/dev/null 2>&1; then
+  log "Docker not found. Installing Docker Engine + Compose..."
+  install_docker_repo
+  sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+    docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+else
+  log "Docker already installed: $(docker --version)"
+  if ! docker compose version >/dev/null 2>&1; then
+    log "Compose plugin missing. Installing it..."
+    sudo apt-get install -y docker-compose-plugin >/dev/null 2>&1 || { install_docker_repo; sudo apt-get install -y docker-compose-plugin; }
   fi
-  if ! docker info >/dev/null 2>&1; then
-    c_err "Docker daemon is not running (or this user lacks permission)."
-    c_err "Start Docker, or add your user to the 'docker' group, then re-run."
-    exit 1
-  fi
-  detect_compose
-  c_ok "Docker and compose detected ($DC)."
-}
+fi
 
-# ---- secret generation ------------------------------------------------------
-gen_secret() {
-  if command -v openssl >/dev/null 2>&1; then
-    openssl rand -hex 32
-  else
-    python3 -c "import secrets; print(secrets.token_hex(32))"
-  fi
-}
+sudo systemctl enable --now docker
+getent group docker >/dev/null 2>&1 || sudo groupadd docker
+sudo usermod -aG docker "$TARGET_USER" || true
 
-# Set KEY=<generated> in .env only when the current value is empty or a placeholder.
-fill_if_blank() {
-  local key="$1" val
-  val="$(grep -E "^${key}=" .env | head -n1 | cut -d= -f2- || true)"
-  val="${val%\"}"; val="${val#\"}"
-  if [ -z "$val" ] || echo "$val" | grep -qiE 'replace-with|choose-a|changeme'; then
-    local new; new="$(gen_secret)"
-    # portable in-place edit (GNU + BSD sed)
-    if sed --version >/dev/null 2>&1; then
-      sed -i "s|^${key}=.*|${key}=${new}|" .env
-    else
-      sed -i '' "s|^${key}=.*|${key}=${new}|" .env
-    fi
-    c_ok "Generated ${key}."
-  fi
-}
+# The current shell may not have the docker group yet — fall back to sudo.
+docker_cmd() { if docker info >/dev/null 2>&1; then docker "$@"; else sudo docker "$@"; fi; }
+docker_cmd compose version >/dev/null 2>&1 || fail "Docker Compose is still unavailable after installation."
 
-prepare_env() {
-  if [ ! -f .env ]; then
-    if [ -f env.example ]; then
-      cp env.example .env
-      c_ok "Created .env from env.example."
-    elif [ -f .env.example ]; then
-      cp .env.example .env
-      c_ok "Created .env from .env.example."
-    else
-      c_err "No env template found (expected env.example). Re-clone the repository."
-      exit 1
-    fi
-  else
-    c_info ".env already exists — leaving it untouched."
+# ---- clone (unless running in place) ----------------------------------------
+if [ "$IN_PLACE" -eq 0 ]; then
+  if [ -e "$INSTALL_DIR" ]; then
+    [ -d "$INSTALL_DIR/.git" ] && fail "A checkout already exists at $INSTALL_DIR. Use ./upgrade.sh instead."
+    fail "Install path exists and is not a git repo: $INSTALL_DIR"
   fi
-  fill_if_blank SESSION_SECRET
-  fill_if_blank APP_PASSCODE
-}
+  log "Cloning into $INSTALL_DIR ..."
+  git clone "$REPO_URL" "$INSTALL_DIR"
+fi
+cd "$INSTALL_DIR"
 
-# ---- health wait ------------------------------------------------------------
-HTTP_PORT="$(grep -E '^HTTP_PORT=' .env | head -n1 | cut -d= -f2- | tr -d '"' || true)"
+# ---- .env -------------------------------------------------------------------
+if [ ! -f .env ]; then
+  [ -f env.example ] || fail "env.example template not found — re-clone the repository."
+  cp env.example .env
+  SESSION_SECRET="$(openssl rand -hex 32)"
+  sed -i "s|^SESSION_SECRET=.*|SESSION_SECRET=${SESSION_SECRET}|" .env
+  log ".env created with a generated SESSION_SECRET."
+  log "APP_PASSCODE was left blank (optional — only needed for programmatic X-Desk-Passcode access)."
+else
+  log ".env already exists — leaving it unchanged."
+fi
+
+mkdir -p backups
+[ "${EUID}" -eq 0 ] && chown -R "$TARGET_USER":"$TARGET_USER" "$INSTALL_DIR" || true
+
+# ---- build + start ----------------------------------------------------------
+log "Building and starting the stack (first run can take a few minutes)..."
+docker_cmd compose up -d --build
+
+HTTP_PORT="$(awk -F= '$1=="HTTP_PORT"{print substr($0,index($0,"=")+1);exit}' .env | tr -d '"')"
 HTTP_PORT="${HTTP_PORT:-80}"
+log "Waiting for the app at http://localhost:${HTTP_PORT} ..."
+healthy=0
+for _ in $(seq 1 60); do
+  if curl -fsS "http://localhost:${HTTP_PORT}/api/schedule/next" >/dev/null 2>&1; then healthy=1; break; fi
+  sleep 3
+done
 
-wait_healthy() {
-  local url="http://localhost:${HTTP_PORT}/api/schedule/next"
-  c_info "Waiting for the app to become healthy at ${url} ..."
-  local i
-  for i in $(seq 1 60); do
-    if curl -fsS "$url" >/dev/null 2>&1; then
-      c_ok "App is responding."
-      return 0
-    fi
-    sleep 3
-  done
-  c_warn "App did not respond within ~3 minutes."
-  c_warn "Check logs with:  $DC logs -f backend"
-  return 1
-}
-
-# ---- run --------------------------------------------------------------------
-main() {
-  c_info "WV Education News Desk — installer"
-  require_docker
-  prepare_env
-
-  c_info "Building and starting containers (this can take a few minutes on first run) ..."
-  $DC up -d --build
-
-  if wait_healthy; then
-    echo
-    c_ok "Install complete."
-    echo "  Open:            http://localhost:${HTTP_PORT}"
-    echo "  Bootstrap login: admin / admin  (change it immediately in Settings → My account)"
-    echo
-    echo "  Next: open Settings → Integrations to add your AI model key and email (Resend/SMTP)."
-    echo "  Logs:            $DC logs -f"
-    echo "  Stop:            $DC down"
-  else
-    exit 1
-  fi
-}
-
-main "$@"
+echo
+echo "=========================================="
+echo " Installation complete"
+echo "=========================================="
+echo
+docker_cmd compose ps
+echo
+if [ "$healthy" -eq 1 ]; then
+  echo "WV Education News Desk is available at:  http://localhost:${HTTP_PORT}"
+else
+  echo "Stack started but did not answer yet. Check logs:  docker compose logs -f backend"
+fi
+echo "First run: open the site and complete the on-screen setup to create your admin account"
+echo "(or import an existing backup). Then add your AI + email keys in Settings → Integrations."
+echo
+echo "NOTE: user '$TARGET_USER' was added to the 'docker' group — log out/in to use docker without sudo."
+echo
