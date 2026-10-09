@@ -76,6 +76,9 @@ story can be flagged as a podcast episode candidate with free-text prep notes.
   Settings button arms a two-click confirm (destructive).
 - **Verify a single story**: `POST /api/briefings/{date}/stories/{story_id}/verify-links` (editor)
   re-resolves just that story's sources; a "Re-verify links" button sits under the Sources list on StoryDetail.
+- **Verify a single episode**: `POST /api/episodes/{week_of}/verify-links` (editor) re-resolves that
+  episode's source log, selected-story sources, and show-notes links; "Re-verify links" button in the
+  Episodes "Recording Script" header.
 - **Unverified count**: `GET /api/unverified-count` → `{count}` (briefing source logs + story sources +
   episode link lists); DeskLayout shows an amber count badge on the Settings nav tab.
 

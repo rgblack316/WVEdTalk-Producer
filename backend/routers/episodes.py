@@ -6,10 +6,11 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from lib import producer
+from lib import desk, producer
 from lib.auth import require_editor
 from lib.db import db
 from lib.email_digest import send_episode
+from models.briefing import SourceLink
 from models.episode import EpisodeSummary, ProduceStatus, WeeklyEpisode
 
 router = APIRouter(tags=["episodes"])
@@ -164,6 +165,33 @@ async def reflow_support(week_of: str, _edit=Depends(require_editor)):
     doc["chapters"] = chapters
     doc["support_included"] = True
     return WeeklyEpisode(**doc)
+
+
+@router.post("/episodes/{week_of}/verify-links", response_model=WeeklyEpisode)
+async def verify_episode_links(week_of: str, _edit=Depends(require_editor)):
+    """Re-resolve and re-verify all of this episode's source links on demand (source log,
+    each selected story's sources, and the show-notes link list)."""
+    doc = await db.episodes.find_one({"week_of": week_of})
+    if not doc:
+        raise HTTPException(status_code=404, detail=f"No episode for week of {week_of}")
+
+    def _mk(items):
+        return [SourceLink(**s) for s in (items or []) if isinstance(s, dict)]
+
+    sl = _mk(doc.get("source_log"))
+    el = _mk(doc.get("episode_links"))
+    stories = {i: _mk(s.get("sources")) for i, s in enumerate(doc.get("selected_stories") or [])}
+    all_links = [*sl, *el]
+    for objs in stories.values():
+        all_links.extend(objs)
+    await desk.resolve_links(all_links)
+    set_doc = {"source_log": [o.model_dump() for o in sl], "episode_links": [o.model_dump() for o in el]}
+    for i, objs in stories.items():
+        set_doc[f"selected_stories.{i}.sources"] = [o.model_dump() for o in objs]
+    await db.episodes.update_one({"week_of": week_of}, {"$set": set_doc})
+    fresh = await db.episodes.find_one({"week_of": week_of})
+    fresh.pop("_id", None)
+    return WeeklyEpisode(**fresh)
 
 
 @router.get("/episodes/{week_of}", response_model=WeeklyEpisode)

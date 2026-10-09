@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
-import { Loader2, Mic, Copy, Download, ExternalLink, Clock, Mail, ListTree, Link2, ArrowUpDown } from "lucide-react";
+import { Loader2, Mic, Copy, Download, ExternalLink, Clock, Mail, ListTree, Link2, ArrowUpDown, Search } from "lucide-react";
 import DeskLayout from "@/components/DeskLayout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -109,6 +109,19 @@ export default function Episodes() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["episode", "latest"] });
       toast.success("Source links updated");
+    },
+    onError: (e) => {
+      const msg = e instanceof ApiError ? String((e.body as { detail?: string })?.detail ?? e.message) : String(e);
+      toast.error(msg);
+    },
+  });
+
+  const verifyLinks = useMutation({
+    mutationFn: () => apiPost<WeeklyEpisode>(`/episodes/${episode?.week_of}/verify-links`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["episode", "latest"] });
+      qc.invalidateQueries({ queryKey: ["unverified-count"] });
+      toast.success("Links re-verified");
     },
     onError: (e) => {
       const msg = e instanceof ApiError ? String((e.body as { detail?: string })?.detail ?? e.message) : String(e);
@@ -358,6 +371,17 @@ export default function Episodes() {
                   >
                     {relink.isPending ? <Loader2 className="size-4 animate-spin" /> : <Link2 className="size-4" />}
                     {relink.isPending ? "Updating links…" : "Update source links"}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={verifyLinks.isPending}
+                    onClick={() => verifyLinks.mutate()}
+                    data-testid="episode-verify-links-button"
+                    title="Re-resolve and re-verify every source link in this episode"
+                  >
+                    {verifyLinks.isPending ? <Loader2 className="size-4 animate-spin" /> : <Search className="size-4" />}
+                    {verifyLinks.isPending ? "Checking…" : "Re-verify links"}
                   </Button>
                   {episode.support_included && (
                     <Button
