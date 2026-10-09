@@ -1,0 +1,35 @@
+# WV Education News Desk — self-hosted stack.
+# Bring up with ./install.sh (first time) or ./upgrade.sh (updates).
+# All operator config lives in .env (copy from .env.example).
+
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    volumes:
+      - mongo_data:/data/db
+    # Intentionally NOT published to the host — only the backend talks to it.
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # Always target the compose Mongo, regardless of any MONGO_URL in .env.
+      MONGO_URL: "mongodb://mongo:27017"
+      DB_NAME: "${DB_NAME:-wvedtalk}"
+    depends_on:
+      - mongo
+    expose:
+      - "8001"
+
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "${HTTP_PORT:-80}:80"
+
+volumes:
+  mongo_data:

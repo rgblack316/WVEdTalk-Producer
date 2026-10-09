@@ -1,107 +1,218 @@
-# Database Export & Import — Migrate the News Desk to Self-Hosting
+# WV Education News Desk — Self-Hosting Migration (Remove All Emergent Dependencies)
 
-A one-click admin tool to download a complete, portable copy of the News Desk's data and load it
-back into a self-hosted (or any other) instance. It exports whatever database the running app is
-connected to, so running it on the published Emergent site captures the live production data.
+This plan turns the News Desk into a **fully self-hostable** application with **no Emergent
+runtime dependency**, deployed via **Docker + docker-compose**, installable and upgradable with
+two scripts (`install.sh`, `upgrade.sh`). The LLM provider is **configurable** (Gemini default,
+OpenAI optional), and email supports **Resend (default) with an SMTP fallback**. Every third-party
+credential (LLM keys, Resend, SMTP, Turnstile) is **managed in-app on the Settings page** so an
+operator never has to hand-edit env files after first boot.
 
-## Who it's for
-- The desk owner/admin who wants to move off Emergent hosting to their own server, keep a periodic
-  off-platform backup, or clone the app's data into a second environment — without needing shell
-  access to the managed database or any MongoDB command-line tools.
+> Decision record (confirmed with stakeholder):
+> - Deliverable **this pass**: this plan + `install.sh` + `upgrade.sh` + Docker scaffolding.
+>   The working LLM/email code is left **as-is** for now (code migration is Phase 2–5 below).
+> - LLM: **configurable** (Gemini via `google-genai` with Google Search grounding = default;
+>   OpenAI with its web-search tool = optional).
+> - Email: **Resend default, SMTP fallback.**
+> - Emergent: **hard cut** — remove all Emergent code, packages, and `EMERGENT_*` keys.
+> - Install target: **Docker + docker-compose.**
+> - All provider credentials must be **manageable from the in-app Settings page** (incl. the SMTP
+>   fallback settings).
 
-## Core features and experience
-- **Full export (one file).** A single downloadable archive containing every collection the app
-  uses: daily briefings, weekly episodes, reader submissions, newsletter subscribers, user accounts,
-  settings/schedule, run history, and email-delivery records. Nothing is left behind.
-- **Accounts included.** User accounts are exported with their emails, roles, and hashed passwords,
-  so everyone can log in unchanged after the move. (Passwords stay hashed — the plaintext is never
-  stored or exported.) Login sessions are not carried over by design; everyone signs in fresh on the
-  new server, which is expected and harmless.
-- **Portable JSON format.** The archive is human-readable JSON — one section per collection plus a
-  small header noting when it was taken and how many records each collection holds. It can be opened,
-  inspected, and loaded anywhere, with no dependency on specific MongoDB tooling or versions.
-- **Import / restore.** A matching import accepts an archive produced by the export and loads it into
-  the target instance's database. Two safety modes:
-  - *Merge* (default): add/replace records by their id, leaving anything already present that isn't
-    in the archive untouched.
-  - *Replace*: clear each collection first, then load the archive, producing an exact copy of the
-    source. Guarded behind an explicit confirmation because it deletes existing data.
-- **Admin-only.** Both export and import are restricted to admin accounts. The export is a sensitive
-  full-data download; the import can overwrite live data.
-- **Guidance note for a raw platform dump.** The delivered work includes written guidance on how to
-  request a direct, native database dump from Emergent hosting as an alternative/complement to the
-  in-app export (useful if a byte-for-byte copy is preferred). See Assumptions for how this is
-  provided.
+---
 
-## User flow
-1. Admin opens Settings and finds a new "Data export & import" area.
-2. **Export:** clicks "Download a full copy." The archive downloads immediately with a dated filename
-   (e.g. the app name plus the export date). A short line states what was included and the record
-   counts.
-3. **Move the data:** the admin stands up the self-hosted app pointed at their own MongoDB, signs in
-   there as an admin, and opens the same Settings area.
-4. **Import:** chooses the downloaded archive, picks Merge or Replace (Replace asks for confirmation),
-   and loads it. A result summary reports how many records were loaded per collection and flags any
-   that were skipped or failed, so the admin can confirm the migration succeeded.
-5. Everyone logs in on the new server with their existing credentials.
+## 1. Current Emergent coupling (inventory)
 
-## UI/UX feel
-- Lives as a self-contained panel on the existing Settings page, matching the current desk styling:
-  a clear heading, a one-paragraph explanation of what the copy contains and that it includes
-  accounts, and two grouped actions (download, then an upload-and-load control).
-- Calm and reassuring for a data-moving task: plain-language labels, an obvious primary "Download a
-  full copy" button, and the destructive Replace option visually set apart with a confirmation step
-  and a warning that it erases existing data first.
-- Progress and results are shown inline (counts per collection on both export and import), not hidden
-  behind a raw file or console output.
+| Area | Where | Emergent dependency | Replacement |
+| --- | --- | --- | --- |
+| LLM — daily briefing | `backend/lib/desk.py::_call_model` | `emergentintegrations.llm.chat.LlmChat`, `EMERGENT_LLM_KEY`, `.with_tools([{"googleSearch":{}}])` | `backend/lib/llm.py` provider layer |
+| LLM — weekly episode | `backend/lib/producer.py` (`_call_model`) | same | same |
+| LLM — chapterize | `backend/lib/producer.py::_chapterize_call` | same (no search tool) | same |
+| Email | `backend/lib/email_digest.py` | managed Resend proxy `https://integrations.emergentagent.com`, `EMERGENT_EMAIL_KEY` | `backend/lib/mailer.py` (Resend/SMTP) |
+| Package | `backend/requirements.txt` | `emergentintegrations==0.2.0` | removed |
+| Docs/env | `README.md`, `backend/.env.example` | `EMERGENT_LLM_KEY`, `EMERGENT_EMAIL_KEY` | new vars (see §5) |
 
-## Implementation phases
+Not coupled to Emergent (keep as-is): Mongo/Motor, auth/sessions, Turnstile (already uses the
+operator's own keys), the DB export/import tool, the source-link verification pipeline.
 
-### Phase 1 — MVP (built now)
-- Admin-only full export of every collection into one portable, dated JSON archive, downloadable from
-  a new Settings panel, with accounts (hashed passwords) included.
-- Admin-only import of that archive with Merge and Replace modes, Replace gated by confirmation, and a
-  per-collection result summary on both export and import.
-- A written migration note covering: how to run the export on the published site to capture production
-  data, how to load it into a self-hosted instance, and how to request a raw native database dump
-  directly from Emergent hosting as an alternative.
+---
 
-### Phase 2 — Later
-- Scheduled/automatic backups (e.g. a periodic export emailed or retained on a cadence) and a short
-  history of recent exports.
-- Selective export/import (choose specific collections, or a date range of briefings/episodes) for
-  partial transfers.
+## 2. Target architecture (Docker compose)
 
-### Phase 3 — Later
-- Direct server-to-server transfer (push a copy straight to another running instance without a manual
-  file download/upload), and integrity verification that compares source and destination counts after
-  a move.
+Three containers, defined in `docker-compose.yml` (added this pass):
 
-## Assumptions
-- "Export the published version's database" is satisfied by running the in-app export while signed in
-  to the live Emergent-hosted site; the app reads/writes the production database, so the export
-  reflects production at the moment it is taken. No separate access to Emergent's managed database
-  internals is assumed.
-- The export is a point-in-time snapshot, not a live continuous replica; data created after the export
-  is not included.
-- All application collections are included: briefings, episodes, submissions, subscribers, users,
-  settings/schedule, run history, and email-delivery records. Internal database bookkeeping and
-  anything derived automatically at runtime (e.g. rebuilt indexes) are not part of the archive — the
-  app recreates those on first run.
-- Secrets that live outside the database (API keys, the session signing secret, email/CAPTCHA keys)
-  are configuration, not data, and are NOT part of the export; they are set up separately on the
-  self-hosted server. This is intentional for security.
-- Because the session signing secret differs between environments, existing login sessions do not
-  transfer; users sign in again on the new server. Accounts and passwords themselves do carry over.
-- Import matches records by their existing id. Merge replaces matching records and keeps the rest;
-  Replace clears each collection before loading. Replace is the only destructive action and always
-  requires explicit confirmation.
-- The import expects an archive produced by this tool's export (same JSON structure); arbitrary
-  external files are not a supported input in the MVP.
-- The archive can be large if there is a long history of briefings/episodes; the MVP handles the
-  current data volume as a single file and does not add streaming/chunked downloads (deferred to a
-  later phase if needed).
-- The migration note is delivered as part of the project documentation (the existing README/notes),
-  not as a separate product surface.
-- The raw-platform-dump guidance describes the request path to Emergent hosting; whether a raw dump is
-  actually provided is controlled by the platform, not by this app.
+- **mongo** — `mongo:7`, data persisted in the `mongo_data` named volume, not published to the host.
+- **backend** — `backend/Dockerfile` (python:3.11-slim), runs `uvicorn server:app` on `:8001`.
+  Reads config from compose env (`env_file: .env` + a few overrides). `MONGO_URL` is forced to
+  `mongodb://mongo:27017` so it always targets the compose Mongo.
+- **frontend** — `frontend/Dockerfile` (multi-stage: `node` build → `nginx`). Nginx serves the
+  built SPA and **reverse-proxies `/api/` to `backend:8001`**, so the browser only ever calls
+  relative `/api/...` (same contract as the Vite dev proxy). Publishes `HTTP_PORT` (default 80).
+
+Supporting files added this pass: `backend/Dockerfile`, `frontend/Dockerfile`,
+`frontend/nginx.conf`, `backend/.dockerignore`, `frontend/.dockerignore`, root `.env.example`
+(compose config), `.dockerignore`.
+
+> Interim note: the backend image currently still installs `emergentintegrations` (via an
+> `--extra-index-url` line, commented in the Dockerfile) so the **present** code builds and runs in
+> Docker today. Phase 5 deletes that package and the extra index, completing the hard cut.
+
+---
+
+## 3. Configuration & in-app Settings management (key requirement)
+
+Every provider credential has **two sources**, resolved in this precedence order at call time:
+
+1. **Database config** (`desk_config.integrations`, set from the Settings page) — wins when present.
+2. **Environment variable** (from `.env`/compose) — bootstrap + fallback, used when the DB value is
+   blank. Lets a brand-new instance run before anyone opens Settings, and lets an operator pin
+   secrets via env only if they prefer.
+
+### 3.1 New "Integrations" Settings panel (admin-only)
+A new panel on the existing Settings page, matching current desk styling, grouped into:
+
+- **AI / Research model**
+  - Provider select: `Gemini` | `OpenAI`.
+  - API key (Gemini or OpenAI, shown per provider).
+  - Model name (defaults filled in: `gemini-2.5-pro`/current, or `gpt-5.x`).
+  - "Test connection" button → backend does a tiny live call and reports ok/error.
+- **Email — primary (Resend)**
+  - Resend API key, From address, From name, Reply-To.
+  - "Send test email" (reuses the existing test-digest path).
+- **Email — fallback (SMTP)**
+  - Host, port, username, password, STARTTLS/SSL toggle, From address.
+  - Used automatically when Resend is unset or a Resend send fails.
+  - "Send test email via SMTP" button.
+- **Turnstile** (move the existing site/secret keys here too, for consistency).
+
+### 3.2 Secret handling rules
+- Secrets are **write-only from the UI**: the API accepts a new value but **never returns the
+  stored secret**; GET responses return a masked boolean/`"••••set"` indicator + last-4 only.
+- Stored **encrypted at rest** using a key derived from `SESSION_SECRET` (Fernet/AES-GCM), so a DB
+  dump alone does not leak live keys. (The DB export tool must redact or encrypt these — see §6.)
+- All Integrations writes are **admin-only** and audited in the run log.
+- Backend reads them through small accessors (`lib/config_secrets.py`) that apply the precedence in
+  §3 and decrypt on use.
+
+---
+
+## 4. Migration phases
+
+### Phase 1 — Scaffolding + tooling (THIS PASS, no app-code changes)
+- Rewrite this `plan/plan.md` (done).
+- Add `docker-compose.yml`, `backend/Dockerfile`, `frontend/Dockerfile`, `frontend/nginx.conf`,
+  `.dockerignore`s, root `.env.example`.
+- Add `install.sh` (first-time Docker bring-up, secret generation, health wait) and `upgrade.sh`
+  (pre-upgrade Mongo backup, rebuild, recreate, prune).
+- The current code still uses `EMERGENT_*`; `.env.example` documents both the **current** keys
+  (to run today) and the **target** self-hosted keys (used after Phase 2–5).
+
+### Phase 2 — LLM provider abstraction (`backend/lib/llm.py`)
+- Introduce a `generate_grounded_json(system, user, *, model) -> {content, citations}` interface.
+- **Gemini** implementation via `google-genai`: `tools=[{google_search:{}}]`, parse
+  `candidates[].grounding_metadata.grounding_chunks[].web.{uri,title}` into the same `_citations`
+  shape the pipeline already consumes (`[{"url","title"}]`).
+- **OpenAI** implementation via the Responses API web-search tool; map its URL citations to the
+  same shape. (If a provider can't ground, links still flow through the existing
+  reachability/title-match verifier, so unverified links are simply badged.)
+- Swap the three call sites (`desk._call_model`, `producer._call_model`,
+  `producer._chapterize_call`) to the new layer. Keep `_parse_json` and citation handling identical
+  downstream.
+- `requirements.txt`: add `google-genai` and/or `openai`.
+
+### Phase 3 — Email abstraction (`backend/lib/mailer.py`)
+- Replace `email_digest._send_email` internals with a `send(to, subject, html)` that:
+  - uses **Resend** (`https://api.resend.com/emails`, `Authorization: Bearer <key>`, `from`,
+    `reply_to`) when a Resend key is configured;
+  - else/on failure uses **SMTP** (`aiosmtplib`) with the configured host/port/TLS/creds.
+- Keep the existing `_assert_safe_email` G2/G3 gate and all HTML templates **unchanged** — only the
+  transport changes. `_error_detail` keeps surfacing the provider's reason.
+- `requirements.txt`: add `aiosmtplib`; `resend` optional (raw httpx is fine).
+
+### Phase 4 — In-app Integrations Settings panel (§3)
+- Backend: extend `models/config.py` + `routers/settings.py` with masked read + admin write
+  endpoints and `lib/config_secrets.py` (precedence + encryption). Add "test connection" / "send
+  test email (resend|smtp)" endpoints.
+- Frontend: new Integrations panel in `pages/Settings.tsx` with masked inputs, provider selects,
+  and test buttons; add matching TS interfaces in `lib/types.ts`.
+
+### Phase 5 — Hard cut cleanup
+- Remove `emergentintegrations` from `requirements.txt` and the `--extra-index-url` line from
+  `backend/Dockerfile`.
+- Delete all `EMERGENT_LLM_KEY` / `EMERGENT_EMAIL_KEY` reads and the
+  `integrations.emergentagent.com` constant.
+- Remove `EMERGENT_*` from `.env.example` files; update `README.md` and `memory/spec.md`.
+- Repo-wide check: `grep -ri emergent backend/ frontend/ src/` returns nothing but historical notes.
+
+---
+
+## 5. Environment variable mapping (old → new)
+
+| Current (Emergent) | New (self-hosted) | Notes |
+| --- | --- | --- |
+| `EMERGENT_LLM_KEY` | `LLM_PROVIDER` + `GEMINI_API_KEY` / `OPENAI_API_KEY` + `LLM_MODEL` | provider selectable; model optional (sane default) |
+| `EMERGENT_EMAIL_KEY` | `EMAIL_PROVIDER` + `RESEND_API_KEY` **or** `SMTP_HOST`/`SMTP_PORT`/`SMTP_USERNAME`/`SMTP_PASSWORD`/`SMTP_STARTTLS` | Resend default, SMTP fallback |
+| (n/a) | `EMAIL_FROM`, `EMAIL_FROM_NAME`, `EMAIL_REPLY_TO` | explicit sender identity (no managed sender) |
+| `MONGO_URL`, `DB_NAME` | same | compose forces `MONGO_URL=mongodb://mongo:27017` |
+| `SESSION_SECRET`, `APP_PASSCODE`, `APP_URL`, `CORS_ORIGINS` | same | unchanged |
+| `TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY` | same (also editable in Settings) | unchanged |
+
+All of the provider values above become **optional in env** once set in the Settings page (§3),
+except `SESSION_SECRET` which must always be present for the server to boot and to derive the
+secret-encryption key.
+
+---
+
+## 6. Interactions with the DB export/import tool
+- The Integrations secrets live in `desk_config`. The existing export (`routers/data_io.py`) must
+  **redact** these fields by default (same spirit as "secrets are config, not data"), with an
+  optional "include encrypted integration secrets" checkbox for same-operator migrations.
+- Because secret encryption is keyed off `SESSION_SECRET`, encrypted secrets only decrypt on a
+  target that shares the same `SESSION_SECRET` — otherwise the operator re-enters keys in Settings.
+
+---
+
+## 7. install.sh / upgrade.sh
+
+### `install.sh` (first-time bring-up)
+1. Verifies `docker` and `docker compose` are available.
+2. Creates `.env` from `.env.example` if missing.
+3. Auto-generates `SESSION_SECRET` and `APP_PASSCODE` if still blank/placeholder
+   (`openssl rand -hex 32`, python fallback).
+4. `docker compose up -d --build`.
+5. Polls `http://localhost:${HTTP_PORT}/api/schedule/next` until healthy (timeout with guidance).
+6. Prints the URL and the seeded bootstrap login (`admin` / `admin`) and next steps
+   (open Settings → Integrations to add AI + email keys).
+
+### `upgrade.sh` (pull new code + migrate)
+1. Verifies Docker, warns if `.env` missing.
+2. **Pre-upgrade backup**: `mongodump` inside the mongo container into `./backups/<timestamp>/`.
+3. Optional `git pull` (flag `--pull`).
+4. `docker compose up -d --build` (rebuilds changed images, recreates containers).
+5. `docker image prune -f` to reclaim space.
+6. Health poll + summary; prints how to roll back (restore the dumped backup + `git checkout`).
+
+Both scripts are idempotent and safe to re-run.
+
+---
+
+## 8. Testing & rollback
+- **Phase 1 (this pass):** `bash -n` on both scripts; validate `docker-compose.yml` parses; confirm
+  no app-code changed and the live Emergent app is untouched.
+- **Phase 2–5:** after each phase, run tier-1 (curl smoke of `/api/run` + `/api/produce` dry paths,
+  `yarn typecheck`, one browser pass) and a real provider test (one briefing run, one test email via
+  Resend and via SMTP). Escalate to the testing subagent on failure.
+- **Rollback:** every change is additive behind a provider switch until Phase 5; `upgrade.sh` keeps a
+  Mongo dump and the previous images so an operator can `git checkout` the prior tag and
+  `docker compose up -d --build` to revert.
+
+---
+
+## 9. Risks & mitigations
+- **Grounding parity:** direct Gemini grounding metadata differs from the Emergent wrapper's
+  OpenAI-style `annotations`. Mitigation: the provider layer normalizes to the existing
+  `[{"url","title"}]` shape; the reachability + title-match verifier already guards bad links.
+- **Email deliverability:** self-hosted Resend needs a verified domain; SMTP needs correct TLS.
+  Mitigation: in-app "send test" buttons surface the exact provider error before a real blast.
+- **Secret safety:** keys in the DB. Mitigation: encrypt at rest, mask on read, redact from export.
+- **Build reproducibility:** pin image tags (`mongo:7`, `python:3.11-slim`, `node:20-alpine`,
+  `nginx:1.27-alpine`) and keep `yarn.lock`/`requirements.txt` pinned.
