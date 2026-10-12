@@ -118,8 +118,10 @@ async def _persist_submission(url: str, name: str, email: str, title: str = "") 
 
 @router.get("/public/config")
 async def public_config():
-    """Public runtime config for the submit form — the Turnstile SITE key is public by design."""
-    return {"turnstile_site_key": turnstile.SITE_KEY or None, "turnstile_enabled": turnstile.enabled()}
+    """Public runtime config for the submit form — the Turnstile SITE key is public by design.
+    Keys come from Settings → Integrations (DB-over-env)."""
+    sk = await turnstile.site_key()
+    return {"turnstile_site_key": sk or None, "turnstile_enabled": await turnstile.enabled()}
 
 
 @router.post("/public/submit-story")
