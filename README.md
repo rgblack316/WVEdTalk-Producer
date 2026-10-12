@@ -80,31 +80,82 @@ public share links.
 
 ```
 backend/           FastAPI app
-  lib/             auth, dates, db, desk (daily), producer (weekly),
-                   email_digest, turnstile, share tokens
+  lib/             auth, dates, db, desk (daily), producer (weekly), email_digest,
+                   turnstile, share tokens, llm (Gemini/OpenAI provider layer),
+                   mailer (Resend/SMTP), config_secrets (encrypted in-app keys)
   models/          Pydantic models (briefing, episode, config, user, subscriber, submission)
-  routers/         auth, public, briefings, episodes, settings, users, submissions
-  server.py        app + api_router (/api), lifespan (schedulers, seed admin)
+  routers/         auth, setup (first-run), public, briefings, episodes, settings,
+                   users, submissions, data_io (backup export/import)
+  server.py        app + api_router (/api), lifespan (schedulers; no default seed)
 frontend/          Vite + React app
   src/pages/       Home, Archive, BriefingPage, StoryDetail, Candidates, Episodes,
                    EpisodePage, Settings, Users, Submissions, Excluded, SharedBriefing,
                    Subscribe, Unsubscribe, SubmitStory
-  src/components/  DeskLayout, AuthGate, BriefingView, ScriptView, StoryCard,
-                   TurnstileWidget, ui/*
+  src/components/  DeskLayout, AuthGate, SetupWizard, IntegrationsPanel, BriefingView,
+                   ScriptView, StoryCard, TurnstileWidget, ui/*
   src/lib/         api (typed fetch over /api), types, useAuth, regions, episode, session
 memory/            spec.md, test_credentials.md
+install.sh / upgrade.sh    self-hosted Docker install & upgrade
+docker-compose.yml, env.example, plan/plan.md
 ```
 
-## Getting started (local)
+## Install & upgrade (self-hosted, Docker)
+
+The self-hosted edition ships two scripts for a turnkey deployment on a fresh **Ubuntu/Debian**
+server. They install Docker if needed, build the stack (MongoDB + backend + frontend/nginx), and
+keep your data in a Docker volume across upgrades.
+
+### First install
+
+```bash
+# On a fresh Ubuntu/Debian host, as a normal (non-root) user with sudo:
+git clone https://github.com/rgblack316/WVEdTalk-Producer.git
+cd WVEdTalk-Producer
+./install.sh
+# (You can also download just install.sh and run it — it will clone the repo for you.)
+```
+
+`install.sh` will:
+1. Install Docker Engine + the Compose plugin if missing (adds Docker's official apt repo), enable
+   the daemon, and add you to the `docker` group.
+2. Clone the repo into `~/wvedtalk` (override with `REPO_URL=` / `INSTALL_DIR=`), or run in place if
+   you're already inside a checkout.
+3. Create `.env` from `env.example` and generate a `SESSION_SECRET`. `APP_PASSCODE` is left blank
+   (optional — see below).
+4. Build and start the stack, then wait until the app answers.
+
+It prints the site URL and points you at the **first-run setup screen** (no default password). Open
+the site, create your first admin (or import a backup), then open **Settings → Integrations** to add
+your AI + email keys. Config lives in `.env`; the only required value is `SESSION_SECRET`
+(auto-generated). `HTTP_PORT` (default 80) sets the published port.
+
+### Upgrading
+
+```bash
+cd ~/wvedtalk      # your install directory
+./upgrade.sh
+```
+
+`upgrade.sh` is safe-by-default: it **refuses** to run on uncommitted local changes, a detached
+HEAD, or a diverged branch; it **always takes a MongoDB backup first** (`mongodump` into
+`backups/pre-upgrade-<timestamp>/`), then fast-forwards the code, rebuilds, and restarts. Your data
+stays in its Docker volume and is never touched. The script prints the exact `mongorestore` command
+to roll back.
+
+> **Publishing the repo first:** use Emergent's **Save → Save to GitHub** to push this project to
+> `github.com/rgblack316/WVEdTalk-Producer` so `install.sh` can clone it. Secrets/`.env` are excluded
+> from the push by design — `install.sh` generates `SESSION_SECRET`, and the rest are managed in-app.
+
+## Getting started (local dev)
 
 Prerequisites: Python 3.11 (+venv), Node 18+ with Yarn, a running MongoDB.
 
 ```bash
 # 1) Backend config
 cp backend/.env.example backend/.env
-# edit backend/.env — set SESSION_SECRET (required), MONGO_URL/DB_NAME, and the
-# EMERGENT_LLM_KEY / EMERGENT_EMAIL_KEY if you want research + email to work.
-# TURNSTILE_* are optional (leave blank to disable the CAPTCHA).
+# edit backend/.env — set SESSION_SECRET (required) and MONGO_URL/DB_NAME.
+# AI (GEMINI_API_KEY/OPENAI_API_KEY) and email (RESEND_API_KEY/SMTP_*) keys are optional here —
+# you'll normally set them in-app via Settings → Integrations. TURNSTILE_* are optional too.
 
 # 2) Backend
 cd backend
@@ -117,18 +168,34 @@ yarn install
 yarn dev        # http://localhost:3000  (proxies /api → http://localhost:8001)
 ```
 
-### First login
+## First-run setup
 
-A bootstrap admin is seeded automatically the first time the app starts with an empty
-`users` collection:
+There is **no** default `admin`/`admin` login. On a brand-new install (empty `users` collection) the
+app opens a **setup wizard** instead of the login screen, with two choices:
 
-- **Username:** `admin`
-- **Password:** `admin`
+- **Create the first admin** — your email + a password (min 8 characters); you're signed in
+  immediately. One-shot — the endpoint refuses once any user exists.
+- **Import a backup** — upload a JSON export from another News Desk. Restores every account (with
+  their existing hashed passwords) and all data in one step; you then sign in with your existing
+  credentials.
 
-**Change this password immediately after signing in** (Settings → My account → Change password),
-then invite the rest of your team from the **Users** tab (each gets a one-time temporary password).
-The seed only runs on an empty `users` collection, so it never overwrites accounts on an existing
-database.
+Invite the rest of your team from the **Users** tab (each gets a one-time temporary password).
+
+## Integrations (in-app credentials — AI, email, Turnstile)
+
+Everything third-party is managed in **Settings → Integrations** (admin-only), so an operator never
+edits code or `.env` after install:
+
+- **AI / Research model** — pick **Gemini** (default, Google Search grounding) or **OpenAI**, paste
+  the key, set the model, and use **Test AI connection**.
+- **Email — Resend (default)** plus an **SMTP fallback** — enter either (or both), each with a
+  **send-test** button.
+- **Turnstile** — the public-form CAPTCHA site/secret keys.
+
+Keys are entered once, stored **encrypted at rest** (never echoed back — shown masked), and take
+precedence over any `.env` fallback. **Scheduled runs and email digests default to OFF** on a fresh
+install — enable them in Integrations once your keys test green, so nothing errors before it's
+configured.
 
 ## Environment variables
 
@@ -140,7 +207,7 @@ See [`backend/.env.example`](backend/.env.example). The real `.env` is never com
 | `MONGO_URL`, `DB_NAME` | Yes | Database connection. |
 | `CORS_ORIGINS` | Yes | Comma-separated allowed frontend origins (no wildcard when using cookies). |
 | `APP_URL` | Yes | Public base URL used in outgoing email links + share pages. |
-| `APP_PASSCODE` | Yes | Machine credential for downstream `X-Desk-Passcode` access. |
+| `APP_PASSCODE` | Optional | Machine credential for `X-Desk-Passcode` access; blank disables programmatic access (human logins unaffected). |
 | `LLM_PROVIDER`, `GEMINI_API_KEY` / `OPENAI_API_KEY`, `LLM_MODEL` | For research | AI provider; normally set in Settings → Integrations (env is initial fallback). |
 | `EMAIL_PROVIDER`, `RESEND_API_KEY` / `SMTP_*`, `EMAIL_FROM`, `EMAIL_FROM_NAME` | For email | Resend default + SMTP fallback; normally set in Settings → Integrations. |
 | `TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY` | Optional | Cloudflare Turnstile on the public submit form; blank = honeypot-only. |
@@ -154,9 +221,11 @@ See [`backend/.env.example`](backend/.env.example). The real `.env` is never com
   outcome to the `digest_deliveries` collection, and **emails admins an alert** if any subscriber
   send fails. Use Settings → Email digest to **send a test copy** or **resend to subscribers who
   missed it**.
-- The managed email proxy returns `HTTP 422 undeliverable_recipient` for invalid/bouncing
-  addresses (and for any `example.com` address). That — not the safety gate — is the usual reason
-  a public subscriber does not receive a briefing while the admin recipient (a valid inbox) does.
+- Delivery uses **your own Resend account (or SMTP fallback)** configured in Settings → Integrations.
+  Invalid/bouncing recipients surface the provider's own per-address error (Resend, for example,
+  rejects `example.com` and undeliverable mailboxes). That — not the safety gate — is the usual
+  reason a public subscriber does not receive a briefing while a valid admin inbox does. Resend
+  requires a verified sending domain.
 
 ## Programmatic / downstream access
 
@@ -171,7 +240,9 @@ curl -H "X-Desk-Passcode: $APP_PASSCODE" \
 ## Migrating off Emergent / self-hosting (data export & import)
 
 An admin-only **Data export & import** panel lives on the Settings page for moving the News Desk's
-data to your own server (or keeping an off-platform backup).
+data to your own server (or keeping an off-platform backup). On a brand-new self-hosted install you
+can also load that same export directly from the **first-run setup wizard** ("Import a backup"),
+which restores accounts + data in one step.
 
 1. **Capture production data.** Sign in to the **published Emergent site** as an admin, open
    **Settings → Data export & import**, and click **Download a full copy**. Because the app reads and
@@ -180,10 +251,10 @@ data to your own server (or keeping an off-platform backup).
    subscribers, users, settings/schedule, run history, delivery records — plus a header with the date
    and per-collection counts). User accounts are included with their **hashed** passwords (plaintext is
    never stored or exported), so everyone logs in unchanged after the move.
-2. **Stand up the self-hosted app.** Follow *Getting started (local)* above against your own MongoDB,
-   and set the secrets in `backend/.env` yourself — `SESSION_SECRET`, `MONGO_URL`/`DB_NAME`,
-   `EMERGENT_LLM_KEY`, email/CAPTCHA keys. These are configuration, **not** part of the export (by
-   design, for security).
+2. **Stand up the self-hosted app.** Run `install.sh` (Docker) or follow *Getting started (local dev)*
+   against your own MongoDB. The only secret you must set is `SESSION_SECRET` (the install script
+   generates it); AI, email, and Turnstile keys are added in-app via **Settings → Integrations** and
+   are **not** part of the export (by design, for security).
 3. **Load the data.** Sign in to the self-hosted app as an admin, open the same panel, choose the
    downloaded file, pick a mode, and load:
    - **Merge** (default) — add/replace records by their id; anything already present that isn't in the
@@ -213,6 +284,7 @@ rehydrate a self-hosted instance.
   errs toward flagging rather than hiding — a reworded real headline or an anti-bot 403 can read as
   unverified, so links are never auto-removed; an admin can purge them explicitly.
 - Environment secrets and database data are **not** included in the repository.
-- Scheduled jobs run in-process against an admin-configured schedule (defaults: daily briefing
-  22:00, weekly episode Fridays 16:00, in the configured home timezone; each fires only if that
-  edition isn't already produced). Times, weekday, and timezone are editable in Settings.
+- Scheduled jobs run in-process against an admin-configured schedule **only when scheduled runs are
+  enabled in Settings → Integrations** (defaults: daily briefing 22:00, weekly episode Fridays 16:00,
+  in the configured home timezone; each fires only if that edition isn't already produced). Times,
+  weekday, and timezone are editable in Settings.
