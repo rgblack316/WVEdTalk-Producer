@@ -107,13 +107,16 @@ keep your data in a Docker volume across upgrades.
 
 ### First install
 
+Download just `install.sh` and run it — the script clones the repo for you:
+
 ```bash
 # On a fresh Ubuntu/Debian host, as a normal (non-root) user with sudo:
-git clone https://github.com/rgblack316/WVEdTalk-Producer.git
-cd WVEdTalk-Producer
-./install.sh
-# (You can also download just install.sh and run it — it will clone the repo for you.)
+curl -fsSL https://raw.githubusercontent.com/rgblack316/WVEdTalk-Producer/main/install.sh -o install.sh
+bash install.sh
 ```
+
+(Already have a clone? Just run `./install.sh` from inside it and the script uses that checkout in
+place instead of cloning.)
 
 `install.sh` will:
 1. Install Docker Engine + the Compose plugin if missing (adds Docker's official apt repo), enable
