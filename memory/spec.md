@@ -12,7 +12,7 @@ story can be flagged as a podcast episode candidate with free-text prep notes.
 ## Model / integration (self-hosted edition — NO Emergent dependency)
 - **Configurable LLM provider** via `lib/llm.py` (`generate(system,user,grounded)` → `{content,
   citations,model}`): **Gemini** (default) through the `google-genai` SDK with the `google_search`
-  grounding tool (default model `gemini-2.5-pro`); **OpenAI** through the Responses API `web_search`
+  grounding tool (default model `gemini-3.1-pro-preview`); **OpenAI** through the Responses API `web_search`
   tool. Citations are normalized to `[{"url","title"}]` from Gemini `grounding_metadata.
   grounding_chunks[].web` or OpenAI `url_citation` annotations, feeding the existing "Grounded"
   badge + link verifier. If a provider returns none, links fall back to verified/unverified.

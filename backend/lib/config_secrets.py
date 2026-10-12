@@ -58,7 +58,7 @@ async def save_integrations(patch: Dict[str, Any]) -> None:
 
 
 def _default_model(provider: str) -> str:
-    return "gemini-2.5-pro" if provider == "gemini" else "gpt-4o-search-preview"
+    return "gemini-3.1-pro-preview" if provider == "gemini" else "gpt-4o-search-preview"
 
 
 async def get_llm_config() -> Dict[str, str]:
