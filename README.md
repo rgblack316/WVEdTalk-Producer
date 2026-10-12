@@ -69,9 +69,10 @@ public share links.
   `/api`; auth routes and token-validated public routes are open, everything else is guarded.
 - **Frontend** — Vite + React 19 + TypeScript (strict), Tailwind v4, shadcn/ui, TanStack Query,
   React Router.
-- **LLM** — Gemini 3.1 Pro (`gemini-3.1-pro-preview`) via the Emergent Universal key with
-  Google Search grounding (the only reliably grounded live-search path over the proxy).
-- **Email** — Emergent-managed Resend integration.
+- **LLM** — configurable per deployment in Settings → Integrations: **Google Gemini** (default,
+  `google-genai` with Google Search grounding) or **OpenAI** (Responses API web search). No Emergent
+  dependency.
+- **Email** — Resend (default) with an SMTP fallback, using the operator's own account/keys.
 - **CAPTCHA** — Cloudflare Turnstile on the public submission form (optional; honeypot-only
   fallback when keys are absent).
 
@@ -140,8 +141,8 @@ See [`backend/.env.example`](backend/.env.example). The real `.env` is never com
 | `CORS_ORIGINS` | Yes | Comma-separated allowed frontend origins (no wildcard when using cookies). |
 | `APP_URL` | Yes | Public base URL used in outgoing email links + share pages. |
 | `APP_PASSCODE` | Yes | Machine credential for downstream `X-Desk-Passcode` access. |
-| `EMERGENT_LLM_KEY` | For research | Gemini 3.1 Pro + Google Search grounding. |
-| `EMERGENT_EMAIL_KEY`, `EMAIL_FROM_NAME` | For email | Managed Resend sender. |
+| `LLM_PROVIDER`, `GEMINI_API_KEY` / `OPENAI_API_KEY`, `LLM_MODEL` | For research | AI provider; normally set in Settings → Integrations (env is initial fallback). |
+| `EMAIL_PROVIDER`, `RESEND_API_KEY` / `SMTP_*`, `EMAIL_FROM`, `EMAIL_FROM_NAME` | For email | Resend default + SMTP fallback; normally set in Settings → Integrations. |
 | `TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY` | Optional | Cloudflare Turnstile on the public submit form; blank = honeypot-only. |
 
 ## Email delivery notes

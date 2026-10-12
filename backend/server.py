@@ -14,10 +14,11 @@ load_dotenv(ROOT_DIR / '.env')
 # MongoDB connection
 from lib.db import client, db, ensure_indexes
 from fastapi import Depends
-from lib.auth import require_auth, require_admin, ensure_seed_admin
+from lib.auth import require_auth, require_admin
 from lib.desk import scheduler_loop
 from lib.producer import scheduler_loop as weekly_scheduler_loop
 from routers.auth import router as auth_router
+from routers.setup import router as setup_router
 from routers.briefings import router as briefings_router
 from routers.episodes import router as episodes_router
 from routers.settings import router as settings_router
@@ -31,8 +32,7 @@ from routers.data_io import router as data_io_router
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     app.state.index_task = asyncio.create_task(ensure_indexes())  # background: a big index build must not block boot
-    await ensure_seed_admin()  # create the bootstrap admin the first time the app starts
-    app.state.scheduler_task = asyncio.create_task(scheduler_loop())  # daily 6:00 AM ET edition
+    app.state.scheduler_task = asyncio.create_task(scheduler_loop())  # daily edition (gated by runs_enabled)
     app.state.weekly_task = asyncio.create_task(weekly_scheduler_loop())  # Friday 2:00 PM ET WVEdTalk episode
     yield
     app.state.scheduler_task.cancel()
@@ -54,6 +54,7 @@ async def root():
 
 # Auth routes are open; everything else requires the shared passcode (cookie or header).
 api_router.include_router(auth_router)
+api_router.include_router(setup_router)  # open first-run setup (each route is one-shot)
 api_router.include_router(public_router)  # open, but each route validates a share token
 _guard = [Depends(require_auth)]
 api_router.include_router(briefings_router, dependencies=_guard)

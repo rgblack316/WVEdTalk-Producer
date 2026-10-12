@@ -296,3 +296,31 @@ export const SECTION_ORDER = [
   "k12",
   "higher_ed",
 ];
+
+export interface SetupStatus {
+  needs_setup: boolean;
+}
+
+export interface Integrations {
+  llm_provider: string;
+  llm_model: string;
+  gemini_api_key_set: boolean;
+  openai_api_key_set: boolean;
+  gemini_api_key_mask: string;
+  openai_api_key_mask: string;
+  email_provider: string;
+  email_from: string;
+  email_from_name: string;
+  email_reply_to: string;
+  resend_api_key_set: boolean;
+  resend_api_key_mask: string;
+  smtp_host: string;
+  smtp_port: number;
+  smtp_username: string;
+  smtp_password_set: boolean;
+  smtp_starttls: boolean;
+  turnstile_site_key: string;
+  turnstile_secret_key_set: boolean;
+  runs_enabled: boolean;
+  digests_enabled: boolean;
+}

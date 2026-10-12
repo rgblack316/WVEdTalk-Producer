@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { apiGet, apiPost, ApiError } from "@/lib/api";
 import { beginSession } from "@/lib/session";
-import type { AuthState } from "@/lib/types";
+import SetupWizard from "@/components/SetupWizard";
+import type { AuthState, SetupStatus } from "@/lib/types";
 
 export default function AuthGate({ children }: { children: React.ReactNode }) {
   const qc = useQueryClient();
@@ -18,6 +19,13 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
     queryFn: () => apiGet<AuthState>("/auth/me"),
     retry: false,
     staleTime: 5 * 60 * 1000,
+  });
+
+  const { data: setup } = useQuery({
+    queryKey: ["setup", "status"],
+    queryFn: () => apiGet<SetupStatus>("/setup/status"),
+    retry: false,
+    staleTime: 60 * 1000,
   });
 
   const login = useMutation({
@@ -47,6 +55,9 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
   }
 
   if (data?.authenticated) return <>{children}</>;
+
+  // Brand-new install with no users yet — run first-run setup instead of the login screen.
+  if (setup?.needs_setup) return <SetupWizard />;
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-5" data-testid="auth-gate">

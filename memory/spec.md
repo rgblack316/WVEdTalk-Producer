@@ -9,11 +9,35 @@ editorial tests). Briefings are stored per calendar date, browsable in an archiv
 story can be flagged as a podcast episode candidate with free-text prep notes.
 
 ## Model / integration
-- Gemini `gemini-3.1-pro-preview` via emergentintegrations LlmChat + `{"googleSearch": {}}` tool.
-- EMERGENT_LLM_KEY in backend/.env. OpenAI web search is rejected by the proxy and Anthropic
-  web_search confabulates, so Gemini grounding is the only functional live-search path here.
+## Model / integration (self-hosted edition — NO Emergent dependency)
+- **Configurable LLM provider** via `lib/llm.py` (`generate(system,user,grounded)` → `{content,
+  citations,model}`): **Gemini** (default) through the `google-genai` SDK with the `google_search`
+  grounding tool (default model `gemini-2.5-pro`); **OpenAI** through the Responses API `web_search`
+  tool. Citations are normalized to `[{"url","title"}]` from Gemini `grounding_metadata.
+  grounding_chunks[].web` or OpenAI `url_citation` annotations, feeding the existing "Grounded"
+  badge + link verifier. If a provider returns none, links fall back to verified/unverified.
+- **Email** via `lib/mailer.py`: Resend direct (default) with an SMTP fallback (`aiosmtplib`).
+  `email_digest._send_email` is the single chokepoint and keeps the G2/G3 safety gate + templates.
+- **Credentials** (`lib/config_secrets.py`): AI keys/model, Resend, SMTP, Turnstile, and the
+  `runs_enabled`/`digests_enabled` flags live in `desk_config.integrations`, encrypted at rest with
+  a Fernet key derived from SESSION_SECRET. Precedence: DB value (Settings → Integrations) > env
+  fallback. Secrets are write-only via the API and returned masked (`public_masked()`).
+- **In-app management**: Settings → Integrations panel (`components/IntegrationsPanel.tsx`, admin-only)
+  with provider select, keys, test-AI + test-email (resend|smtp) buttons, and run/digest toggles.
+  Endpoints: `GET/POST /api/settings/integrations`, `POST /api/settings/integrations/test-ai`,
+  `.../test-email`.
+- **First-run**: no `admin`/`admin` seed. `routers/setup.py` — `GET /api/setup/status`,
+  `POST /api/setup/admin` (one-shot), `POST /api/setup/import` (first-run backup restore). `AuthGate`
+  shows `SetupWizard` when `needs_setup`.
+- **Safe defaults**: scheduled runs + digests default OFF; the schedulers (`desk.scheduler_loop`,
+  `producer.scheduler_loop`) and `_send_digest_safe` are gated by `config_secrets.runs_enabled()` /
+  `digests_enabled()`, so nothing errors before keys are configured.
+- Deployment: Docker (`docker-compose.yml`, `backend/Dockerfile`, `frontend/Dockerfile` + nginx),
+  `install.sh` (auto-installs Docker, clones repo, starts), `upgrade.sh` (git-safety + mandatory
+  mongodump). See `plan/plan.md`.
 - Grounding returns Google redirect URLs; `_resolve_sources()` follows each to the publisher's
   direct URL (httpx, 8s timeout) and fills the outlet from the final domain.
+
 
 ## Data model (MongoDB, collection `briefings`, one doc per date)
 - Briefing: id, date (YYYY-MM-DD ET), generated_at, status, model, editor_note, stories[],

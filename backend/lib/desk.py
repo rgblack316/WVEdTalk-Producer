@@ -259,32 +259,16 @@ def _parse_json(raw: str) -> Dict[str, Any]:
 
 
 async def _call_model(date_str: str, recent: List[Dict[str, Any]], submissions: List[Dict[str, Any]]) -> Dict[str, Any]:
-    from emergentintegrations.llm.chat import LlmChat, UserMessage
+    from lib import llm
 
-    key = os.environ.get("EMERGENT_LLM_KEY", "")
-    if not key:
-        raise RuntimeError("EMERGENT_LLM_KEY is not configured")
-
-    chat = (
-        LlmChat(api_key=key, session_id=f"wv-desk-{date_str}", system_message=EDITORIAL_BRIEF)
-        .with_model(MODEL_PROVIDER, MODEL_NAME)
-        .with_tools([{"googleSearch": {}}])  # live Google Search grounding — real cited sources
+    result = await llm.generate(
+        system=EDITORIAL_BRIEF,
+        user=_user_prompt(date_str, recent, submissions),
+        grounded=True,
     )
-    resp = await chat.send_message_with_tools(UserMessage(text=_user_prompt(date_str, recent, submissions)))
-    content = resp.content if isinstance(resp.content, str) else str(resp.content or "")
-    data = _parse_json(content)
-
-    # Grounding citations carry the authoritative source URLs (Google redirect links + outlet titles).
-    citations: List[Dict[str, str]] = []
-    try:
-        annotations = getattr(resp.raw.choices[0].message, "annotations", None) or []
-        for a in annotations:
-            uc = a.get("url_citation") if isinstance(a, dict) else None
-            if uc and uc.get("url"):
-                citations.append({"url": uc["url"], "title": uc.get("title", "")})
-    except Exception:
-        pass
-    data["_citations"] = citations
+    data = _parse_json(result["content"])
+    data["_citations"] = result["citations"]
+    data["_model"] = result["model"]
     return data
 
 
@@ -599,7 +583,7 @@ async def run_briefing(date_str: Optional[str] = None, trigger: str = "manual") 
 
             briefing = Briefing(
                 date=date_str,
-                model=f"{MODEL_PROVIDER}/{MODEL_NAME}",
+                model=str(data.get("_model") or f"{MODEL_PROVIDER}/{MODEL_NAME}"),
                 editor_note=str(data.get("editor_note") or ""),
                 stories=stories,
                 trends=data.get("trends") or [],
@@ -645,8 +629,10 @@ async def run_briefing(date_str: Optional[str] = None, trigger: str = "manual") 
 async def _send_digest_safe(briefing: Briefing) -> None:
     """Email the digest to configured recipients after a run — never fail the run on this."""
     try:
-        from lib import email_digest
+        from lib import email_digest, config_secrets
 
+        if not await config_secrets.digests_enabled():
+            return
         cfg = await db.desk_config.find_one({"key": "singleton"}, {"_id": 0})
         recipients = (cfg or {}).get("recipients") or []
         sub_count = await db.subscribers.count_documents({"active": True})
@@ -680,7 +666,9 @@ async def scheduler_loop() -> None:
     """Fire the daily edition at 10:00 PM Eastern if that date has no briefing yet."""
     while True:
         try:
-            await _maybe_run_daily()
+            from lib import config_secrets
+            if await config_secrets.runs_enabled():
+                await _maybe_run_daily()
         except Exception:
             logger.exception("scheduler loop error")
             await asyncio.sleep(1800)  # back off after a failure

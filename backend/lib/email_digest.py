@@ -21,12 +21,10 @@ from lib.db import db
 
 logger = logging.getLogger(__name__)
 
-# Managed email proxy — a CONSTANT, never read from env, so it survives deployment.
-EMAIL_BASE_URL = "https://integrations.emergentagent.com"
-EMAIL_KEY = os.environ.get("EMERGENT_EMAIL_KEY", "")
-EMAIL_FROM_NAME = os.environ.get("EMAIL_FROM_NAME", "WVEdTalk News Desk")
-EMAIL_REPLY_TO = os.environ.get("EMAIL_REPLY_TO")  # maps to Reply-To (contact_email)
-APP_URL = os.environ.get("APP_URL", "https://mountain-school-news.preview.emergentagent.com").rstrip("/")
+# Email sender identity + transport are configured in Settings → Integrations (see lib/mailer).
+EMAIL_FROM_NAME = os.environ.get("EMAIL_FROM_NAME", "WV Education News Desk")
+EMAIL_REPLY_TO = os.environ.get("EMAIL_REPLY_TO")  # optional default Reply-To
+APP_URL = os.environ.get("APP_URL", "http://localhost").rstrip("/")
 
 _SHORTENERS = ("bit.ly", "tinyurl.com", "t.co", "is.gd", "cutt.ly", "goo.gl", "rebrand.ly")
 # Imperative credential/payment REQUESTS directed at the recipient — genuine phishing
@@ -114,19 +112,9 @@ def _assert_safe_email(subject: str, html: str) -> None:
 
 async def _send_email(*, to: str, subject: str, html: str) -> Optional[str]:
     _assert_safe_email(subject, html)  # G2/G3 gate — never skip
-    if not EMAIL_KEY:
-        raise RuntimeError("EMERGENT_EMAIL_KEY is not configured")
-    payload = {"to": [to], "subject": subject, "html": html, "from_name": EMAIL_FROM_NAME}
-    if EMAIL_REPLY_TO:
-        payload["contact_email"] = EMAIL_REPLY_TO
-    async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.post(
-            f"{EMAIL_BASE_URL}/api/v1/email/send",
-            headers={"X-Email-Key": EMAIL_KEY},
-            json=payload,
-        )
-    resp.raise_for_status()
-    return resp.json().get("id")
+    from lib import mailer
+
+    return await mailer.send(to=to, subject=subject, html=html)
 
 
 def _digest_html(briefing, unsubscribe_url: Optional[str] = None) -> str:

@@ -247,33 +247,16 @@ async def _call_model(
 ) -> Dict[str, Any]:
     import os
 
-    from emergentintegrations.llm.chat import LlmChat, UserMessage
+    from lib import llm
 
-    key = os.environ.get("EMERGENT_LLM_KEY", "")
-    if not key:
-        raise RuntimeError("EMERGENT_LLM_KEY is not configured")
-
-    chat = (
-        LlmChat(api_key=key, session_id=f"wvedtalk-{week_end}", system_message=PRODUCER_BRIEF)
-        .with_model(MODEL_PROVIDER, MODEL_NAME)
-        .with_tools([{"googleSearch": {}}])
+    result = await llm.generate(
+        system=PRODUCER_BRIEF,
+        user=_user_prompt(week_start, week_end, briefings, script_length, candidates, positive, submissions),
+        grounded=True,
     )
-    resp = await chat.send_message_with_tools(
-        UserMessage(text=_user_prompt(week_start, week_end, briefings, script_length, candidates, positive, submissions))
-    )
-    content = resp.content if isinstance(resp.content, str) else str(resp.content or "")
-    data = desk._parse_json(content)
-
-    citations: List[Dict[str, str]] = []
-    try:
-        annotations = getattr(resp.raw.choices[0].message, "annotations", None) or []
-        for a in annotations:
-            uc = a.get("url_citation") if isinstance(a, dict) else None
-            if uc and uc.get("url"):
-                citations.append({"url": uc["url"], "title": uc.get("title", "")})
-    except Exception:
-        pass
-    data["_citations"] = citations
+    data = desk._parse_json(result["content"])
+    data["_citations"] = result["citations"]
+    data["_model"] = result["model"]
     return data
 
 
@@ -352,12 +335,6 @@ async def _chapterize_call(script: str) -> Dict[str, Any]:
     """Ask the model to insert chapter headers into an EXISTING script without rewriting it."""
     import os
 
-    from emergentintegrations.llm.chat import LlmChat, UserMessage
-
-    key = os.environ.get("EMERGENT_LLM_KEY", "")
-    if not key:
-        raise RuntimeError("EMERGENT_LLM_KEY is not configured")
-
     system = (
         "You format existing podcast scripts by inserting chapter headers. You never change, add, "
         "remove, reword, or reorder any spoken words — you only insert '## Chapter Title' header "
@@ -376,16 +353,10 @@ async def _chapterize_call(script: str) -> Dict[str, Any]:
         '"chapters": ["ordered chapter titles without the ## prefix"]}\n\n'
         "SCRIPT:\n" + script
     )
-    chat = LlmChat(api_key=key, session_id="wvedtalk-chapterize", system_message=system).with_model(
-        MODEL_PROVIDER, MODEL_NAME
-    )
-    resp = await chat.send_message(UserMessage(text=prompt))
-    if isinstance(resp, str):
-        content = resp
-    else:
-        raw = getattr(resp, "content", resp)
-        content = raw if isinstance(raw, str) else str(raw or "")
-    return desk._parse_json(content)
+    from lib import llm
+
+    result = await llm.generate(system=system, user=prompt, grounded=False)
+    return desk._parse_json(result["content"])
 
 
 async def chapterize_episode(week_of: str) -> Dict[str, Any]:
@@ -523,7 +494,7 @@ async def produce_episode(week_of: Optional[str] = None, trigger: str = "manual"
                 week_of=week_of,
                 week_start=week_start,
                 week_end=week_end,
-                model=f"{MODEL_PROVIDER}/{MODEL_NAME}",
+                model=str(data.get("_model") or f"{MODEL_PROVIDER}/{MODEL_NAME}"),
                 editorial_summary=str(data.get("editorial_summary") or ""),
                 selected_stories=selected,
                 not_selected=not_selected,
@@ -607,7 +578,9 @@ async def scheduler_loop() -> None:
     """Produce the weekly episode at 4:00 PM ET on Fridays if it doesn't exist yet."""
     while True:
         try:
-            await _maybe_produce_weekly()
+            from lib import config_secrets
+            if await config_secrets.runs_enabled():
+                await _maybe_produce_weekly()
         except Exception:
             logger.exception("weekly scheduler loop error")
             await asyncio.sleep(1800)

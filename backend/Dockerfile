@@ -12,13 +12,7 @@ RUN apt-get update \
 
 COPY requirements.txt .
 
-# NOTE (temporary, removed in migration Phase 5 / hard cut):
-# the code shipped today still imports `emergentintegrations`, which is served
-# from Emergent's package index. The extra-index-url lets the CURRENT build run
-# in Docker. Once the LLM/email providers are swapped to direct SDKs, delete
-# `emergentintegrations` from requirements.txt and drop the extra index below.
-RUN pip install -r requirements.txt \
-    --extra-index-url https://d33sy5i8bnduwe.cloudfront.net/simple/
+RUN pip install -r requirements.txt
 
 COPY . .
 

@@ -1,12 +1,14 @@
 """Desk configuration routes — recipients and watchlist terms. Mounted under /api."""
 
-from typing import List
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, EmailStr
 
 from lib import email_digest
 from lib import auth
 from lib import desk
+from lib import config_secrets, llm, mailer
 from lib.db import db
 from models.config import (
     AutoLockUpdate,
@@ -45,6 +47,62 @@ async def _save(cfg: DeskConfig) -> None:
 @router.get("/settings", response_model=DeskConfig)
 async def get_settings():
     return await _load()
+
+
+# ---- Integrations: AI provider, email (Resend/SMTP), Turnstile, run toggles ---
+
+@router.get("/settings/integrations")
+async def get_integrations(_admin=Depends(auth.require_admin)):
+    return await config_secrets.public_masked()
+
+
+class IntegrationUpdate(BaseModel):
+    llm_provider: Optional[str] = None
+    llm_model: Optional[str] = None
+    gemini_api_key: Optional[str] = None
+    openai_api_key: Optional[str] = None
+    email_provider: Optional[str] = None
+    email_from: Optional[str] = None
+    email_from_name: Optional[str] = None
+    email_reply_to: Optional[str] = None
+    resend_api_key: Optional[str] = None
+    smtp_host: Optional[str] = None
+    smtp_port: Optional[int] = None
+    smtp_username: Optional[str] = None
+    smtp_password: Optional[str] = None
+    smtp_starttls: Optional[bool] = None
+    turnstile_site_key: Optional[str] = None
+    turnstile_secret_key: Optional[str] = None
+    runs_enabled: Optional[bool] = None
+    digests_enabled: Optional[bool] = None
+
+
+_SECRET_FIELDS = {"gemini_api_key", "openai_api_key", "resend_api_key", "smtp_password", "turnstile_secret_key"}
+
+
+@router.post("/settings/integrations")
+async def update_integrations(body: IntegrationUpdate, _admin=Depends(auth.require_admin)):
+    patch = {}
+    for k, v in body.model_dump(exclude_none=True).items():
+        patch[k] = config_secrets.enc(v) if k in _SECRET_FIELDS else v
+    if patch:
+        await config_secrets.save_integrations(patch)
+    return await config_secrets.public_masked()
+
+
+@router.post("/settings/integrations/test-ai")
+async def test_ai(_admin=Depends(auth.require_admin)):
+    return await llm.test_connection()
+
+
+class TestEmail(BaseModel):
+    email: EmailStr
+    provider: Optional[str] = None
+
+
+@router.post("/settings/integrations/test-email")
+async def test_email(body: TestEmail, _admin=Depends(auth.require_admin)):
+    return await mailer.test_send(str(body.email), provider=body.provider)
 
 
 @router.post("/settings/recipients", response_model=DeskConfig)
