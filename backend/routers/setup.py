@@ -42,7 +42,7 @@ async def create_first_admin(body: FirstAdmin, response: Response):
     user = await auth.create_user(email=email, role="admin", password=body.password.strip())
     response.set_cookie(
         key=auth.COOKIE_NAME, value=auth.make_token(user), max_age=auth.MAX_AGE,
-        httponly=True, samesite="lax", secure=True, path="/",
+        httponly=True, samesite="lax", secure=auth.COOKIE_SECURE, path="/",
     )
     return {"ok": True, "email": email}
 

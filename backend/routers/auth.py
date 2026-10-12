@@ -50,7 +50,7 @@ async def login(body: LoginRequest, request: Request, response: Response):
         max_age=auth.MAX_AGE,
         httponly=True,
         samesite="lax",
-        secure=True,
+        secure=auth.COOKIE_SECURE,
         path="/",
     )
     return _state(user)
@@ -58,5 +58,5 @@ async def login(body: LoginRequest, request: Request, response: Response):
 
 @router.post("/auth/logout", response_model=AuthState)
 async def logout(response: Response):
-    response.delete_cookie(key=auth.COOKIE_NAME, path="/")
+    response.delete_cookie(key=auth.COOKIE_NAME, path="/", samesite="lax", secure=auth.COOKIE_SECURE)
     return AuthState(authenticated=False, user=None)

@@ -28,6 +28,18 @@ COOKIE_NAME = "wv_desk_session"
 MAX_AGE = 60 * 60 * 24 * 30  # 30 days
 _PBKDF2_ROUNDS = 200_000
 
+# Only mark the session cookie Secure when the deployment is actually HTTPS. Browsers DROP a Secure
+# cookie sent over plain http://, which silently breaks login on a local / HTTP self-hosted install
+# (the login succeeds but the cookie is never stored). Default: infer from APP_URL's scheme; an
+# explicit COOKIE_SECURE=true/false env overrides. HTTPS deployments stay Secure.
+_cs = os.environ.get("COOKIE_SECURE", "").strip().lower()
+if _cs in ("true", "1", "yes"):
+    COOKIE_SECURE = True
+elif _cs in ("false", "0", "no"):
+    COOKIE_SECURE = False
+else:
+    COOKIE_SECURE = os.environ.get("APP_URL", "").strip().lower().startswith("https")
+
 # Bootstrap admin — seeded once if the users collection is empty.
 SEED_ADMIN_EMAIL = "admin"
 SEED_ADMIN_PASSWORD = "admin"

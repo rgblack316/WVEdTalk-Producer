@@ -1,0 +1,48 @@
+{
+  "iteration": 3,
+  "summary": "Regression check for the login-cookie-stickiness fix (Secure flag now conditional on deployment scheme). Verified full email/password login flow end-to-end on the HTTPS preview: valid login + session persistence across reload, invalid credentials rejected with inline error, protected /api/auth/me recognizes the session, and logout clears it. 3 browser checks + 1 backend test file (2 tests) all PASSED; pre-existing backend suite (6 tests) still green.",
+  "passed": 4,
+  "failed": 0,
+  "flaky": 0,
+  "blocked": 0,
+  "test_error": 0,
+  "retest_needed": false,
+  "bugs": [],
+  "action_items": [],
+  "checks": [
+    {
+      "criterion": "Admin can sign in with valid credentials and the session persists",
+      "name": "login-valid-credentials-persist-session",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "On https://mountain-school-news.preview.emergentagent.com, filled login-email-input/login-password-input with admin@johnscreekstudios.com / WVEd!Desk-Admin2026, clicked login-submit -> data-testid=desk-layout became visible (not bounced back to login). Reloaded the page (page.reload) -> desk-layout still visible, confirming the session cookie stuck across reload on this HTTPS origin."
+    },
+    {
+      "criterion": "Invalid credentials are rejected with a clear error",
+      "name": "login-invalid-credentials-rejected",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Submitted admin@johnscreekstudios.com with a wrong password -> POST /api/auth/login returned 401 (visible as a console 'Failed to load resource: 401' entry, matching lib/auth.py's 'Incorrect email or password' path), login-error testid became visible, and the user remained on the login screen (login-email-input still visible, no crash)."
+    },
+    {
+      "criterion": "Authenticated session is recognized on protected API",
+      "name": "test_tscheck_auth_session_recognized.py (test_login_then_me_reports_authenticated)",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "httpx.Client against https://mountain-school-news.preview.emergentagent.com/api (resolved from backend/.env APP_URL so the Secure cookie set over https round-trips correctly, matching real browser behavior): POST /auth/login -> 200 {authenticated:true, user.email=admin@johnscreekstudios.com}; subsequent GET /auth/me (cookie carried by the client jar) -> 200 {authenticated:true, user.role:'admin'}. Also verified companion test_login_with_wrong_password_rejected: POST /auth/login with bad password -> 401 'Incorrect email or password', and /auth/me after that stays authenticated:false (no session created)."
+    },
+    {
+      "criterion": "Logout clears the session",
+      "name": "logout-clears-session",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "After logging in and confirming desk-layout, clicked the logout control -> login-email-input became visible again (returned to login screen). Follow-up page.request.get('/api/auth/me') returned {authenticated:false, user:null}, confirming the server-side session was cleared, not just client-side UI state."
+    }
+  ],
+  "notes": [
+    "Per spec_deviations, the session cookie is Secure=True on this HTTPS preview (APP_URL starts with https://) by design; the HTTP/self-hosted Secure=False path cannot be exercised here and was not treated as a bug.",
+    "The backend test for the 'protected API' criterion deliberately targets the public HTTPS ingress (read from backend/.env APP_URL, since it is not exported as a shell env var) rather than http://localhost:8001 — hitting the plain-http backend directly produced a cookie that httpx's jar (consistent with real browser Secure-cookie semantics) correctly refused to resend, which would have been a false-positive bug report against the by-design http/https split described in spec_deviations.",
+    "Pre-existing backend suite (6 tests covering demo-endpoint removal, settings auto-lock persistence, protected-API auth requirement, header passcode auth) re-ran clean alongside the 2 new tests -> 8/8 passed total.",
+    "4 acceptance criteria in this briefing, all covered (3 browser + 1 backend test file for the API-bearing criterion); no criteria were skipped."
+  ]
+}
