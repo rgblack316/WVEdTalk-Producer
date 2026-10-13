@@ -270,7 +270,23 @@ send emails, or change any shared setting). Replaced the earlier single shared p
 None seeded. First real briefing generated for 2026-09-18. Demo watch terms ("consolidation",
 "special education") were added during testing and left as harmless examples; no recipients configured.
 
-## WVEdTalk Weekly Producer (feature)
+## Self-hosting: version & update indicator
+- **App version** lives in `backend/VERSION` (baked into the image). `lib/version.py`
+  `current_version()` reads it; the update check (`check_update`, 1h in-process cache) fetches
+  `backend/VERSION` from the GitHub default branch (`raw.githubusercontent.com/<GITHUB_REPO>/<UPDATE_BRANCH>/backend/VERSION`,
+  defaults `rgblack316/WVEdTalk-Producer` / `main`) and compares (numeric-tuple when both parse, else
+  string inequality). Fails closed — any fetch/parse error → `update_available:false` + an `error` string.
+- **Endpoints** (`routers/version.py`, auth-guarded): `GET /api/version` → `VersionInfo {current, latest,
+  update_available, checked_at, error}` (any signed-in user, cached); `POST /api/version/check` (editor)
+  forces a fresh fetch. TS mirror `VersionInfo` in `lib/types.ts`.
+- **Banner**: `DeskLayout` queries `/api/version` only for admins and renders a dismissible
+  `update-available-banner` (current→latest + "run ./upgrade.sh") when `update_available`. Dismiss is
+  session-local (`updateDismissed` state). **Release = bump `backend/VERSION` and push.**
+- **Docker health/startup order** (`docker-compose.yml`): mongo (`mongosh ping`), backend
+  (`curl /api/` — the auth-free health route; the old probe hit `/api/schedule/next` which 401s and
+  wrongly reported the container unhealthy), frontend (busybox `wget --spider /`). `backend` depends on
+  mongo healthy, `frontend` on backend healthy (`condition: service_healthy`). `install.sh`/`upgrade.sh`
+  readiness loops also poll `/api/` now, not the 401 endpoint.
 - **Purpose**: every Friday 4:00 PM ET, independently reviews the week and writes a recording-ready
   WVEdTalk episode. Adapts the user's full producer brief (`lib/producer.py` PRODUCER_BRIEF).
 - **Model**: Gemini 3.1 Pro + googleSearch grounding; fresh research, does not merely restate the

@@ -1,12 +1,12 @@
 import { Link, useLocation } from "react-router-dom";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Loader2, RefreshCw, LogOut, Clock } from "lucide-react";
+import { Loader2, RefreshCw, LogOut, Clock, ArrowUpCircle, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { apiGet, apiPost, ApiError } from "@/lib/api";
 import { endSession } from "@/lib/session";
-import type { AuthState, CandidateStory, DeskConfig, NextRuns, RunStatus } from "@/lib/types";
+import type { AuthState, CandidateStory, DeskConfig, NextRuns, RunStatus, VersionInfo } from "@/lib/types";
 
 const BASE_NAV = [
   { to: "/", label: "Today's Briefing" },
@@ -75,6 +75,17 @@ export default function DeskLayout({ children }: { children: React.ReactNode }) 
   const isViewer = auth?.user?.role === "viewer";
   const canEdit = auth?.user?.role === "admin" || auth?.user?.role === "editor";
   const nav = isAdmin ? [...BASE_NAV, { to: "/users", label: "Users" }] : BASE_NAV;
+
+  // Self-hosted "update available" indicator — admin-only, cached server-side (1h TTL).
+  const { data: versionInfo } = useQuery({
+    queryKey: ["version"],
+    queryFn: () => apiGet<VersionInfo>("/version"),
+    enabled: isAdmin,
+    staleTime: 30 * 60 * 1000,
+    refetchInterval: 60 * 60 * 1000,
+  });
+  const [updateDismissed, setUpdateDismissed] = useState(false);
+  const showUpdateBanner = isAdmin && !!versionInfo?.update_available && !updateDismissed;
 
   // Auto-lock after a period of inactivity (0 = off). Any interaction resets the timer.
   const lockMinutes = config?.auto_lock_minutes ?? 0;
@@ -237,6 +248,32 @@ export default function DeskLayout({ children }: { children: React.ReactNode }) 
           </div>
         )}
       </header>
+      {showUpdateBanner && (
+        <div
+          className="flex items-center justify-center gap-2 border-b border-accent/40 bg-accent/15 px-5 py-2 text-center text-xs text-foreground"
+          data-testid="update-available-banner"
+        >
+          <ArrowUpCircle className="size-3.5 text-accent-foreground" />
+          <span>
+            Update available — version{" "}
+            <span className="font-semibold" data-testid="update-latest-version">
+              {versionInfo?.latest}
+            </span>{" "}
+            is out (you're on {versionInfo?.current}). Run{" "}
+            <code className="rounded bg-background/70 px-1 py-0.5 font-mono">./upgrade.sh</code> on
+            your server to update.
+          </span>
+          <button
+            type="button"
+            onClick={() => setUpdateDismissed(true)}
+            aria-label="Dismiss update notice"
+            className="ml-1 rounded-sm p-0.5 text-muted-foreground transition-colors hover:text-foreground"
+            data-testid="update-dismiss-button"
+          >
+            <X className="size-3.5" />
+          </button>
+        </div>
+      )}
       {isViewer && (
         <div
           className="border-b border-border bg-secondary/60 px-5 py-1.5 text-center text-xs text-muted-foreground"

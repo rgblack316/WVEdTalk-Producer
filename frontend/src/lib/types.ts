@@ -301,6 +301,14 @@ export interface SetupStatus {
   needs_setup: boolean;
 }
 
+export interface VersionInfo {
+  current: string;
+  latest: string | null;
+  update_available: boolean;
+  checked_at: string | null;
+  error: string | null;
+}
+
 export interface Integrations {
   llm_provider: string;
   llm_model: string;

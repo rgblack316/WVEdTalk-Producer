@@ -145,6 +145,17 @@ HEAD, or a diverged branch; it **always takes a MongoDB backup first** (`mongodu
 stays in its Docker volume and is never touched. The script prints the exact `mongorestore` command
 to roll back.
 
+> **"Update available" banner:** admins see an in-app banner when a newer release is published. The
+> app compares its baked-in `backend/VERSION` against the same file on the GitHub default branch
+> (`GET /api/version`, cached 1h). **To cut a release, bump `backend/VERSION`** (e.g. `1.0.0` →
+> `1.1.0`) and push — running installs will then show the banner until an operator runs `./upgrade.sh`.
+> The check is best-effort and fails closed (no banner) if GitHub is unreachable. Override the source
+> with `GITHUB_REPO` / `UPDATE_BRANCH` env vars.
+
+> **Health & startup order:** each service defines a Docker `healthcheck` (backend probes the
+> auth-free `GET /api/`, not the 401-guarded `/api/schedule/next`); `backend` waits for `mongo`
+> healthy and `frontend` waits for `backend` healthy via `depends_on: condition: service_healthy`.
+
 > **Publishing the repo first:** use Emergent's **Save → Save to GitHub** to push this project to
 > `github.com/rgblack316/WVEdTalk-Producer` so `install.sh` can clone it. Secrets/`.env` are excluded
 > from the push by design — `install.sh` generates `SESSION_SECRET`, and the rest are managed in-app.

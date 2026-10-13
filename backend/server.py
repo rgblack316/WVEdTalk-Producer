@@ -26,6 +26,7 @@ from routers.users import router as users_router
 from routers.public import router as public_router
 from routers.submissions import router as submissions_router
 from routers.data_io import router as data_io_router
+from routers.version import router as version_router
 
 
 # Startup runs before the yield, shutdown after it. Add your own setup/teardown here.
@@ -59,6 +60,7 @@ api_router.include_router(public_router)  # open, but each route validates a sha
 _guard = [Depends(require_auth)]
 api_router.include_router(briefings_router, dependencies=_guard)
 api_router.include_router(settings_router, dependencies=_guard)
+api_router.include_router(version_router, dependencies=_guard)
 api_router.include_router(episodes_router, dependencies=_guard)
 api_router.include_router(submissions_router, dependencies=_guard)
 api_router.include_router(users_router, dependencies=[Depends(require_admin)])

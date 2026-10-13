@@ -129,7 +129,7 @@ HTTP_PORT="${HTTP_PORT:-80}"
 log "Waiting for the app at http://localhost:${HTTP_PORT} ..."
 healthy=0
 for _ in $(seq 1 60); do
-  if curl -fsS "http://localhost:${HTTP_PORT}/api/schedule/next" >/dev/null 2>&1; then healthy=1; break; fi
+  if curl -fsS "http://localhost:${HTTP_PORT}/api/" >/dev/null 2>&1; then healthy=1; break; fi
   sleep 3
 done
 

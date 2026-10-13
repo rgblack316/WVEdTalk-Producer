@@ -92,7 +92,7 @@ HTTP_PORT="$(awk -F= '$1=="HTTP_PORT"{print substr($0,index($0,"=")+1);exit}' .e
 HTTP_PORT="${HTTP_PORT:-80}"
 log "Waiting for the app at http://localhost:${HTTP_PORT} ..."
 for _ in $(seq 1 60); do
-  curl -fsS "http://localhost:${HTTP_PORT}/api/schedule/next" >/dev/null 2>&1 && break
+  curl -fsS "http://localhost:${HTTP_PORT}/api/" >/dev/null 2>&1 && break
   sleep 3
 done
 
