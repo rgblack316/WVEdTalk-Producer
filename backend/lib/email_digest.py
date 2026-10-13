@@ -26,6 +26,18 @@ EMAIL_FROM_NAME = os.environ.get("EMAIL_FROM_NAME", "WV Education News Desk")
 EMAIL_REPLY_TO = os.environ.get("EMAIL_REPLY_TO")  # optional default Reply-To
 APP_URL = os.environ.get("APP_URL", "http://localhost").rstrip("/")
 
+
+async def _resolve_base() -> str:
+    """Refresh the module base URL from Settings → Integrations (public_url) before building any
+    email, so links/assets use the public https URL (required by the G3 gate) rather than a local
+    http://localhost that the gate — correctly — rejects."""
+    global APP_URL
+    from lib import config_secrets
+    base = await config_secrets.get_public_url()
+    if base:
+        APP_URL = base.rstrip("/")
+    return APP_URL
+
 _SHORTENERS = ("bit.ly", "tinyurl.com", "t.co", "is.gd", "cutt.ly", "goo.gl", "rebrand.ly")
 # Imperative credential/payment REQUESTS directed at the recipient — genuine phishing
 # signals, always fatal. Bare topical nouns ("social security number", "cvv", "seed
@@ -363,6 +375,7 @@ async def _send_to_lists(briefing, admin: List[str], sub_emails: List[str], *,
     DigestSendResult."""
     from models.config import DeliveryFailure, DigestSendResult
 
+    await _resolve_base()
     subject = f"WVEdTalk News Desk — Daily Briefing, {briefing.date}"
     res = DigestSendResult(date=briefing.date)
 
@@ -433,6 +446,7 @@ async def send_test_digest(briefing, email: str) -> Optional[str]:
     None on success, or the exact failure reason so the UI can show what went wrong. Does not
     touch the delivery log or fire alerts."""
     email = (email or "").strip()
+    await _resolve_base()
     share_url = f"{APP_URL}/share/briefing/{briefing.date}?t={make_share_token(briefing.date)}"
     unsub = f"{APP_URL}/unsubscribe?email={quote(email)}&t={make_unsub_token(email)}"
     try:
@@ -499,6 +513,7 @@ async def send_delivery_alert(res) -> int:
     partial miss never goes unnoticed. Best-effort; returns how many alerts were sent."""
     if not res.sub_failed:
         return 0
+    await _resolve_base()
     admins = await db.users.find({"role": "admin"}, {"_id": 0, "email": 1}).to_list(200)
     tos = [u["email"] for u in admins if "@" in (u.get("email") or "")]
     if not tos:
@@ -559,6 +574,7 @@ async def send_episode(episode, recipients: List[str]) -> int:
     """Send the weekly episode script email. Best-effort; returns how many succeeded."""
     if not recipients:
         return 0
+    await _resolve_base()
     subject = f"WVEdTalk Weekly Script — Week of {episode.week_end}"
     html = _episode_html(episode)
     return await _fan_out(subject, html, recipients)
@@ -594,6 +610,7 @@ def _alert_html(title: str, label: str, detail: str) -> str:
 async def send_failure_alert(*, kind: str, label: str, detail: str) -> int:
     """Email every admin when a SCHEDULED run fails, so a silent miss never goes unnoticed.
     Only real email-address admins are targeted (a fresh 'admin' username has no inbox)."""
+    await _resolve_base()
     admins = await db.users.find({"role": "admin"}, {"_id": 0, "email": 1}).to_list(200)
     tos = [u["email"] for u in admins if "@" in (u.get("email") or "")]
     if not tos:
@@ -636,6 +653,7 @@ async def send_submission_thanks(*, name: str, email: str, url: str) -> int:
     email = (email or "").strip()
     if "@" not in email:
         return 0
+    await _resolve_base()
     subject = "Thank you for your WVEdTalk story submission"
     html = _thanks_html(name, url)
     _assert_safe_email(subject, html)
@@ -647,6 +665,7 @@ async def send_submission_rejection(*, name: str, email: str, url: str) -> int:
     email = (email or "").strip()
     if "@" not in email:
         return 0
+    await _resolve_base()
     who = escape((name or "there").strip() or "there")
     link = escape((url or "").strip())
     subject = "About your WVEdTalk story submission"

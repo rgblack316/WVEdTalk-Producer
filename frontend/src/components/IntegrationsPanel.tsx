@@ -53,6 +53,7 @@ export default function IntegrationsPanel() {
         llm_model: data.llm_model,
         email_provider: data.email_provider,
         email_from: data.email_from,
+        public_url: data.public_url,
         email_from_name: data.email_from_name,
         email_reply_to: data.email_reply_to,
         smtp_host: data.smtp_host,
@@ -188,6 +189,9 @@ export default function IntegrationsPanel() {
       </Section>
 
       <Section icon={<Mail className="size-4 text-primary" />} title="Email — Resend (default)">
+        <Field label="Public site URL (used for links & logo in emails — must be https)">
+          <Input value={String(form.public_url ?? "")} onChange={(e) => set("public_url", e.target.value)} placeholder="https://your-tunnel-domain" data-testid="public-url-input" />
+        </Field>
         <Field label="From address">
           <Input value={String(form.email_from ?? "")} onChange={(e) => set("email_from", e.target.value)} data-testid="email-from-input" />
         </Field>

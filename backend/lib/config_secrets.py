@@ -88,6 +88,13 @@ async def get_email_config() -> Dict[str, Any]:
     }
 
 
+async def get_public_url() -> str:
+    """Public base URL for links/assets in outgoing email (must be https for the G3 gate). Set in
+    Settings → Integrations; falls back to the APP_URL env. Trailing slash stripped."""
+    ic = await _integrations()
+    return (ic.get("public_url") or os.environ.get("APP_URL") or "").strip().rstrip("/")
+
+
 async def get_turnstile_config() -> Dict[str, str]:
     ic = await _integrations()
     return {
@@ -120,6 +127,7 @@ async def public_masked() -> Dict[str, Any]:
         "openai_api_key_set": bool(dec(ic.get("openai_api_key", "")) or os.environ.get("OPENAI_API_KEY", "")),
         "gemini_api_key_mask": mask(dec(ic.get("gemini_api_key", ""))),
         "openai_api_key_mask": mask(dec(ic.get("openai_api_key", ""))),
+        "public_url": ic.get("public_url") or os.environ.get("APP_URL", ""),
         "email_provider": email["provider"],
         "email_from": email["from_email"],
         "email_from_name": email["from_name"],

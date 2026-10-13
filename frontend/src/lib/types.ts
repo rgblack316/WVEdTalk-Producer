@@ -310,6 +310,7 @@ export interface Integrations {
   openai_api_key_mask: string;
   email_provider: string;
   email_from: string;
+  public_url: string;
   email_from_name: string;
   email_reply_to: string;
   resend_api_key_set: boolean;

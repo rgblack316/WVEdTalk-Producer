@@ -63,6 +63,7 @@ class IntegrationUpdate(BaseModel):
     openai_api_key: Optional[str] = None
     email_provider: Optional[str] = None
     email_from: Optional[str] = None
+    public_url: Optional[str] = None
     email_from_name: Optional[str] = None
     email_reply_to: Optional[str] = None
     resend_api_key: Optional[str] = None

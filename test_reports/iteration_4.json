@@ -1,0 +1,39 @@
+{
+  "iteration": 4,
+  "mode": "generate",
+  "summary": "Verified G3 absolute-https gate no longer fires for digest sends now that public_url is configured, and that the integrations public_url field round-trips. All criteria are pure backend/API behavior (spec_deviations marks browser pass optional); covered via one pytest file, 3 tests, all passed.",
+  "passed": 3,
+  "failed": 0,
+  "bugs": [],
+  "action_items": [
+    {
+      "type": "note",
+      "severity": "low",
+      "detail": "The briefing's acceptance_matrix names the test-digest endpoint 'POST /api/settings/send-test-digest', but the actual route is 'POST /api/settings/test-digest' (send-test-digest returns 404). The underlying behavior (no G3 error, transport-only failure) was verified against the real route; this is a documentation/naming mismatch in the briefing, not an app bug."
+    }
+  ],
+  "retest_needed": false,
+  "checks": [
+    {
+      "criterion": "Sending a briefing digest no longer fails the G3 'absolute https' safety check when a public https URL is configured",
+      "name": "test_send_test_digest_no_g3_error (test_tscheck_digest_g3_public_url.py)",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "POST /api/settings/test-digest {\"email\":\"tscheck-g3-digest@example.com\"} as authenticated admin -> 200 {\"ok\":false,\"email\":\"tscheck-g3-digest@example.com\",\"error\":\"No email transport is configured. Add Resend or SMTP in Settings → Integrations.\"} — no 'absolute https'/'(G3)'/'http://localhost' markers in response; failure reason is transport-only as expected. (Note: route is /settings/test-digest, not /settings/send-test-digest as named in the briefing.)"
+    },
+    {
+      "criterion": "The full daily-digest send path is also G3-clean with the public URL configured",
+      "name": "test_send_digest_no_g3_error (test_tscheck_digest_g3_public_url.py)",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "POST /api/settings/send-digest as admin -> 200 DigestSendResult {\"date\":\"2026-10-13\",\"admin_sent\":0,\"admin_failed\":1,\"sub_sent\":0,\"sub_failed\":0,\"failures\":[{\"email\":\"admin@johnscreekstudios.com\",\"error\":\"No email transport is configured...\"}]} — no failure reason contains 'absolute https' or '(G3)'; only transport-not-configured failures present."
+    },
+    {
+      "criterion": "Integrations exposes and persists the Public URL setting",
+      "name": "test_integrations_public_url_round_trip (test_tscheck_digest_g3_public_url.py)",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "GET /api/settings/integrations -> 200 includes public_url='https://mountain-school-news.preview.emergentagent.com'. POST {\"public_url\":\"https://example.org\"} -> 200, subsequent GET reflects 'https://example.org'. Finally restored via POST {\"public_url\":\"https://mountain-school-news.preview.emergentagent.com\"} and GET confirms baseline restored."
+    }
+  ]
+}
