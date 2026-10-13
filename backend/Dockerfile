@@ -18,8 +18,10 @@ COPY . .
 
 EXPOSE 8001
 
-# Simple container healthcheck against a lightweight public endpoint.
+# Container healthcheck against the open, auth-free health endpoint.
+# (/api/schedule/next requires a session cookie and returns 401 to the probe,
+#  which made the container report unhealthy — GET /api/ is the public health route.)
 HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=5 \
-    CMD curl -fsS http://localhost:8001/api/schedule/next || exit 1
+    CMD curl -fsS http://localhost:8001/api/ || exit 1
 
 CMD ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "8001"]
