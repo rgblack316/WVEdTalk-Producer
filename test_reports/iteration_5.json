@@ -1,0 +1,68 @@
+{
+  "iteration": 5,
+  "mode": "retest",
+  "summary": "Regression retest after a deploy-script-only change (upgrade.sh git exec-bit handling; no app code touched). Backend suite (11 tests) green. Core criteria (admin login/session, integrations settings shape incl. public_url, briefings read path) verified via existing backend tests + browser checks - all pass. Two pre-existing legacy browser checks for a removed passcode-gate UI fail (stale selectors from a prior app version, unrelated to this turn's change) - not treated as bugs for this regression guard.",
+  "passed": 5,
+  "failed": 0,
+  "checks": [
+    {
+      "criterion": "Admin login still works and session persists (regression guard)",
+      "name": "test_tscheck_auth_session_recognized.py",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "POST /auth/login -> 200 authenticated=true user.email matches; GET /auth/me -> 200 authenticated=true; POST /auth/logout then GET /auth/me -> authenticated=false. Also verifies wrong password -> 401, no session set."
+    },
+    {
+      "criterion": "Admin login still works and session persists (regression guard)",
+      "name": "login-valid-credentials-persist-session",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Ran against public preview URL. Login form filled with seed admin creds -> desk-layout visible; page.reload() -> desk-layout still visible (session persists, no bounce to login). Screenshots: logged-in, after-reload."
+    },
+    {
+      "criterion": "Admin login still works and session persists (regression guard)",
+      "name": "auth-gate-blocks-unauthenticated",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Unauthenticated visit shows auth-gate (login form); protected content not reachable without session."
+    },
+    {
+      "criterion": "Admin login still works and session persists (regression guard)",
+      "name": "logout-clears-session",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "After logout, UI returns to logged-out state."
+    },
+    {
+      "criterion": "Integrations settings endpoint still returns its full shape including public_url",
+      "name": "test_tscheck_digest_g3_public_url.py",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "GET /settings/integrations -> 200, body contains public_url; POST round-trip to https://example.org then restored to baseline, confirmed via subsequent GET both times. Also confirms test-digest/send-digest responses carry no G3 absolute-https error leakage."
+    },
+    {
+      "criterion": "Core read path still works",
+      "name": "test_tscheck_header_auth_works.py",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "GET /briefings with X-Desk-Passcode header -> 200, list body."
+    },
+    {
+      "criterion": "Core read path still works",
+      "name": "briefing-source-links-external-only",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Briefing archive/home page loaded via public preview URL, rendered 6 anchors with valid external hrefs, no console errors reported."
+    }
+  ],
+  "bugs": [],
+  "action_items": [
+    {
+      "type": "stale_test_artifact",
+      "severity": "low",
+      "detail": "Browser checks 'correct-passcode-unlocks-briefing' and 'settings-security-panel-autolock-persists' target a passcode-input / current-passcode-input UI that no longer exists (the app now uses email+password admin login per login-email-input/login-password-input testids). Both fail with locator timeouts waiting for getByTestId('passcode-input'). This predates this turn's change (which only touched upgrade.sh) and is not a regression introduced by it — these checks are leftover from an earlier app iteration and are out of scope for the current acceptance_matrix (which does not mention a passcode gate). Recommend the main agent either retire these two checks or confirm whether a passcode-based unlock flow still exists anywhere in the current UI; current evidence (screenshot of '/' showing a 'Sign in' email/password form) indicates it does not."
+    }
+  ],
+  "retest_needed": false,
+  "notes": "wrong-passcode-rejected and lock-returns-to-gate-and-persists checks exist too but were not re-run this iteration since they share the same obsolete passcode-gate dependency already demonstrated to be stale by the two checks above; re-running them would not add new information. login-invalid-credentials-rejected (current email/password flow) was not re-run this iteration as it is not in the 3-item acceptance_matrix for this retest and is unaffected by the upgrade.sh-only change; available for re-run on request."
+}

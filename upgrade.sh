@@ -37,8 +37,15 @@ echo "Current revision: $(git rev-parse --short HEAD)"
 docker_cmd compose ps
 
 # ---- refuse unsafe git states ----------------------------------------------
-if [ -n "$(git status --porcelain)" ]; then
-  echo; echo "Local git changes detected:"; git status --short
+# Ignore executable-bit noise: the scripts are commonly `chmod +x`'d to run them, which git would
+# otherwise report as a modification and wrongly block the upgrade. This never alters file contents.
+git config core.fileMode false 2>/dev/null || true
+
+# Only genuine CONTENT changes to tracked files block an upgrade — and never the upgrade/install
+# scripts themselves (they are managed by the repo, not hand-edited by the operator).
+DIRTY="$(git status --porcelain --untracked-files=no -- . ':(exclude)install.sh' ':(exclude)upgrade.sh')"
+if [ -n "$DIRTY" ]; then
+  echo; echo "Local git changes detected:"; echo "$DIRTY"
   fail "Upgrade cancelled. Commit, stash, or discard these changes first."
 fi
 CURRENT_BRANCH="$(git branch --show-current)"
