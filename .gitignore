@@ -95,3 +95,6 @@ android-sdk/
 credentials.json
 *.key
 .credentials
+
+# One-click updater control volume (runtime, host-side)
+control/

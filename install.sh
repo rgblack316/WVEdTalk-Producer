@@ -117,12 +117,43 @@ else
   log ".env already exists — leaving it unchanged."
 fi
 
-mkdir -p backups
+mkdir -p backups control
 [ "${EUID}" -eq 0 ] && chown -R "$TARGET_USER":"$TARGET_USER" "$INSTALL_DIR" || true
 
 # ---- build + start ----------------------------------------------------------
 log "Building and starting the stack (first run can take a few minutes)..."
 docker_cmd compose up -d --build
+
+# ---- one-click updater service (host-side watcher) --------------------------
+# The app's "Apply update" button drops a request into control/; this host service runs
+# upgrade.sh for it (a container can't rebuild its own stack). Safe-by-default upgrade.sh still
+# takes a DB backup and refuses on local/dirty git state.
+chmod +x upgrade.sh upgrade-watch.sh 2>/dev/null || true
+if command -v systemctl >/dev/null 2>&1; then
+  log "Installing the one-click updater service (wvedtalk-updater)..."
+  sudo tee /etc/systemd/system/wvedtalk-updater.service >/dev/null <<EOF
+[Unit]
+Description=WV Education News Desk one-click updater
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+User=$TARGET_USER
+WorkingDirectory=$INSTALL_DIR
+ExecStart=/usr/bin/env bash $INSTALL_DIR/upgrade-watch.sh
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+EOF
+  sudo systemctl daemon-reload
+  sudo systemctl enable --now wvedtalk-updater.service \
+    || log "Could not start wvedtalk-updater automatically — start it later with: sudo systemctl enable --now wvedtalk-updater"
+else
+  log "systemd not found — to enable one-click updates run ./upgrade-watch.sh on the host (cron/tmux)."
+fi
 
 HTTP_PORT="$(awk -F= '$1=="HTTP_PORT"{print substr($0,index($0,"=")+1);exit}' .env | tr -d '"')"
 HTTP_PORT="${HTTP_PORT:-80}"

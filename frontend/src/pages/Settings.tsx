@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { Mail, Eye, Trash2, Send, Gauge, ShieldCheck, Timer, KeyRound, Users, Link2, Code2, Copy, CalendarClock, History, Megaphone, FlaskConical, RotateCcw, Database, Download, Upload, AlertTriangle, Search, Loader2 } from "lucide-react";
 import DeskLayout from "@/components/DeskLayout";
 import IntegrationsPanel from "@/components/IntegrationsPanel";
+import SelfUpdatePanel from "@/components/SelfUpdatePanel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -434,6 +435,7 @@ export default function Settings() {
         <p className="text-xs tracking-[0.2em] text-accent uppercase">Settings</p>
         <h2 className="font-heading text-3xl font-bold tracking-tight">Desk settings</h2>
         <IntegrationsPanel />
+        <SelfUpdatePanel />
         <p className="mt-2 text-sm text-muted-foreground">
           Manage who receives the morning email digest and which topics or counties the desk should
           flag on every edition.

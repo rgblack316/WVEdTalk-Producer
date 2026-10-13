@@ -287,6 +287,23 @@ None seeded. First real briefing generated for 2026-09-18. Demo watch terms ("co
   wrongly reported the container unhealthy), frontend (busybox `wget --spider /`). `backend` depends on
   mongo healthy, `frontend` on backend healthy (`condition: service_healthy`). `install.sh`/`upgrade.sh`
   readiness loops also poll `/api/` now, not the 401 endpoint.
+
+## Self-hosting: one-click update (no SSH)
+- A container can't rebuild its own compose stack, so update is decoupled via a bind-mounted
+  `control/` volume (`./control:/app/control`, `CONTROL_DIR=/app/control`): the app writes
+  `upgrade.request`; a HOST watcher applies it and writes `upgrade.status` + a `watcher.alive`
+  heartbeat (see `lib/selfupdate.py`).
+- **Endpoints** (`routers/version.py`, `require_admin`): `GET /api/self-update/status` →
+  `SelfUpdateStatus {state(idle|queued|running|success|failed), message, pending, available,
+  watcher_alive, revision_before/after, …}`; `POST /api/self-update` → queues a request (503 if the
+  control volume isn't mounted; idempotent — returns `already:true` while one is in flight). TS mirrors
+  `SelfUpdateStatus`/`SelfUpdateResult` in `lib/types.ts`.
+- **Host watcher** `upgrade-watch.sh` (loop or `--once`): heartbeats, runs `./upgrade.sh` on a request,
+  writes status, logs to `control/upgrade.log`. Installed by `install.sh` as the systemd service
+  `wvedtalk-updater`.
+- **Frontend** `components/SelfUpdatePanel.tsx` (admin-only, on Settings): shows current/latest version,
+  a "Check for updates" and a "Download & apply update" button, polls status every 4s while in flight,
+  and warns when `available` but `watcher_alive` is false.
 - **Purpose**: every Friday 4:00 PM ET, independently reviews the week and writes a recording-ready
   WVEdTalk episode. Adapts the user's full producer brief (`lib/producer.py` PRODUCER_BRIEF).
 - **Model**: Gemini 3.1 Pro + googleSearch grounding; fresh research, does not merely restate the

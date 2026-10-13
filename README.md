@@ -156,6 +156,14 @@ to roll back.
 > auth-free `GET /api/`, not the 401-guarded `/api/schedule/next`); `backend` waits for `mongo`
 > healthy and `frontend` waits for `backend` healthy via `depends_on: condition: service_healthy`.
 
+> **One-click update (no SSH):** admins can apply an update from **Settings → Software updates**.
+> Because a container can't rebuild its own stack, the app writes a request into a bind-mounted
+> `control/` volume and a small **host-side watcher** (`upgrade-watch.sh`) runs `./upgrade.sh` for it
+> and reports progress back to the UI. `install.sh` installs the watcher as the systemd service
+> **`wvedtalk-updater`** (manage with `sudo systemctl status/enable/disable wvedtalk-updater`). If you
+> installed before this service existed, run it once on the host: `./upgrade-watch.sh` (loop) or wire
+> `./upgrade-watch.sh --once` into cron. The panel warns when the updater service isn't detected.
+
 > **Publishing the repo first:** use Emergent's **Save → Save to GitHub** to push this project to
 > `github.com/rgblack316/WVEdTalk-Producer` so `install.sh` can clone it. Secrets/`.env` are excluded
 > from the push by design — `install.sh` generates `SESSION_SECRET`, and the rest are managed in-app.

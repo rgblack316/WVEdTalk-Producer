@@ -24,11 +24,16 @@ services:
       # Always target the compose Mongo, regardless of any MONGO_URL in .env.
       MONGO_URL: "mongodb://mongo:27017"
       DB_NAME: "${DB_NAME:-wvedtalk}"
+      CONTROL_DIR: "/app/control"
     depends_on:
       mongo:
         condition: service_healthy
     expose:
       - "8001"
+    # Control volume for the one-click updater: the app writes upgrade.request here and the
+    # host watcher (upgrade-watch.sh) reads it + writes status back.
+    volumes:
+      - ./control:/app/control
     # Probes the open health route (/api/); /api/schedule/next requires auth and 401s the probe.
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8001/api/"]

@@ -309,6 +309,25 @@ export interface VersionInfo {
   error: string | null;
 }
 
+export interface SelfUpdateStatus {
+  state: string; // idle | queued | running | success | failed
+  message: string | null;
+  pending: boolean;
+  available: boolean;
+  watcher_alive: boolean;
+  requested_at: string | null;
+  requested_by: string | null;
+  started_at: string | null;
+  finished_at: string | null;
+  revision_before: string | null;
+  revision_after: string | null;
+}
+
+export interface SelfUpdateResult extends SelfUpdateStatus {
+  queued: boolean;
+  already: boolean;
+}
+
 export interface Integrations {
   llm_provider: string;
   llm_model: string;
