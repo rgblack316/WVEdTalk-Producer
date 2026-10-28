@@ -24,6 +24,7 @@ from routers.episodes import router as episodes_router
 from routers.settings import router as settings_router
 from routers.users import router as users_router
 from routers.public import router as public_router
+from routers.publish import router as publish_router
 from routers.submissions import router as submissions_router
 from routers.data_io import router as data_io_router
 from routers.version import router as version_router
@@ -57,6 +58,7 @@ async def root():
 api_router.include_router(auth_router)
 api_router.include_router(setup_router)  # open first-run setup (each route is one-shot)
 api_router.include_router(public_router)  # open, but each route validates a share token
+api_router.include_router(publish_router)  # open, but token-validated (read-only publish token for the website build)
 _guard = [Depends(require_auth)]
 api_router.include_router(briefings_router, dependencies=_guard)
 api_router.include_router(settings_router, dependencies=_guard)

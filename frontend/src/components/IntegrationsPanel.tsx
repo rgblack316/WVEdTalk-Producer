@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Loader2, Bot, Mail, Server, ShieldCheck, Send, Power } from "lucide-react";
+import { Loader2, Bot, Mail, Server, ShieldCheck, Send, Power, Globe, Copy, KeyRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -45,6 +45,7 @@ export default function IntegrationsPanel() {
   const [form, setForm] = useState<Record<string, unknown>>({});
   const [testEmail, setTestEmail] = useState("");
   const [busy, setBusy] = useState("");
+  const [newToken, setNewToken] = useState(""); // shown once, right after a rotate
 
   useEffect(() => {
     if (data) {
@@ -54,6 +55,7 @@ export default function IntegrationsPanel() {
         email_provider: data.email_provider,
         email_from: data.email_from,
         public_url: data.public_url,
+        site_url: data.site_url,
         email_from_name: data.email_from_name,
         email_reply_to: data.email_reply_to,
         smtp_host: data.smtp_host,
@@ -109,6 +111,33 @@ export default function IntegrationsPanel() {
         provider,
       });
       r.ok ? toast.success("Test email sent") : toast.error(r.error || "Email test failed");
+    } catch (e) {
+      toast.error(errText(e));
+    } finally {
+      setBusy("");
+    }
+  };
+
+  const rotateToken = async () => {
+    if (data?.publish_token_set && !window.confirm("Generate a new publish token? The current one stops working, so update it in the website's build settings.")) return;
+    setBusy("token");
+    try {
+      const r = await apiPost<{ token: string }>("/settings/integrations/publish-token");
+      setNewToken(r.token);
+      await refetch();
+      toast.success("New publish token generated — copy it now");
+    } catch (e) {
+      toast.error(errText(e));
+    } finally {
+      setBusy("");
+    }
+  };
+
+  const testSiteHook = async () => {
+    setBusy("hook");
+    try {
+      const r = await apiPost<{ ok: boolean; error?: string }>("/settings/integrations/test-site-hook");
+      r.ok ? toast.success("Website rebuild triggered") : toast.error(r.error || "Deploy hook test failed");
     } catch (e) {
       toast.error(errText(e));
     } finally {
@@ -239,6 +268,56 @@ export default function IntegrationsPanel() {
             {savedBadge(data.turnstile_secret_key_set, "")}
           </div>
         </Field>
+      </Section>
+
+      <Section icon={<Globe className="size-4 text-primary" />} title="Website publishing (wvedtalk.com/daily)">
+        <p className="text-xs text-muted-foreground">
+          Each daily briefing is published to your website. After a successful run the desk triggers a website
+          rebuild, waits for the new page to go live, then sends the digest emails with a link to it.
+        </p>
+        <Field label="Website URL (must be https)">
+          <Input value={String(form.site_url ?? "")} onChange={(e) => set("site_url", e.target.value)} placeholder="https://wvedtalk.com" data-testid="site-url-input" />
+        </Field>
+        <Field label="Website deploy hook URL">
+          <div className="flex items-center gap-2">
+            <Input type="password" placeholder="Paste to set / replace" onChange={(e) => set("deploy_hook_url", e.target.value)} data-testid="deploy-hook-input" />
+            {savedBadge(data.deploy_hook_set, data.deploy_hook_mask)}
+          </div>
+        </Field>
+        <Field label="Publish token (read-only; the website build uses it to fetch briefings)">
+          <div className="flex flex-wrap items-center gap-2">
+            <Button size="sm" variant="outline" disabled={busy !== ""} onClick={rotateToken} data-testid="rotate-publish-token">
+              {busy === "token" ? <Loader2 className="size-4 animate-spin" /> : <KeyRound className="size-4" />}{" "}
+              {data.publish_token_set ? "Rotate token" : "Generate token"}
+            </Button>
+            {savedBadge(data.publish_token_set, "")}
+          </div>
+          {newToken && (
+            <div className="mt-2 flex items-center gap-2" data-testid="new-publish-token">
+              <Input readOnly value={newToken} onFocus={(e) => e.currentTarget.select()} className="font-mono text-xs" />
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => navigator.clipboard.writeText(newToken).then(() => toast.success("Copied"))}
+              >
+                <Copy className="size-4" /> Copy
+              </Button>
+            </div>
+          )}
+          {newToken && (
+            <p className="text-xs text-amber-600">
+              Shown only once. Set it as <code>BRIEFINGS_TOKEN</code> in the website's build settings.
+            </p>
+          )}
+        </Field>
+        <div className="flex gap-2">
+          <Button size="sm" disabled={busy !== ""} onClick={() => save({ site_url: form.site_url, ...(form.deploy_hook_url ? { deploy_hook_url: form.deploy_hook_url } : {}) })} data-testid="save-site">
+            {busy === "save" ? <Loader2 className="size-4 animate-spin" /> : null} Save
+          </Button>
+          <Button size="sm" variant="outline" disabled={busy !== "" || !data.deploy_hook_set} onClick={testSiteHook} data-testid="test-site-hook">
+            {busy === "hook" ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />} Rebuild website now
+          </Button>
+        </div>
       </Section>
 
       <div className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-secondary/30 p-4">

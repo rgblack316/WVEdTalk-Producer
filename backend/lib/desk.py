@@ -607,6 +607,7 @@ async def run_briefing(date_str: Optional[str] = None, trigger: str = "manual") 
                 )
             except Exception:
                 logger.exception("linking used submissions failed (non-fatal)")
+            await _publish_site_safe(briefing)
             await _send_digest_safe(briefing)
             return briefing
         except Exception as exc:
@@ -624,6 +625,34 @@ async def run_briefing(date_str: Optional[str] = None, trigger: str = "manual") 
                 detail=_run_status.message if run_ok else _run_status.last_error,
                 started_at=started,
             )
+
+
+async def _publish_site_safe(briefing: Briefing) -> None:
+    """Ping the website deploy hook so wvedtalk.com/daily picks up the new briefing. When digest
+    emails are about to go out, first wait (bounded) until the new page is live so the email's
+    "view on the web" link works on arrival; a timeout alerts admins and the emails still send
+    (they carry the full briefing inline). Never fails the run."""
+    try:
+        from lib import config_secrets, email_digest, site_publish
+
+        if briefing.status != "complete" or not (await config_secrets.get_deploy_hook()).strip():
+            return
+        wait = False
+        if await config_secrets.digests_enabled():
+            cfg = await db.desk_config.find_one({"key": "singleton"}, {"_id": 0})
+            wait = bool((cfg or {}).get("recipients") or await db.subscribers.count_documents({"active": True}))
+        _run_status.message = (
+            "Publishing to the website and waiting for it to go live…" if wait else "Publishing to the website…"
+        )
+        res = await site_publish.publish_and_wait(briefing.date, wait=wait)
+        if not res.get("triggered") or res.get("live") is False:
+            detail = str(res.get("error") or "The website publish did not complete.")
+            logger.error("website publish for %s: %s", briefing.date, detail)
+            await email_digest.send_site_publish_alert(label=briefing.date, detail=detail)
+        else:
+            logger.info("website publish for %s: triggered, live=%s", briefing.date, res.get("live"))
+    except Exception:
+        logger.exception("website publish step failed (non-fatal)")
 
 
 async def _send_digest_safe(briefing: Briefing) -> None:

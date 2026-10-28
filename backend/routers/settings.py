@@ -8,7 +8,7 @@ from pydantic import BaseModel, EmailStr
 from lib import email_digest
 from lib import auth
 from lib import desk
-from lib import config_secrets, llm, mailer
+from lib import config_secrets, llm, mailer, site_publish
 from lib.db import db
 from models.config import (
     AutoLockUpdate,
@@ -76,19 +76,44 @@ class IntegrationUpdate(BaseModel):
     turnstile_secret_key: Optional[str] = None
     runs_enabled: Optional[bool] = None
     digests_enabled: Optional[bool] = None
+    site_url: Optional[str] = None
+    deploy_hook_url: Optional[str] = None
 
 
-_SECRET_FIELDS = {"gemini_api_key", "openai_api_key", "resend_api_key", "smtp_password", "turnstile_secret_key"}
+_SECRET_FIELDS = {
+    "gemini_api_key", "openai_api_key", "resend_api_key", "smtp_password", "turnstile_secret_key",
+    "deploy_hook_url",
+}
 
 
 @router.post("/settings/integrations")
 async def update_integrations(body: IntegrationUpdate, _admin=Depends(auth.require_admin)):
+    data = body.model_dump(exclude_none=True)
+    # Website publishing: both values must be https URLs (blank clears the setting).
+    for key, label in (("site_url", "Website URL"), ("deploy_hook_url", "Deploy hook URL")):
+        if key in data:
+            data[key] = data[key].strip().rstrip("/") if key == "site_url" else data[key].strip()
+            if data[key] and not site_publish.valid_https_url(data[key]):
+                raise HTTPException(status_code=422, detail=f"{label} must be a full https:// URL.")
     patch = {}
-    for k, v in body.model_dump(exclude_none=True).items():
+    for k, v in data.items():
         patch[k] = config_secrets.enc(v) if k in _SECRET_FIELDS else v
     if patch:
         await config_secrets.save_integrations(patch)
     return await config_secrets.public_masked()
+
+
+@router.post("/settings/integrations/publish-token")
+async def rotate_publish_token(_admin=Depends(auth.require_admin)):
+    """Generate a new read-only publish token for the website build. Shown ONCE — only a masked
+    'set' flag is ever returned afterwards. Rotating invalidates the previous token."""
+    return {"token": await config_secrets.rotate_publish_token()}
+
+
+@router.post("/settings/integrations/test-site-hook")
+async def test_site_hook(_admin=Depends(auth.require_admin)):
+    """Fire the website deploy hook once (also works as a manual 'rebuild the website now')."""
+    return await site_publish.trigger_deploy()
 
 
 @router.post("/settings/integrations/test-ai")

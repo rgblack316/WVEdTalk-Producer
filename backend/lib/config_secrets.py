@@ -9,7 +9,9 @@ matching environment variable is used as an initial fallback.
 
 import base64
 import hashlib
+import hmac
 import os
+import secrets
 from typing import Any, Dict, Optional
 
 from cryptography.fernet import Fernet, InvalidToken
@@ -95,6 +97,39 @@ async def get_public_url() -> str:
     return (ic.get("public_url") or os.environ.get("APP_URL") or "").strip().rstrip("/")
 
 
+async def get_site_url() -> str:
+    """Public website base URL (e.g. https://wvedtalk.com). When set, the "view on the web" link in
+    the daily emails points at <site>/daily/<date> instead of this desk's own share page."""
+    ic = await _integrations()
+    return (ic.get("site_url") or os.environ.get("SITE_URL") or "").strip().rstrip("/")
+
+
+async def get_deploy_hook() -> str:
+    """Website deploy-hook URL (a secret — its path authorizes a rebuild). DB value wins."""
+    ic = await _integrations()
+    return dec(ic.get("deploy_hook_url", "")) or os.environ.get("SITE_DEPLOY_HOOK", "")
+
+
+async def get_publish_token() -> str:
+    """Read-only token the website build presents to GET /api/publish/briefings."""
+    ic = await _integrations()
+    return dec(ic.get("publish_token", "")) or os.environ.get("PUBLISH_TOKEN", "")
+
+
+async def verify_publish_token(candidate: str) -> bool:
+    expected = await get_publish_token()
+    if not expected or not candidate:
+        return False
+    return hmac.compare_digest(expected.encode(), candidate.encode())
+
+
+async def rotate_publish_token() -> str:
+    """Generate and store a fresh publish token (the old one stops working). Returned once."""
+    token = secrets.token_urlsafe(32)
+    await save_integrations({"publish_token": enc(token)})
+    return token
+
+
 async def get_turnstile_config() -> Dict[str, str]:
     ic = await _integrations()
     return {
@@ -128,6 +163,10 @@ async def public_masked() -> Dict[str, Any]:
         "gemini_api_key_mask": mask(dec(ic.get("gemini_api_key", ""))),
         "openai_api_key_mask": mask(dec(ic.get("openai_api_key", ""))),
         "public_url": ic.get("public_url") or os.environ.get("APP_URL", ""),
+        "site_url": ic.get("site_url") or os.environ.get("SITE_URL", ""),
+        "deploy_hook_set": bool(dec(ic.get("deploy_hook_url", "")) or os.environ.get("SITE_DEPLOY_HOOK", "")),
+        "deploy_hook_mask": mask(dec(ic.get("deploy_hook_url", ""))),
+        "publish_token_set": bool(dec(ic.get("publish_token", "")) or os.environ.get("PUBLISH_TOKEN", "")),
         "email_provider": email["provider"],
         "email_from": email["from_email"],
         "email_from_name": email["from_name"],
