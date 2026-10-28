@@ -38,6 +38,17 @@ async def _resolve_base() -> str:
         APP_URL = base.rstrip("/")
     return APP_URL
 
+async def _web_url(briefing) -> str:
+    """The public 'view on the web' link for a briefing: the website page when a website URL is
+    configured (Settings -> Integrations), otherwise this desk's own tokenized share page."""
+    from lib import config_secrets
+
+    site = await config_secrets.get_site_url()
+    if site:
+        return f"{site}/daily/{briefing.date}"
+    return f"{APP_URL}/share/briefing/{briefing.date}?t={make_share_token(briefing.date)}"
+
+
 _SHORTENERS = ("bit.ly", "tinyurl.com", "t.co", "is.gd", "cutt.ly", "goo.gl", "rebrand.ly")
 # Imperative credential/payment REQUESTS directed at the recipient — genuine phishing
 # signals, always fatal. Bare topical nouns ("social security number", "cvv", "seed
@@ -389,7 +400,7 @@ async def _send_to_lists(briefing, admin: List[str], sub_emails: List[str], *,
             res.failures.append(DeliveryFailure(email=to, error=det))
             logger.error("admin digest to %s failed: %s", to, det)
 
-    share_url = f"{APP_URL}/share/briefing/{briefing.date}?t={make_share_token(briefing.date)}"
+    share_url = await _web_url(briefing)
     for email in sub_emails:
         unsub = f"{APP_URL}/unsubscribe?email={quote(email)}&t={make_unsub_token(email)}"
         try:
@@ -447,7 +458,7 @@ async def send_test_digest(briefing, email: str) -> Optional[str]:
     touch the delivery log or fire alerts."""
     email = (email or "").strip()
     await _resolve_base()
-    share_url = f"{APP_URL}/share/briefing/{briefing.date}?t={make_share_token(briefing.date)}"
+    share_url = await _web_url(briefing)
     unsub = f"{APP_URL}/unsubscribe?email={quote(email)}&t={make_unsub_token(email)}"
     try:
         await _send_email(
@@ -580,18 +591,23 @@ async def send_episode(episode, recipients: List[str]) -> int:
     return await _fan_out(subject, html, recipients)
 
 
-def _alert_html(title: str, label: str, detail: str) -> str:
+def _alert_html(title: str, label: str, detail: str, *, heading: str = "Scheduled run failed",
+                message: Optional[str] = None) -> str:
     detail = escape(detail or "No further detail was captured.")
+    if message is None:
+        message = (
+            f'The scheduled <strong>{escape(title)}</strong> run for <strong>{escape(label)}</strong> '
+            'did not complete.'
+        )
     return (
         '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
         'style="max-width:560px;margin:0 auto;background:#fbfaf5"><tr><td style="padding:28px 24px">'
         '<div style="font-family:Georgia,serif;font-size:20px;font-weight:bold;color:#16305e">'
         'WVEdTalk News Desk</div>'
         '<div style="font-family:Arial,sans-serif;font-size:12px;letter-spacing:.14em;'
-        'text-transform:uppercase;color:#b91c1c;margin-top:6px">Scheduled run failed</div>'
+        f'text-transform:uppercase;color:#b91c1c;margin-top:6px">{escape(heading)}</div>'
         f'<p style="font-family:Arial,sans-serif;font-size:15px;color:#222;margin-top:16px">'
-        f'The scheduled <strong>{escape(title)}</strong> run for <strong>{escape(label)}</strong> '
-        'did not complete.</p>'
+        f'{message}</p>'
         f'<div style="font-family:Arial,sans-serif;font-size:13px;color:#444;background:#fff;'
         f'border-left:3px solid #b91c1c;padding:12px 14px;margin-top:12px;line-height:1.55">{detail}</div>'
         '<p style="font-family:Arial,sans-serif;font-size:13px;color:#555;margin-top:16px">'
@@ -619,6 +635,31 @@ async def send_failure_alert(*, kind: str, label: str, detail: str) -> int:
     title = "daily briefing" if kind == "daily" else "weekly script"
     subject = f"[WVEdTalk] Scheduled {title} run failed ({label})"
     html = _alert_html(title, label, detail)
+    _assert_safe_email(subject, html)
+    return await _fan_out(subject, html, tos)
+
+
+def _site_alert_html(label: str, detail: str) -> str:
+    return _alert_html(
+        "website publish", label, detail,
+        heading="Website publish problem",
+        message=(
+            f"The briefing for <strong>{escape(label)}</strong> may not be on the website yet. "
+            "Digest emails were still sent; their web link may not work until the website finishes rebuilding."
+        ),
+    )
+
+
+async def send_site_publish_alert(*, label: str, detail: str) -> int:
+    """Email every admin when publishing a briefing to the website did not complete."""
+    await _resolve_base()
+    admins = await db.users.find({"role": "admin"}, {"_id": 0, "email": 1}).to_list(200)
+    tos = [u["email"] for u in admins if "@" in (u.get("email") or "")]
+    if not tos:
+        logger.warning("website publish problem for %s but no admin email is available for an alert", label)
+        return 0
+    subject = f"[WVEdTalk] Website publish problem ({label})"
+    html = _site_alert_html(label, detail)
     _assert_safe_email(subject, html)
     return await _fan_out(subject, html, tos)
 

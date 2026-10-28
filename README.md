@@ -259,6 +259,25 @@ curl -H "X-Desk-Passcode: $APP_PASSCODE" \
   https://your-app/api/briefings/2026-09-20
 ```
 
+## Publishing briefings to the public website
+
+Daily briefings can be published to a public website (e.g. `wvedtalk.com/daily`) instead of being
+shared from this desk. Configure it under **Settings → Integrations → Website publishing**:
+
+- **Website URL** — the public site (https). The "View this briefing on the web" link in the daily
+  email then points at `<site>/daily/<date>`. Left blank, emails keep using this desk's own share link.
+- **Website deploy hook URL** — after a successful daily run the desk POSTs this hook so the site
+  rebuilds. When digest emails are about to go out it first waits (up to ~10 minutes) until the new
+  briefing page is live; on a timeout admins get an alert and the emails still send (they contain the
+  full briefing inline). **Rebuild website now** fires the hook manually.
+- **Publish token** — a read-only token the website build presents as
+  `Authorization: Bearer <token>` to `GET /api/publish/briefings`. It works for that one endpoint only.
+  The token is shown once when generated; rotating it invalidates the old one.
+
+The publish endpoint returns **stories, sources and trends only**. Importance / podcast-potential
+scores, podcast angles and questions, the Podcast Opportunities section, the host's private notes and
+candidate/excluded/positive flags, and source links flagged unverified are never included.
+
 ## Migrating off Emergent / self-hosting (data export & import)
 
 An admin-only **Data export & import** panel lives on the Settings page for moving the News Desk's

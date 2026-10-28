@@ -338,6 +338,10 @@ export interface Integrations {
   email_provider: string;
   email_from: string;
   public_url: string;
+  site_url: string;
+  deploy_hook_set: boolean;
+  deploy_hook_mask: string;
+  publish_token_set: boolean;
   email_from_name: string;
   email_reply_to: string;
   resend_api_key_set: boolean;
