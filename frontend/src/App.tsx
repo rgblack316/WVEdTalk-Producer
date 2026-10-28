@@ -10,14 +10,13 @@ import Settings from "@/pages/Settings";
 import Users from "@/pages/Users";
 import Episodes from "@/pages/Episodes";
 import EpisodePage from "@/pages/EpisodePage";
-import SharedBriefing from "@/pages/SharedBriefing";
 import Subscribe from "@/pages/Subscribe";
 import SubmitStory from "@/pages/SubmitStory";
 import Submissions from "@/pages/Submissions";
 import Excluded from "@/pages/Excluded";
 import Unsubscribe from "@/pages/Unsubscribe";
 
-// Everything under ProtectedLayout sits behind the login gate; /share/* is public.
+// Everything under ProtectedLayout sits behind the login gate; /subscribe, /submit and /unsubscribe are public.
 function ProtectedLayout() {
   return (
     <AuthGate>
@@ -31,7 +30,6 @@ export default function App() {
   return (
     <>
       <Routes>
-        <Route path="/share/briefing/:date" element={<SharedBriefing />} />
         <Route path="/subscribe" element={<Subscribe />} />
         <Route path="/submit" element={<SubmitStory />} />
         <Route path="/unsubscribe" element={<Unsubscribe />} />

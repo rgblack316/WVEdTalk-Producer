@@ -75,7 +75,6 @@ export function StoryCard({
   story,
   date,
   featured = false,
-  isPublic = false,
   canFlag = false,
   hideUnverified = false,
   onToggleCandidate,
@@ -85,7 +84,6 @@ export function StoryCard({
   story: Story;
   date: string;
   featured?: boolean;
-  isPublic?: boolean;
   canFlag?: boolean;
   hideUnverified?: boolean;
   onToggleCandidate?: () => void;
@@ -125,28 +123,19 @@ export function StoryCard({
         )}
       </div>
 
-      {isPublic ? (
+      <Link
+        to={`/briefings/${date}/stories/${story.id}`}
+        className="block"
+        data-testid={`story-link-${story.id}`}
+      >
         <h3
-          className={`font-heading font-bold tracking-tight ${featured ? "text-2xl" : "text-lg"}`}
-          data-testid={`story-heading-${story.id}`}
+          className={`font-heading font-bold tracking-tight transition-colors duration-150 hover:text-primary ${
+            featured ? "text-2xl" : "text-lg"
+          }`}
         >
           {story.headline}
         </h3>
-      ) : (
-        <Link
-          to={`/briefings/${date}/stories/${story.id}`}
-          className="block"
-          data-testid={`story-link-${story.id}`}
-        >
-          <h3
-            className={`font-heading font-bold tracking-tight transition-colors duration-150 hover:text-primary ${
-              featured ? "text-2xl" : "text-lg"
-            }`}
-          >
-            {story.headline}
-          </h3>
-        </Link>
-      )}
+      </Link>
 
       <div className="mt-2 flex flex-wrap items-center gap-2">
         <ScoreChip label="Importance" value={story.importance} />

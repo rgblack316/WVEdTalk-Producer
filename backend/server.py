@@ -57,7 +57,7 @@ async def root():
 # Auth routes are open; everything else requires the shared passcode (cookie or header).
 api_router.include_router(auth_router)
 api_router.include_router(setup_router)  # open first-run setup (each route is one-shot)
-api_router.include_router(public_router)  # open, but each route validates a share token
+api_router.include_router(public_router)  # open: newsletter sign-up/unsubscribe + reader tips (each guarded: tokens, honeypot, throttle)
 api_router.include_router(publish_router)  # open, but token-validated (read-only publish token for the website build)
 _guard = [Depends(require_auth)]
 api_router.include_router(briefings_router, dependencies=_guard)
