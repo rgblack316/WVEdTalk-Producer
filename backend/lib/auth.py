@@ -63,20 +63,6 @@ def new_secret() -> str:
     return secrets.token_hex(32)
 
 
-# ---- public share tokens (unauthenticated read links) ------------------------
-
-def make_share_token(resource: str) -> str:
-    """Deterministic, unguessable token for a public read link (e.g. a briefing date).
-    Not tied to any user, so a shared link keeps working; rotate SESSION_SECRET to revoke all."""
-    return _sign(f"share:{resource}")[:32]
-
-
-def verify_share_token(resource: str, token: str | None) -> bool:
-    if not token:
-        return False
-    return hmac.compare_digest(make_share_token(resource), token)
-
-
 # ---- newsletter unsubscribe tokens -------------------------------------------
 
 def make_unsub_token(email: str) -> str:

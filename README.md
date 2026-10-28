@@ -7,7 +7,7 @@ Friday it independently reassembles the week into a recording-ready **weekly epi
 script** for the host. The desk adds podcast-prep tooling, email digests with delivery
 tracking, a public reader-tip inbox, public newsletter subscribers, watchlist alerts,
 region filtering, Markdown exports, a configurable run schedule, multi-user accounts, and
-public share links.
+publishing to the public website.
 
 ## Features
 
@@ -58,8 +58,7 @@ public share links.
   - **Admin** — everything, including user management and schedule/settings.
   - **Editor** — everything except user management.
   - **Viewer** — read-only (no runs, tagging, edits, emails, or setting changes).
-- **Public share links** — copy a tokenized link to any briefing that opens read-only
-  without a login.
+- **Public briefing links** — copy the briefing's public page on the website (`<site>/daily/<date>`).
 - **More integrations** — watchlist alerts, 8-region filtering & keyword search, Markdown
   copy/download, script-length dial, auto-lock on inactivity.
 
@@ -81,7 +80,7 @@ public share links.
 ```
 backend/           FastAPI app
   lib/             auth, dates, db, desk (daily), producer (weekly), email_digest,
-                   turnstile, share tokens, llm (Gemini/OpenAI provider layer),
+                   turnstile, unsubscribe tokens, llm (Gemini/OpenAI provider layer),
                    mailer (Resend/SMTP), config_secrets (encrypted in-app keys)
   models/          Pydantic models (briefing, episode, config, user, subscriber, submission)
   routers/         auth, setup (first-run), public, briefings, episodes, settings,
@@ -89,7 +88,7 @@ backend/           FastAPI app
   server.py        app + api_router (/api), lifespan (schedulers; no default seed)
 frontend/          Vite + React app
   src/pages/       Home, Archive, BriefingPage, StoryDetail, Candidates, Episodes,
-                   EpisodePage, Settings, Users, Submissions, Excluded, SharedBriefing,
+                   EpisodePage, Settings, Users, Submissions, Excluded,
                    Subscribe, Unsubscribe, SubmitStory
   src/components/  DeskLayout, AuthGate, SetupWizard, IntegrationsPanel, BriefingView,
                    ScriptView, StoryCard, TurnstileWidget, ui/*
@@ -225,10 +224,10 @@ See [`backend/.env.example`](backend/.env.example). The real `.env` is never com
 
 | Variable | Required | Purpose |
 | --- | --- | --- |
-| `SESSION_SECRET` | **Yes** | Signs session cookies + share/unsubscribe tokens. Server refuses to boot without it. |
+| `SESSION_SECRET` | **Yes** | Signs session cookies + unsubscribe tokens. Server refuses to boot without it. |
 | `MONGO_URL`, `DB_NAME` | Yes | Database connection. |
 | `CORS_ORIGINS` | Yes | Comma-separated allowed frontend origins (no wildcard when using cookies). |
-| `APP_URL` | Yes | Public base URL used in outgoing email links + share pages. |
+| `APP_URL` | Yes | Public base URL used in outgoing email links. |
 | `APP_PASSCODE` | Optional | Machine credential for `X-Desk-Passcode` access; blank disables programmatic access (human logins unaffected). |
 | `LLM_PROVIDER`, `GEMINI_API_KEY` / `OPENAI_API_KEY`, `LLM_MODEL` | For research | AI provider; normally set in Settings → Integrations (env is initial fallback). |
 | `EMAIL_PROVIDER`, `RESEND_API_KEY` / `SMTP_*`, `EMAIL_FROM`, `EMAIL_FROM_NAME` | For email | Resend default + SMTP fallback; normally set in Settings → Integrations. |
@@ -237,7 +236,7 @@ See [`backend/.env.example`](backend/.env.example). The real `.env` is never com
 ## Email delivery notes
 
 - The daily briefing goes to admin recipients (compact edition + login-protected link) **and**
-  active public subscribers (the full briefing inline + a no-login share link). Each address is
+  active public subscribers (the full briefing inline + a link to its page on the website). Each address is
   sent individually so addresses stay private.
 - Every send returns per-audience counts and a **reason for each failed address**, records the
   outcome to the `digest_deliveries` collection, and **emails admins an alert** if any subscriber
@@ -265,7 +264,7 @@ Daily briefings can be published to a public website (e.g. `wvedtalk.com/daily`)
 shared from this desk. Configure it under **Settings → Integrations → Website publishing**:
 
 - **Website URL** — the public site (https). The "View this briefing on the web" link in the daily
-  email then points at `<site>/daily/<date>`. Left blank, emails keep using this desk's own share link.
+  email then points at `<site>/daily/<date>`. Left blank, the link is omitted from emails (the full briefing is still inline).
 - **Website deploy hook URL** — after a successful daily run the desk POSTs this hook so the site
   rebuilds. When digest emails are about to go out it first waits (up to ~10 minutes) until the new
   briefing page is live; on a timeout admins get an alert and the emails still send (they contain the

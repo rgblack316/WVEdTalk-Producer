@@ -99,7 +99,7 @@ async def get_public_url() -> str:
 
 async def get_site_url() -> str:
     """Public website base URL (e.g. https://wvedtalk.com). When set, the "view on the web" link in
-    the daily emails points at <site>/daily/<date> instead of this desk's own share page."""
+    the daily emails points at <site>/daily/<date> instead of omitting the link."""
     ic = await _integrations()
     return (ic.get("site_url") or os.environ.get("SITE_URL") or "").strip().rstrip("/")
 
