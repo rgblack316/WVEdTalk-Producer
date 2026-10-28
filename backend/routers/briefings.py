@@ -1,13 +1,13 @@
 """Briefing routes — mounted onto api_router (/api) from server.py."""
 
 import asyncio
+import re
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from lib import desk
-from lib import desk
-from lib.auth import require_editor, require_admin, make_share_token
+from lib import config_secrets, desk
+from lib.auth import require_editor, require_admin
 from lib.db import db
 from models.briefing import (
     Briefing,
@@ -301,15 +301,20 @@ async def trigger_run(_edit=Depends(require_editor)):
     return desk.get_run_status()
 
 
-@router.get("/briefings/{date}/share")
-async def briefing_share_link(date: str):
-    """Return a public share token/path for this briefing. Readable by any signed-in
-    user (including viewers) so they can copy a link to send to people without accounts."""
+@router.get("/briefings/{date}/public-url")
+async def briefing_public_url(date: str):
+    """The public page for this briefing on the website. Readable by any signed-in user (including
+    viewers) so they can copy a link to send to people without accounts. 409 until a website URL is
+    set in Settings -> Integrations."""
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date):
+        raise HTTPException(status_code=422, detail="Date must look like YYYY-MM-DD")
     doc = await db.briefings.find_one({"date": date}, {"_id": 1})
     if not doc:
         raise HTTPException(status_code=404, detail=f"No briefing for {date}")
-    token = make_share_token(date)
-    return {"date": date, "token": token, "path": f"/share/briefing/{date}?t={token}"}
+    site = await config_secrets.get_site_url()
+    if not site:
+        raise HTTPException(status_code=409, detail="No website URL is configured (Settings → Integrations).")
+    return {"date": date, "url": f"{site}/daily/{date}"}
 
 
 @router.get("/briefings/{date}", response_model=Briefing)

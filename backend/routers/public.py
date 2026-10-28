@@ -1,6 +1,6 @@
-"""Public, unauthenticated routes: token-validated share links + newsletter sign-up.
-Mounted WITHOUT the auth guard. Share links carry an HMAC token; unsubscribe carries a
-per-email HMAC token. Sign-up is idempotent, email-format validated, and IP-throttled."""
+"""Public, unauthenticated routes: newsletter sign-up/unsubscribe and reader story tips.
+Mounted WITHOUT the auth guard. Unsubscribe carries a per-email HMAC token. Sign-up is idempotent,
+email-format validated, and IP-throttled. (Briefings are published on the website, not served here.)"""
 
 import re
 import time
@@ -10,14 +10,13 @@ from html import unescape
 from urllib.parse import parse_qs, urlparse
 
 import httpx
-from fastapi import APIRouter, HTTPException, Query, Request, Response
+from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
 
 from lib import auth
 from lib import turnstile
 from lib.db import db
 from lib.desk import _is_private_host
-from models.briefing import Briefing
 from models.subscriber import SubscribeRequest, UnsubscribeRequest
 from models.submission import SubmissionRequest
 
@@ -51,17 +50,6 @@ async def _persist_subscriber(email: str) -> None:
         await db.subscribers.insert_one(
             {"email": email, "active": True, "subscribed_at": datetime.now(timezone.utc)}
         )
-
-
-@router.get("/public/briefings/{date}", response_model=Briefing)
-async def public_briefing(date: str, token: str = Query(default="")):
-    if not auth.verify_share_token(date, token):
-        raise HTTPException(status_code=403, detail="Invalid or expired share link")
-    doc = await db.briefings.find_one({"date": date})
-    if not doc:
-        raise HTTPException(status_code=404, detail=f"No briefing for {date}")
-    doc.pop("_id", None)
-    return Briefing(**doc)
 
 
 @router.post("/public/subscribe")

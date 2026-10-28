@@ -101,7 +101,7 @@ story can be flagged as a podcast episode candidate with free-text prep notes.
 - **Hide-unverified toggle**: `desk_config.hide_unverified_sources` (`POST /api/settings/hide-unverified {enabled}`,
   Settings "Source links" panel, admin). When on, `SourceList`/`ScriptView` drop `verified === false` links from
   briefings & episode notes. `BriefingView`/`StoryDetail` read config and pass `hideUnverified` down (public
-  SharedBriefing never filters); `ScriptView` reads config itself (authed pages only).
+  the public website filters on its own); `ScriptView` reads config itself (authed pages only).
 - **Re-check all**: `POST /api/briefings/recheck-sources` (admin) re-resolves + re-verifies every source
   link across all past briefings AND weekly episodes in one pass, returns `{briefings, episodes,
   links_checked, unverified}`. Button in the Settings "Source links" panel.
@@ -139,7 +139,7 @@ story can be flagged as a podcast episode candidate with free-text prep notes.
 
 ## Branding
 - Logo: `frontend/public/wvedtalk-logo.png` (WVEDTALK WV license-plate art, ~700×700, optimized).
-  Shown on the header masthead (links home), login, and public Subscribe/Unsubscribe/SharedBriefing.
+  Shown on the header masthead (links home), login, and public Subscribe/Unsubscribe.
   Favicons regenerated from the logo.
 - **Brand palette** (index.css): primary = navy `oklch(0.35 0.13 264)` / dark `0.7 0.12 262`;
   accent = gold `oklch(0.62 0.14 74)` / dark `0.78 0.14 80`; accent-foreground navy for gold buttons.
@@ -204,13 +204,10 @@ send emails, or change any shared setting). Replaced the earlier single shared p
   a hard redirect to the lock screen — when it elapses. Set on the Settings "Security" panel.
 
 ## Added features (post-MVP)
-- **Public share link** (backend `routers/public.py` + `auth.make_share_token`/`verify_share_token`,
-  frontend `pages/SharedBriefing.tsx`): any signed-in user (incl. viewers) copies a link via
-  GET /api/briefings/{date}/share → `/share/briefing/{date}?t=<hmac>`. The `/share/*` route is
-  OUTSIDE AuthGate (App.tsx uses a `ProtectedLayout` outlet); it fetches the open, token-validated
-  GET /api/public/briefings/{date}?token=… (403 on bad token). BriefingView takes an `isPublic` prop
-  that skips the authed /settings query, hides the share button + machine-readable link, and renders
-  story headlines as plain text (no authed detail links). Rotate SESSION_SECRET to revoke all links.
+- **Public briefing link**: briefings are published on the website (see README "Publishing briefings
+  to the public website"). `GET /api/briefings/{date}/public-url` returns `<site>/daily/<date>` (409 if
+  no site URL is set); BriefingView's copy button uses it. The old `/share/briefing/{date}?t=…` pages
+  and token API were removed; nginx 301-redirects old `/share/briefing/<date>` links to the website.
 - **View-only banner**: DeskLayout shows a subtle ribbon for viewers explaining editing is off.
 - **Public newsletter subscribers** (backend `models/subscriber.py`, collection `subscribers`
   {email, active, subscribed_at}, unique email index; `routers/public.py`): a public `/subscribe`
@@ -224,8 +221,7 @@ send emails, or change any shared setting). Replaced the earlier single shared p
   Three summary + a login-protected "Read the full briefing" link to `/briefings/{date}`). Public
   subscribers get `_full_digest_html` — the COMPLETE briefing rendered inline (every section: Big
   Three, Developing, State Policy, K-12, Higher Ed, Other, with sources) PLUS a "View this briefing
-  on the web" button to the public share page `/share/briefing/{date}?t=<make_share_token(date)>`
-  (no login). `_safe_source_links` pre-filters source anchors to https/non-shortener hosts with the
+  on the web" button to `<site>/daily/{date}` (omitted when no website URL is configured). `_safe_source_links` pre-filters source anchors to https/non-shortener hosts with the
   host as anchor text, so a bad source URL can never trip `_assert_safe_email` and block the send.
   NOTE: the full-briefing body renders lots of model-generated news prose, so `_assert_safe_email`'s
   credential-request gate (`_CRED_ASK`) matches only imperative phishing phrases ("reply with your

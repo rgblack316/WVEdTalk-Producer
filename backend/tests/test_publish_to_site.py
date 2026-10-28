@@ -225,10 +225,16 @@ async def test_email_links_to_website_when_site_url_set(monkeypatch):
     assert 'href="https://wvedtalk.com/daily/2026-10-28"' in html
 
 
-async def test_email_falls_back_to_share_link_without_site_url(monkeypatch):
+async def test_email_omits_web_link_without_site_url(monkeypatch):
     async def get_site():
         return ""
 
     monkeypatch.setattr(config_secrets, "get_site_url", get_site)
-    url = await email_digest._web_url(Briefing(date="2026-10-28"))
-    assert "/share/briefing/2026-10-28?t=" in url
+    monkeypatch.setattr(email_digest, "APP_URL", "https://news-desk.wvedtalk.com")
+    assert await email_digest._web_url(Briefing(date="2026-10-28")) == ""
+    html = email_digest._full_digest_html(
+        Briefing(date="2026-10-28"), "",
+        unsubscribe_url="https://news-desk.wvedtalk.com/unsubscribe?email=a%40b.co&t=x",
+    )
+    assert "View this briefing on the web" not in html
+    email_digest._assert_safe_email("subject", html)

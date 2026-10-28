@@ -16,7 +16,7 @@ from urllib.parse import quote, urlparse
 
 import httpx
 
-from lib.auth import make_share_token, make_unsub_token
+from lib.auth import make_unsub_token
 from lib.db import db
 
 logger = logging.getLogger(__name__)
@@ -39,14 +39,12 @@ async def _resolve_base() -> str:
     return APP_URL
 
 async def _web_url(briefing) -> str:
-    """The public 'view on the web' link for a briefing: the website page when a website URL is
-    configured (Settings -> Integrations), otherwise this desk's own tokenized share page."""
+    """The public 'view on the web' link for a briefing: its page on the website, or "" when no
+    website URL is configured (Settings -> Integrations -> Website publishing)."""
     from lib import config_secrets
 
     site = await config_secrets.get_site_url()
-    if site:
-        return f"{site}/daily/{briefing.date}"
-    return f"{APP_URL}/share/briefing/{briefing.date}?t={make_share_token(briefing.date)}"
+    return f"{site}/daily/{briefing.date}" if site else ""
 
 
 _SHORTENERS = ("bit.ly", "tinyurl.com", "t.co", "is.gd", "cutt.ly", "goo.gl", "rebrand.ly")
@@ -284,9 +282,10 @@ def _story_block(s) -> str:
     )
 
 
-def _full_digest_html(briefing, share_url: str, unsubscribe_url: Optional[str] = None) -> str:
+def _full_digest_html(briefing, web_url: str, unsubscribe_url: Optional[str] = None) -> str:
     """The COMPLETE briefing rendered inline for public subscribers (every section), plus a
-    public 'view on the web' share link and a one-click unsubscribe. No login required to read."""
+    'view on the web' link to the briefing's website page (omitted when `web_url` is empty) and a
+    one-click unsubscribe. No login required to read."""
     date = escape(briefing.date)
     note = escape(briefing.editor_note) if briefing.editor_note else ""
 
@@ -307,10 +306,11 @@ def _full_digest_html(briefing, share_url: str, unsubscribe_url: Optional[str] =
         )
 
     share_btn = (
-        f'<p style="margin:18px 0 4px"><a href="{share_url}" '
+        f'<p style="margin:18px 0 4px"><a href="{escape(web_url, quote=True)}" '
         'style="display:inline-block;background:#16305e;color:#fff;text-decoration:none;'
         'font-family:Arial,sans-serif;font-size:14px;padding:11px 20px;border-radius:4px">'
         'View this briefing on the web</a></p>'
+        if web_url else ""
     )
 
     return (
@@ -400,13 +400,13 @@ async def _send_to_lists(briefing, admin: List[str], sub_emails: List[str], *,
             res.failures.append(DeliveryFailure(email=to, error=det))
             logger.error("admin digest to %s failed: %s", to, det)
 
-    share_url = await _web_url(briefing)
+    web_url = await _web_url(briefing)
     for email in sub_emails:
         unsub = f"{APP_URL}/unsubscribe?email={quote(email)}&t={make_unsub_token(email)}"
         try:
             await _send_email(
                 to=email, subject=subject,
-                html=_full_digest_html(briefing, share_url, unsubscribe_url=unsub),
+                html=_full_digest_html(briefing, web_url, unsubscribe_url=unsub),
             )
             res.sub_sent += 1
             if record:
@@ -458,13 +458,13 @@ async def send_test_digest(briefing, email: str) -> Optional[str]:
     touch the delivery log or fire alerts."""
     email = (email or "").strip()
     await _resolve_base()
-    share_url = await _web_url(briefing)
+    web_url = await _web_url(briefing)
     unsub = f"{APP_URL}/unsubscribe?email={quote(email)}&t={make_unsub_token(email)}"
     try:
         await _send_email(
             to=email,
             subject=f"[TEST] WVEdTalk News Desk — Daily Briefing, {briefing.date}",
-            html=_full_digest_html(briefing, share_url, unsubscribe_url=unsub),
+            html=_full_digest_html(briefing, web_url, unsubscribe_url=unsub),
         )
         return None
     except Exception as exc:
