@@ -194,6 +194,46 @@ async def verify_episode_links(week_of: str, _edit=Depends(require_editor)):
     return WeeklyEpisode(**fresh)
 
 
+class _ReviseBody(BaseModel):
+    feedback: str
+    allow_research: bool = False
+
+
+@router.post("/episodes/{week_of}/revise", response_model=WeeklyEpisode)
+async def revise(week_of: str, body: _ReviseBody, _edit=Depends(require_editor)):
+    """Revise the existing script from editor feedback (minimal edits; the prior version is kept)."""
+    if len(body.feedback) > 8000:
+        raise HTTPException(status_code=400, detail="Feedback is too long (8,000 characters max)")
+    try:
+        doc = await producer.revise_episode(week_of, body.feedback, body.allow_research)
+    except ValueError as exc:
+        code = str(exc)
+        if code == "not_found":
+            raise HTTPException(status_code=404, detail=f"No episode for week of {week_of}")
+        if code == "empty_feedback":
+            raise HTTPException(status_code=400, detail="Write some feedback first")
+        if code == "busy":
+            raise HTTPException(status_code=409, detail="Another revision is already running")
+        raise HTTPException(status_code=502, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Could not revise the script: {exc}")
+    return WeeklyEpisode(**doc)
+
+
+@router.get("/episodes/{week_of}/revisions")
+async def revisions(week_of: str):
+    return await producer.list_revisions(week_of)
+
+
+@router.post("/episodes/{week_of}/revisions/{revision_id}/restore", response_model=WeeklyEpisode)
+async def restore(week_of: str, revision_id: str, _edit=Depends(require_editor)):
+    try:
+        doc = await producer.restore_revision(week_of, revision_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Revision not found")
+    return WeeklyEpisode(**doc)
+
+
 @router.get("/episodes/{week_of}", response_model=WeeklyEpisode)
 async def get_episode(week_of: str):
     doc = await db.episodes.find_one({"week_of": week_of})

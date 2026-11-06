@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScoreChip, SourceList, isExternalUrl } from "@/components/StoryCard";
 import { ScriptView } from "@/components/ScriptView";
+import { ScriptFeedbackPanel } from "@/components/ScriptFeedbackPanel";
 import { apiGet, apiPost, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/useAuth";
 import { episodeToMarkdown } from "@/lib/episode";
@@ -354,6 +355,7 @@ export default function EpisodePage() {
                 )}
               </div>
             </div>
+            <ScriptFeedbackPanel episode={episode} canEdit={canEdit} />
             <ScriptView
               script={episode.recording_script}
               chapters={episode.chapters}

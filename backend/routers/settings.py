@@ -198,6 +198,45 @@ async def set_support(body: SupportUpdate):
     return cfg
 
 
+class PlanUpdate(BaseModel):
+    plan: str
+
+
+def _plan_payload(plan: str) -> dict:
+    from lib.producer_plan import DEFAULT_PLAN
+
+    return {"plan": plan or DEFAULT_PLAN, "is_default": not plan, "default_plan": DEFAULT_PLAN}
+
+
+@router.get("/settings/plan")
+async def get_plan():
+    """The editable weekly-script plan (the editorial brief the producer follows)."""
+    cfg = await db.desk_config.find_one(_KEY, {"_id": 0, "producer_plan": 1}) or {}
+    return _plan_payload((cfg.get("producer_plan") or "").strip())
+
+
+@router.post("/settings/plan")
+async def set_plan(body: PlanUpdate, _edit=Depends(auth.require_editor)):
+    """Save the plan. Saving text identical to the default (or empty) reverts to the built-in default."""
+    from lib.producer_plan import DEFAULT_PLAN
+
+    text = body.plan.strip()
+    if len(text) > 30000:
+        raise HTTPException(status_code=400, detail="Plan is too long (30,000 characters max)")
+    if text and len(text) < 200:
+        raise HTTPException(status_code=400, detail="Plan is too short to guide a weekly script — use Reset to restore the default")
+    if text == DEFAULT_PLAN.strip():
+        text = ""
+    await db.desk_config.update_one(_KEY, {"$set": {"producer_plan": text}}, upsert=True)
+    return _plan_payload(text)
+
+
+@router.post("/settings/plan/reset")
+async def reset_plan(_edit=Depends(auth.require_editor)):
+    await db.desk_config.update_one(_KEY, {"$set": {"producer_plan": ""}}, upsert=True)
+    return _plan_payload("")
+
+
 @router.post("/settings/auto-thank", response_model=DeskConfig)
 async def set_auto_thank(body: AutoThankUpdate):
     cfg = await _load()

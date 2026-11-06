@@ -2,7 +2,7 @@
 
 import uuid
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -24,6 +24,7 @@ class EpisodeStory(BaseModel):
     what_happened_during_week: str = ""
     what_remains_unresolved: str = ""
     why_it_matters: str = ""
+    key_dates: str = ""  # dates the sources state for this story (so deadlines can be checked at a glance)
     sources: List[SourceLink] = Field(default_factory=list)
 
 
@@ -58,6 +59,11 @@ class WeeklyEpisode(BaseModel):
     # De-duplicated links to every article used to build the episode — the show-notes list
     # rendered as "Links to New Sources for This Week" after the recording script.
     episode_links: List[SourceLink] = Field(default_factory=list)
+    # Fact-check findings from the post-write pass: {claim, problem, source_id, suggested_fix, severity, fixed}.
+    fact_check: List[Dict[str, Any]] = Field(default_factory=list)
+    plan_is_custom: bool = False  # produced with a host-edited plan rather than the built-in default
+    last_revision_notes: str = ""  # what the most recent feedback revision changed / couldn't do
+    revision_count: int = 0
     error: str = ""
 
 

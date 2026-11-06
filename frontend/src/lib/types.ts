@@ -225,7 +225,30 @@ export interface EpisodeStory {
   what_happened_during_week: string;
   what_remains_unresolved: string;
   why_it_matters: string;
+  key_dates?: string;
   sources: SourceLink[];
+}
+
+export interface FactCheckIssue {
+  claim: string;
+  problem: string;
+  source_id?: string;
+  suggested_fix?: string;
+  severity?: string;
+  fixed?: boolean;
+}
+
+export interface EpisodeRevision {
+  id: string;
+  at: string;
+  feedback: string;
+  notes: string;
+}
+
+export interface ProducerPlan {
+  plan: string;
+  is_default: boolean;
+  default_plan: string;
 }
 
 export interface NotSelectedStory {
@@ -257,6 +280,10 @@ export interface WeeklyEpisode {
   support_included: boolean;
   source_log: SourceLink[];
   episode_links: SourceLink[];
+  fact_check?: FactCheckIssue[];
+  plan_is_custom?: boolean;
+  last_revision_notes?: string;
+  revision_count?: number;
   error: string;
 }
 
