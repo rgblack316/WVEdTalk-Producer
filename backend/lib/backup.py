@@ -18,6 +18,7 @@ import gzip
 import json
 import logging
 import re
+import urllib.parse
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
@@ -148,6 +149,12 @@ async def save_config(patch: Dict[str, Any]) -> None:
 
 # ---------------------------------------------------------------- S3
 
+def _is_r2(endpoint_url: str) -> bool:
+    """True when the endpoint's HOST is Cloudflare R2 (not just a URL containing the text)."""
+    host = (urllib.parse.urlparse(endpoint_url or "").hostname or "").lower()
+    return host == "r2.cloudflarestorage.com" or host.endswith(".r2.cloudflarestorage.com")
+
+
 def _client(cfg: Dict[str, Any]):
     import boto3
     from botocore.config import Config
@@ -156,7 +163,7 @@ def _client(cfg: Dict[str, Any]):
     return boto3.client(
         "s3",
         endpoint_url=cfg["endpoint_url"] or None,
-        region_name=cfg["region"] or ("auto" if "r2.cloudflarestorage.com" in cfg["endpoint_url"] else "us-east-1"),
+        region_name=cfg["region"] or ("auto" if _is_r2(cfg["endpoint_url"]) else "us-east-1"),
         aws_access_key_id=cfg["access_key_id"],
         aws_secret_access_key=cfg["secret_access_key"],
         config=Config(
@@ -198,6 +205,9 @@ async def list_backups() -> List[Dict[str, Any]]:
 
 
 def _friendly(exc: Exception) -> str:
+    """A short, safe message for the UI. The full exception is logged server-side only, so provider
+    error bodies, request IDs or stack details are never returned to the browser."""
+    logger.warning("backup storage error: %s", exc)
     msg = str(exc)
     for needle, text in (
         ("InvalidAccessKeyId", "The access key ID isn't recognized by that provider."),
@@ -209,7 +219,10 @@ def _friendly(exc: Exception) -> str:
     ):
         if needle in msg:
             return text
-    return msg[:300]
+    code = (getattr(exc, "response", None) or {}).get("Error", {}).get("Code") if hasattr(exc, "response") else None
+    if code and re.fullmatch(r"[A-Za-z0-9_.-]{1,40}", str(code)):
+        return f"The storage service returned an error ({code})."
+    return "The backup storage request failed. Check the settings and try again (details are in the server log)."
 
 
 def _test_sync(cfg: Dict[str, Any]) -> Dict[str, Any]:
@@ -314,7 +327,10 @@ async def fetch_archive(key: str) -> Dict[str, Any]:
     cfg = await get_config()
     _check_key(cfg, key)
     raw = await asyncio.to_thread(_download_sync, cfg, key)
-    return json.loads(gzip.decompress(raw).decode("utf-8"))
+    try:
+        return json.loads(gzip.decompress(raw).decode("utf-8"))
+    except (OSError, EOFError, ValueError):
+        raise ValueError("That backup file is corrupt or isn't a valid archive.") from None
 
 
 # ---------------------------------------------------------------- schedule

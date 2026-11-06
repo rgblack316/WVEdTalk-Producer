@@ -148,3 +148,17 @@ def test_upload_list_prune_download_roundtrip(monkeypatch):
         keys = {o["Key"] for o in s3.list_objects_v2(Bucket="test-bucket")["Contents"]}
         assert "bk/unrelated.txt" in keys and "other/wvedtalk-backup-20200101-000000.json.gz" in keys
         assert json.loads(gzip.decompress(backup._download_sync(c, left[0]))) == {"format": "x"}
+
+
+def test_r2_detection_checks_the_host_not_a_substring():
+    assert backup._is_r2("https://abc123.r2.cloudflarestorage.com")
+    assert not backup._is_r2("https://evil.example/r2.cloudflarestorage.com")
+    assert not backup._is_r2("https://r2.cloudflarestorage.com.evil.example")
+    assert not backup._is_r2("")
+
+
+def test_friendly_errors_never_echo_raw_exception_text():
+    secret = "RequestId=ABC123 host=internal-db.local Traceback secret-detail"
+    out = backup._friendly(RuntimeError(secret))
+    assert "ABC123" not in out and "internal-db" not in out and "Traceback" not in out
+    assert "AccessDenied" not in backup._friendly(RuntimeError("AccessDenied: x"))
