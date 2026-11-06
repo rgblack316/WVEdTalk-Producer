@@ -462,9 +462,9 @@
   integrity sha512-cms1nM7U6SN8epIV1WMVOV8VsA645aSm3wHfzIQnkk188U341ThbJGSl2Sv54V29gnDbT2arMPfLzvVIIVCceQ==
 
 "@hono/node-server@^1.19.9 || ^2.0.5":
-  version "2.0.12"
-  resolved "https://registry.yarnpkg.com/@hono/node-server/-/node-server-2.0.12.tgz#23876c8640ec7b9cc77dd457758464b1206a11cd"
-  integrity sha512-eWpQYr67tqJLeaSUl0Q+TquuYfUdTibpOJlUMV2FfUP7+KqCC5TufnwnlXL6mobZBJbGAYRd7ZvEBDCbLInjhg==
+  version "2.1.5"
+  resolved "https://registry.yarnpkg.com/@hono/node-server/-/node-server-2.1.5.tgz#273db93e8bfb44ef361e55f3d00048013668aa09"
+  integrity sha512-MgP/I06GdvsilDspMk/qmRzpk8LOUStP6jFAbSRi40W09DhoyUn+Mj7eyKICPqeYKybOjVFLVIAQzvu1bfIa7Q==
 
 "@icons-pack/react-simple-icons@13.15.1":
   version "13.15.1"
@@ -3252,9 +3252,9 @@ strip-final-newline@^4.0.0:
   integrity sha512-aulFJcD6YK8V1G7iRB5tigAP4TsHBZZrOV8pjV++zdUwmeV8uzbY7yn6h9MswN62adStNZFuCIx4haBnRuMDaw==
 
 systeminformation@^5.22.11:
-  version "5.33.1"
-  resolved "https://registry.yarnpkg.com/systeminformation/-/systeminformation-5.33.1.tgz#499f06a859d2abeafaae6d69f71dd3516919f0f4"
-  integrity sha512-DEN6ICHk3Tk0Uf/hrAHh7xlt7iL5CJFBtPZinA0H62DrGG/KPKqq/Nzj6lCXPS4Ay/sf/14zNnk9LpqKzBIc+w==
+  version "5.33.18"
+  resolved "https://registry.yarnpkg.com/systeminformation/-/systeminformation-5.33.18.tgz#cae5983875ba291f6f036cfde86a26b422c5b71c"
+  integrity sha512-SF8DBQx3ypa8zDqZlezpHQ6M2g7TrqSEWpAtC4OsHCdLmi7J2WdxaSbA8/DJyEn2l/CHPrW0VFenoqoDccrw6g==
 
 tailwind-merge@3.6.0, tailwind-merge@^3.0.1:
   version "3.6.0"
