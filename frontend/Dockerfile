@@ -1,5 +1,6 @@
 # Frontend image: build the Vite SPA, then serve it with nginx + /api proxy.
-FROM node:20-alpine AS build
+# Node 26 is the current LTS (vitest 5 / vite 8 need Node >= 22.12). Bump deliberately, not via a floating tag.
+FROM node:26-alpine AS build
 WORKDIR /app
 # yarn.lock* (glob) so the build still works if the lockfile isn't present in the repo; prefer a
 # frozen install when it is, otherwise fall back to a normal resolve.
