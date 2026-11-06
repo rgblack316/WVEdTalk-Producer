@@ -144,12 +144,14 @@ HEAD, or a diverged branch; it **always takes a MongoDB backup first** (`mongodu
 stays in its Docker volume and is never touched. The script prints the exact `mongorestore` command
 to roll back.
 
-> **"Update available" banner:** admins see an in-app banner when a newer release is published. The
-> app compares its baked-in `backend/VERSION` against the same file on the GitHub default branch
-> (`GET /api/version`, cached 1h). **To cut a release, bump `backend/VERSION`** (e.g. `1.0.0` →
-> `1.1.0`) and push — running installs will then show the banner until an operator runs `./upgrade.sh`.
-> The check is best-effort and fails closed (no banner) if GitHub is unreachable. Override the source
-> with `GITHUB_REPO` / `UPDATE_BRANCH` env vars.
+> **"Update available" banner:** admins see what's new in **Settings → Software updates**. The image is
+> stamped at build time with the git commit it came from (`APP_COMMIT`, passed by `install.sh` /
+> `upgrade.sh` as the `GIT_SHA` build arg), and the app asks GitHub how many commits the default branch
+> is ahead of that commit (`GET /api/version`, cached 1h; **Check for updates** bypasses the cache). So
+> any merged change counts as an update — no need to bump `backend/VERSION`, which is now just the
+> display label (a bump also counts). A server built before this stamping shows build "unknown" and is
+> offered one update that rebuilds and stamps it. The check is best-effort (it never blocks the app if
+> GitHub is unreachable). Override the source with `GITHUB_REPO` / `UPDATE_BRANCH` env vars.
 
 > **Health & startup order:** each service defines a Docker `healthcheck` (backend probes the
 > auth-free `GET /api/`, not the 401-guarded `/api/schedule/next`); `backend` waits for `mongo`

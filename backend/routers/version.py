@@ -16,6 +16,11 @@ class VersionInfo(BaseModel):
     update_available: bool = False
     checked_at: Optional[str] = None
     error: Optional[str] = None
+    current_commit: Optional[str] = None  # short SHA of the running build
+    latest_commit: Optional[str] = None  # short SHA at the head of the update branch
+    behind_by: int = 0  # commits on GitHub this build doesn't have
+    changes: list[str] = []  # newest-first commit subjects (up to 10)
+    unknown_build: bool = False  # image built before commit-stamping, so currency can't be proven
 
 
 @router.get("/version", response_model=VersionInfo)

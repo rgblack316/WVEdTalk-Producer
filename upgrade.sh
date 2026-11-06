@@ -60,12 +60,19 @@ AHEAD="$(git rev-list --count "$REMOTE_REF..HEAD")"
 BEHIND="$(git rev-list --count "HEAD..$REMOTE_REF")"
 [ "$AHEAD" -gt 0 ] && [ "$BEHIND" -gt 0 ] && fail "Local branch and remote have diverged. Resolve the git history manually."
 [ "$AHEAD" -gt 0 ] && fail "Local branch has $AHEAD commit(s) not on the remote. No changes made."
+HEAD_SHA="$(git rev-parse HEAD)"
+# The commit the RUNNING backend image was built from (empty/"unknown" for builds that predate this check).
+RUNNING_SHA="$(docker_cmd compose exec -T backend printenv APP_COMMIT 2>/dev/null | tr -d '\r\n' || true)"
 if [ "$BEHIND" -eq 0 ]; then
-  log "Already up to date. No rebuild necessary."
-  docker_cmd compose ps
-  exit 0
+  if [ "$RUNNING_SHA" = "$HEAD_SHA" ]; then
+    log "Already up to date. No rebuild necessary."
+    docker_cmd compose ps
+    exit 0
+  fi
+  log "Code is current, but the running build (${RUNNING_SHA:-unknown}) is not $HEAD_SHA — rebuilding to sync."
+else
+  echo "Remote has $BEHIND new commit(s)."
 fi
-echo "Remote has $BEHIND new commit(s)."
 
 # ---- mandatory pre-upgrade DB backup ---------------------------------------
 mkdir -p "$DB_BACKUP_DIR"
@@ -82,8 +89,11 @@ fi
 cp -p .env "$DB_BACKUP_DIR/.env"
 
 # ---- fast-forward + rebuild -------------------------------------------------
-log "Pulling latest code..."
-git pull --ff-only
+if [ "$BEHIND" -gt 0 ]; then
+  log "Pulling latest code..."
+  git pull --ff-only
+fi
+export GIT_SHA="$(git rev-parse HEAD)"   # baked into the image so the app can detect future updates
 log "Rebuilding and recreating containers..."
 docker_cmd compose up -d --build
 docker_cmd image prune -f >/dev/null 2>&1 || true

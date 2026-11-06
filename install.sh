@@ -122,6 +122,7 @@ mkdir -p backups control
 
 # ---- build + start ----------------------------------------------------------
 log "Building and starting the stack (first run can take a few minutes)..."
+export GIT_SHA="$(git rev-parse HEAD)"
 docker_cmd compose up -d --build
 
 # ---- one-click updater service (host-side watcher) --------------------------
