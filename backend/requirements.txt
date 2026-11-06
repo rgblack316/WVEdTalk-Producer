@@ -33,3 +33,4 @@ google-genai>=0.3.0
 openai>=1.40.0
 aiosmtplib>=3.0.0
 
+moto[s3]>=5.0.0
