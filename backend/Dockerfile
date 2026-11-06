@@ -16,6 +16,11 @@ RUN pip install -r requirements.txt
 
 COPY . .
 
+# Git commit this image was built from (passed by upgrade.sh/install.sh as GIT_SHA). Lets the app
+# tell whether it is behind the GitHub branch — the VERSION file alone can't see ordinary commits.
+ARG GIT_SHA=unknown
+ENV APP_COMMIT=${GIT_SHA}
+
 EXPOSE 8001
 
 # Container healthcheck against the open, auth-free health endpoint.

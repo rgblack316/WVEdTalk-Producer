@@ -334,6 +334,11 @@ export interface VersionInfo {
   update_available: boolean;
   checked_at: string | null;
   error: string | null;
+  current_commit?: string | null;
+  latest_commit?: string | null;
+  behind_by?: number;
+  changes?: string[];
+  unknown_build?: boolean;
 }
 
 export interface SelfUpdateStatus {

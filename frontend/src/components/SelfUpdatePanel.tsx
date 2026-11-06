@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -56,6 +57,12 @@ export default function SelfUpdatePanel() {
     onError: (e) => toast.error(errText(e)),
   });
 
+  // After an update finishes, re-check so the panel stops offering it.
+  const finishedAt = st?.finished_at;
+  useEffect(() => {
+    if (st?.state === "success") qc.invalidateQueries({ queryKey: ["version"] });
+  }, [st?.state, finishedAt, qc]);
+
   if (!isAdmin) return null;
 
   const state = st?.state ?? "idle";
@@ -83,7 +90,38 @@ export default function SelfUpdatePanel() {
             <Badge data-testid="self-update-latest">{ver.latest}</Badge>
           </>
         )}
+        {" "}· build{" "}
+        <Badge variant="secondary" data-testid="self-update-commit">
+          {ver?.current_commit ?? "unknown"}
+        </Badge>
+        {ver?.latest_commit && ver.latest_commit !== ver.current_commit && (
+          <>
+            {" "}→ <Badge>{ver.latest_commit}</Badge>
+          </>
+        )}
       </p>
+      {ver?.update_available && (
+        <div className="mt-3 rounded-sm bg-secondary/60 px-3 py-2 text-sm" data-testid="self-update-changes">
+          {ver.unknown_build ? (
+            <p>
+              This server's build predates update tracking, so it can't tell whether it's current. Applying the
+              update rebuilds it and fixes that.
+            </p>
+          ) : (
+            <p className="font-medium">
+              {ver.behind_by} new change{ver.behind_by === 1 ? "" : "s"} available
+            </p>
+          )}
+          {(ver.changes ?? []).length > 0 && (
+            <ul className="mt-1 list-disc space-y-0.5 pl-5 text-xs text-muted-foreground">
+              {(ver.changes ?? []).map((c, i) => (
+                <li key={i}>{c}</li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+      {ver?.error && <p className="mt-2 text-xs text-amber-700 dark:text-amber-400">{ver.error}</p>}
 
       <div className="mt-3 flex items-center gap-2 text-sm" data-testid="self-update-state">
         {state === "running" && <Loader2 className="size-4 animate-spin text-accent-foreground" />}
