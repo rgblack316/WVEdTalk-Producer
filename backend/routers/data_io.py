@@ -1,5 +1,5 @@
 """Admin-only full database export/import — a portable JSON archive of every application
-collection, for migrating the News Desk off Emergent hosting (or keeping an off-platform backup).
+collection, for moving the News Desk between servers (or keeping an off-platform backup).
 
 Mounted under /api behind a require_admin guard in server.py, so every route here is admin-only.
 The export reflects whatever database the running app is connected to, so running it on the live

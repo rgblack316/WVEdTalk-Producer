@@ -1,7 +1,7 @@
 # WV Education News Desk — Self-Hosted Edition
 
 A standalone, fully self-hostable build of the WV Education News Desk that runs on an operator's own
-server with their own AI and email accounts — no Emergent platform, keys, or services involved.
+server with their own AI and email accounts — no third-party platform keys or services involved.
 
 ## Who it's for
 - The desk owner/operator who wants to run the News Desk on their own Ubuntu/Debian server (or a VM),
@@ -9,9 +9,8 @@ server with their own AI and email accounts — no Emergent platform, keys, or s
 - Non-specialist operators: setup, configuration, and upgrades are designed to be doable without
   editing code — one install command, then everything else from inside the app.
 
-> Context: this is a separate track from the current Emergent-hosted app. The existing app keeps
-> running unchanged; this plan is built in a fork so the two versions stay independent. Data moves
-> between them via the app's existing backup export/import (see User flow).
+> Context: this plan describes the self-hosted edition. Data moves between installs via the app's
+> backup export/import (see User flow).
 
 ## Core features and experience
 Everything the current News Desk does — daily statewide briefings, the weekly podcast script
@@ -78,7 +77,7 @@ self-hosted edition:
 
 ### Phase 1 — MVP (built now)
 The complete hard cut, delivered in one build:
-- Remove all Emergent dependencies (managed LLM key, managed email, the Emergent integration library).
+- Use only the operator's own AI and email accounts (no platform-managed keys or integration libraries).
 - **Configurable AI provider** — Gemini (default, with Google Search grounding) and OpenAI — with the
   key and model set in-app. Phase 1 begins with a short **grounding-parity check**: confirm that
   direct Gemini still yields source citations so the "Grounded" badge and link verification keep
@@ -103,9 +102,8 @@ The complete hard cut, delivered in one build:
   Integrations settings.
 
 ## Assumptions
-- The self-hosted edition is a separate fork; the current Emergent-hosted app is left running and
-  unchanged. Migration between them is one-directional for now: export from the current app, import on
-  the self-hosted first run.
+- Moving between installs is done with the app's export/import: export from the old install, import on
+  the new one's first run.
 - Target OS for the automated install/upgrade is Ubuntu/Debian with Docker; other operating systems
   require installing Docker manually first, after which the same stack runs.
 - The operator provides and pays for their own AI and email accounts. Gemini is the default AI

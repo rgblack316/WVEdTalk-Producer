@@ -60,7 +60,7 @@ def test_integrations_public_url_round_trip(admin_client):
     """GET /api/settings/integrations exposes public_url; POST persists a new value and the
     following GET reflects it. Restores the original value afterward (not a seeded-data mutation
     since we restore the known baseline)."""
-    original_url = "https://mountain-school-news.preview.emergentagent.com"
+    original_url = "https://news-desk.example.org"
 
     r = admin_client.get("/settings/integrations")
     assert r.status_code == 200, r.text

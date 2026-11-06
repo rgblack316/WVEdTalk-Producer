@@ -9,7 +9,7 @@ editorial tests). Briefings are stored per calendar date, browsable in an archiv
 story can be flagged as a podcast episode candidate with free-text prep notes.
 
 ## Model / integration
-## Model / integration (self-hosted edition — NO Emergent dependency)
+## Model / integration (self-hosted edition)
 - **Configurable LLM provider** via `lib/llm.py` (`generate(system,user,grounded)` → `{content,
   citations,model}`): **Gemini** (default) through the `google-genai` SDK with the `google_search`
   grounding tool (default model `gemini-3.1-pro-preview`); **OpenAI** through the Responses API `web_search`
@@ -239,11 +239,9 @@ send emails, or change any shared setting). Replaced the earlier single shared p
 - **Markdown export** (frontend): Copy-to-clipboard and Download `.md` of the full edition.
 - **Watchlist** (backend `desk_config` singleton, `routers/settings.py`): case-insensitive terms
   matched anywhere in a story's text; matches surface as a highlighted alert atop the briefing.
-- **Email digest** (backend `lib/email_digest.py`, managed Resend via EMERGENT_EMAIL_KEY,
+- **Email digest** (backend `lib/email_digest.py`, sent via the configured mail transport (Resend or SMTP),
   EMAIL_FROM_NAME="WVEdTalk News Desk", EMAIL_REPLY_TO=no-reply@wvedtalk.com → contact_email/Reply-To.
-  NOTE: the managed proxy's From *address* is the platform's fixed verified shared domain and CANNOT
-  be changed to no-reply@wvedtalk.com — only the sender display name + Reply-To are settable):
-  EMAIL_FROM_NAME="WV Education News Desk"): HTML digest built from a server-side template and sent
+  From name and Reply-To are configurable in Settings → Integrations): HTML digest built from a server-side template and sent
   to configured recipients automatically after each run (`_send_digest_safe`, non-fatal) and via
   POST /api/settings/send-digest. Guardrail gate `_assert_safe_email` runs on every send.
 - **Delivery alerting + test send + resend** (all editor-guarded, in the Settings "Email digest"

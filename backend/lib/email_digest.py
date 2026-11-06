@@ -1,4 +1,4 @@
-"""Email digest via Emergent's managed Resend integration.
+"""Email digest, sent through the configured mail transport (lib/mailer.py).
 
 Recipients come from server-side config; the HTML body is built here from a
 server-side template (callers never supply markup) — see G4 in the playbook.
