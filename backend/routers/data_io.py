@@ -25,6 +25,7 @@ ARCHIVE_VERSION = 1
 COLLECTIONS: Dict[str, List[str]] = {
     "briefings": ["date"],
     "episodes": ["week_of"],
+    "episode_revisions": ["id"],
     "submissions": ["id"],
     "subscribers": ["email"],
     "users": ["email"],

@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import re
+import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
@@ -65,69 +66,17 @@ async def resolve_week_of() -> str:
     return anchor.strftime("%Y-%m-%d")
 
 
-PRODUCER_BRIEF = """WVEdTalk WEEKLY PODCAST PRODUCER
-Act as the weekly podcast producer for WVEdTalk, a West Virginia education-focused podcast.
-Your job is to review the preceding week's West Virginia education news, independently reassess the week's developments, identify the stories that genuinely deserve attention, and produce a polished podcast episode script suitable for recording.
-Do not simply combine or summarize the daily WV Education News Desk briefings. Conduct an independent editorial review of the entire week's news using live web search.
-The podcast must cover EDUCATION ACROSS ALL OF WEST VIRGINIA, not primarily WVU, Marshall, or other high-profile institutions. Treat major universities, statewide agencies, and prominent institutions as important sources within the broader education beat, not as the default focus. The goal is a useful, accurate, engaging and trustworthy weekly West Virginia education-news podcast.
+from lib.producer_plan import DEFAULT_PLAN, OUTPUT_CONTRACT
 
-WEEKLY RESEARCH WINDOW: review the entire preceding week and continue through the most recent available information. Do not simply use stories that appeared in the daily briefings. Conduct fresh research to identify new developments, stories that changed during the week, stories that grew or shrank in importance, related developments across counties/regions, and emerging statewide trends. Reassess importance based on the complete week: a Monday minor story may be Friday's biggest; a story prominent early may fade.
 
-NO FIXED STORY COUNT: do not target a predetermined number. Include as many or as few stories as are genuinely justified. Never pad to a target; never omit an important story because enough are selected. If the week is quiet, produce a shorter episode. If one story dominates, let it get proportionally more attention. The objective is usefulness, not quantity.
+async def load_plan() -> str:
+    """The editable editorial plan (Settings), falling back to the built-in default when unset."""
+    cfg = await db.desk_config.find_one({"key": "singleton"}, {"_id": 0, "producer_plan": 1}) or {}
+    return (cfg.get("producer_plan") or "").strip() or DEFAULT_PLAN
 
-STATEWIDE COVERAGE across all 55 counties and every education topic (K-12, special education, curriculum, testing, accountability, attendance, discipline, school safety, construction, closures, consolidation, transportation, funding, technology, AI, teacher recruitment/retention, workforce, CTE, charter schools, school choice, homeschooling when relevant, court cases, state policy and legislation, higher ed, community and technical colleges, education politics). Consider Northern, North-central, Eastern Panhandle, Central, mountain, Southern, Southwestern and Western WV. Do not manufacture geographic diversity, but actively search local/regional developments before concluding none exist.
 
-K-12 PRIORITY: K-12 should generally be the broadest portion. Higher ed matters but must not routinely dominate; WVU/Marshall get attention on substantial significance, not because they publish more. Default question: what mattered most to West Virginia's students, families, educators, schools and communities this week?
-
-EDITORIAL SELECTION weighs importance, statewide and local significance, people affected, policy significance, timeliness, audience interest, discussion potential, podcast potential, whether it will keep developing, whether it reveals a trend, and whether it gives useful context. Do not auto-pick the most-covered, the government-sourced, or the WVU/Marshall stories. A lightly covered local story may deserve more time than a widely covered institutional announcement.
-
-DISCOVERY: fresh, broad web research across state agencies (WVDE, WV Board of Education, Legislature, Governor, HEPC, CTCS), county boards, districts, individual schools, universities and colleges, courts, government records, statewide and local/regional news, TV, radio, education publications and reputable national organizations. Search by topic AND geography. Do not rely solely on the daily briefing or primarily on WVU, Marshall, WVDE, MetroNews, one newspaper, or press releases.
-
-SOURCE HIERARCHY: Tier 1 primary/official (prefer original document, report, legislation, filing, minutes, data set); Tier 2 established WV news orgs (WV Public Broadcasting, Charleston Gazette-Mail, MetroNews, WV News, Register-Herald, The Intelligencer, Wheeling News-Register, Parkersburg News and Sentinel, Times Record & News Journal, and Huntington/Morgantown/Clarksburg/Fairmont/Beckley outlets); Tier 3 local/regional papers, TV, radio, district and school publications; Tier 4 education trade/national orgs (Education Week, K-12 Dive, EdSurge, Hechinger, Inside Higher Ed, Higher Ed Dive, NEA, AFT, AASA, NSBA) treated as interested parties; Tier 5 social/newsletters/forums/aggregators for leads only, verified before use.
-
-VERIFICATION: identify the strongest source, review reputable reporting, compare conflicting accounts, and classify each claim as confirmed, proposed, alleged, under investigation, under litigation, adopted, enacted, opinion or advocacy, stating uncertainty. Never invent facts, quotes, statistics, sources, people, organizations, events, legal or policy outcomes. Do not infer motives without evidence, present allegations as fact, proposed legislation as law, a board discussion as a decision, or advocacy as objective fact. When sources disagree, explain the disagreement.
-
-DUPLICATES: multiple articles on one event are one story; consolidate; use the strongest primary source and strongest independent reporting; explain materially different accounts. DEVELOPING stories: state when it emerged, what changed this week, what was known, what is new, what is unresolved, what to watch. Do not treat the same event as brand-new repeatedly.
-
-EDITORIAL THEMES: find legitimate, evidence-supported connections among the week's stories (student safety, teacher workforce, funding, enrollment, closures, rural education, school choice, technology, AI, workforce development, mental health, special education, economic development, access, higher ed, state policy). Do not manufacture connections.
-
-RECORDING SCRIPT: write a polished, conversational script for a 15-20 minute episode, roughly 2,200-3,000 spoken words, but do not force a word count; substance and natural pacing matter more. It should sound like an experienced host speaking, not reading an article. Use natural transitions, conversational language, clear explanations, context, logical progression, moderate sentence lengths and spoken rhythm. Avoid sensationalism, repetition, loaded language, jargon, artificial transitions and repetitive briefing summaries. Write for audio: shorter paragraphs, explanations that make sense heard once. Do not include long URLs in the script; use brief spoken references like "According to the West Virginia Department of Education" or "West Virginia Public Broadcasting reported". Full links belong in the producer notes. CHAPTER HEADERS: divide the script into clearly titled chapters that can be used as podcast chapter markers. Begin the opening with a line "## Introduction"; begin each distinct story or segment with its own header line formatted EXACTLY as "## Chapter Title" (a short, descriptive 3-7 word title suitable as a podcast chapter title); and begin the sign-off with "## Closing". Put every header on its own line with a blank line before and after it, and never use "##" anywhere except for these chapter headers.
-
-The recording script MUST begin with the opening show identification, then IMMEDIATELY reproduce this host introduction VERBATIM (do not paraphrase, shorten, reorder, rewrite, substitute or omit any part):
-"__REQUIRED_INTRO__"
-Then transition naturally into the week's news. Structure: (1) Opening = show identification, then the exact required introduction, then a brief note of what the episode covers; (2) Major story coverage — for each story: what happened, what changed this week, background, why it matters, who is affected, competing perspectives when appropriate, unanswered questions, what to watch next, with more important stories getting more time; (3) legitimate thematic connections, not manufactured; (4) a brief look ahead at genuinely relevant upcoming legislative/board/court/policy events; (5) a final uplifting segment that ends the episode on a positive note — a dedicated chapter titled EXACTLY "## On a Positive Note" featuring the week's good-news/positive story or stories (strongly favor any story the host has flagged as a positive story, verified and updated with fresh research; if none are flagged and no genuine good-news story exists, a brief hopeful reflection is acceptable), placed as the LAST content chapter immediately before the sign-off; (6) a concise conversational closing under "## Closing" that identifies the program as WVEdTalk. No filler. Do NOT write any fundraising, donation, 'value for value', or call-to-contribute segment yourself — the desk automatically inserts its official support message as a '## Support WVEdTalk' chapter immediately BEFORE the final '## On a Positive Note' chapter, so listeners hear the support message and then the episode ends on the uplifting story.
-
-LEGAL/ETHICAL: identify allegations as allegations, do not imply guilt before adjudication, distinguish allegations from findings, note unresolved cases, avoid sensational descriptions; state proposed legislation as proposed and where it is in the process; distinguish board discussion from action and note when no final decision was made.
-
-OUTPUT: respond with a SINGLE valid JSON object and nothing else (no markdown fence, no prose outside it). Use these keys:
-{
-  "editorial_summary": "concise editorial summary of the week (the WEEKLY RESEARCH PRODUCER NOTES lead-in)",
-  "selected_stories": [
-    {
-      "story": "headline",
-      "location": "county/region/statewide",
-      "classification": ["NEWS"],
-      "importance": 8,
-      "podcast_potential": 7,
-      "estimated_minutes": 3.5,
-      "why_it_made_the_cut": "",
-      "what_happened_during_week": "",
-      "what_remains_unresolved": "",
-      "why_it_matters": "",
-      "sources": [{"title": "", "url": "https://...", "outlet": ""}]
-    }
-  ],
-  "not_selected": [
-    {"story": "", "location": "", "why_considered": "", "why_not_selected": ""}
-  ],
-  "look_ahead": [{"label": "upcoming event genuinely relevant to WV education", "date": "YYYY-MM-DD or descriptive"}],
-  "recording_script": "the full spoken script as one string, beginning with the show identification and the verbatim Randy Black introduction, with a \\"## Chapter Title\\" header line before each story segment (and \\"## Introduction\\"/\\"## Closing\\" for the open and close), using \\n\\n between paragraphs",
-  "chapters": ["the ordered chapter titles, matching the ## headers in recording_script exactly but WITHOUT the ## prefix"],
-  "source_log": [{"title": "", "url": "https://...", "outlet": ""}]
-}
-The "not_selected" array (STORIES CONSIDERED BUT NOT SELECTED) is REQUIRED and must include notable alternatives seriously considered but excluded, and stories that were prominent early but faded, forming an editorial audit trail. Every URL must be a real page you actually consulted this run. Apply the quality-control tests before answering, especially: would these still be the top stories if WVU and Marshall had published nothing this week; did K-12 and local education get appropriate weight; did you independently reassess the full week rather than lifting from daily briefings; and does the script open with Randy Black's exact required introduction.""".replace(
-    "__REQUIRED_INTRO__", REQUIRED_INTRO
-)
+def build_system(plan: str) -> str:
+    return plan.strip() + "\n\n" + OUTPUT_CONTRACT.replace("__REQUIRED_INTRO__", REQUIRED_INTRO)
 
 
 LENGTH_GUIDANCE = {
@@ -145,10 +94,30 @@ def _user_prompt(
     candidates: List[Dict[str, Any]],
     positive: List[Dict[str, Any]],
     submissions: List[Dict[str, Any]],
+    *,
+    stage: str = "research",
+    packet_text: str = "",
+    dossier: str = "",
 ) -> str:
+    today = datetime.now(desk.EASTERN).strftime("%A, %B %d, %Y")
     lines = [
+        f"TODAY'S DATE: {today} (America/New_York). The episode covers the week of {week_start} through {week_end}.",
         f"Produce the WVEdTalk weekly episode covering West Virginia education news for the week of {week_start} through {week_end} (America/New_York).",
-        "Independently research the full week with live web search — do not merely restate the daily briefings below.",
+    ]
+    if stage == "research":
+        lines += [
+            "STAGE: RESEARCH. Independently research the full week with live web search — do not merely restate the daily briefings below.",
+            "Return a plain-text research dossier (NOT JSON). For each story worth considering give: headline, location, what happened and when, "
+            "and every date, deadline, number and name exactly as the article states them, with the full article URL you actually read. "
+            "Quote deadlines verbatim from the article (e.g. 'comments accepted through Nov. 20') and say which article said it. "
+            "Be explicit when you could not find a date. Also list stories considered but not worth covering.",
+        ]
+    else:
+        lines += [
+            "STAGE: WRITE. You can no longer search. Write the episode using ONLY the numbered SOURCES and the research dossier below; "
+            "when they disagree, the SOURCE text wins over the dossier.",
+        ]
+    lines += [
         LENGTH_GUIDANCE.get(script_length, LENGTH_GUIDANCE["standard"]),
         "The length preference is a target, not a mandate: never pad a quiet week to reach it, and never omit a genuinely important story to stay under it.",
     ]
@@ -196,7 +165,12 @@ def _user_prompt(
             lines.append(f"- {b.get('date')}: {heads}")
     else:
         lines.append("\nThere are no daily briefings on file for this week; research the week entirely from the open web.")
-    lines.append("\nReturn only the single JSON object described in your instructions.")
+    if stage == "write":
+        lines.append("\n=== RESEARCH DOSSIER (from the research stage; verify against the sources) ===\n" + dossier)
+        lines.append("\n=== SOURCES (real article text; cite by ID only) ===\n" + packet_text)
+        lines.append("\nReturn only the single JSON object described in your instructions.")
+    else:
+        lines.append("\nReturn the research dossier now (plain text).")
     return "\n".join(lines)
 
 
@@ -236,27 +210,119 @@ async def _gather_positive() -> List[Dict[str, Any]]:
     return out
 
 
-async def _call_model(
-    week_start: str,
-    week_end: str,
-    briefings: List[Dict[str, Any]],
-    script_length: str,
-    candidates: List[Dict[str, Any]],
-    positive: List[Dict[str, Any]],
-    submissions: List[Dict[str, Any]],
-) -> Dict[str, Any]:
-    import os
+_RESEARCH_SUFFIX = (
+    "\n\nYou are in the RESEARCH stage of a multi-stage workflow. Ignore any instruction about JSON or script "
+    "formatting for now; return a plain-text research dossier as requested. A later stage writes the script."
+)
 
-    from lib import llm
+
+def _split_contract():
+    mech, _, schema = OUTPUT_CONTRACT.partition("\nOUTPUT:")
+    return mech.replace("__REQUIRED_INTRO__", REQUIRED_INTRO), "OUTPUT:" + schema
+
+
+async def _research(
+    plan: str, week_start, week_end, briefings, script_length, candidates, positive, submissions,
+    extra: str = "",
+):
+    """Stage 1 (grounded): live Google Search research. Returns (dossier, citations, model)."""
+    from lib import llm, source_packet
+
+    user = _user_prompt(
+        week_start, week_end, briefings, script_length, candidates, positive, submissions, stage="research"
+    )
+    if extra:
+        user += "\n\n" + extra
+    result = await llm.generate(system=plan + _RESEARCH_SUFFIX, user=user, grounded=True)
+    dossier = result["content"] or ""
+    cites = [{"url": c["url"], "title": c.get("title", ""), "grounded": True} for c in result["citations"]]
+    # URLs the model typed into its dossier are NOT grounded; they only enter the packet if they fetch.
+    cites += [{"url": u, "title": "", "grounded": False} for u in source_packet.urls_in_text(dossier)]
+    # Reader-submitted links are fetched so the writer reads them instead of guessing.
+    cites += [{"url": s.get("url", ""), "title": "", "grounded": False} for s in submissions if s.get("url")]
+    return dossier, cites, result["model"]
+
+
+async def _write(
+    plan: str, week_start, week_end, briefings, script_length, candidates, positive, submissions,
+    packet: List[Dict[str, Any]], dossier: str,
+) -> Dict[str, Any]:
+    """Stage 2 (ungrounded): write the episode strictly from the fetched source packet."""
+    from lib import llm, source_packet
 
     result = await llm.generate(
-        system=PRODUCER_BRIEF,
-        user=_user_prompt(week_start, week_end, briefings, script_length, candidates, positive, submissions),
-        grounded=True,
+        system=build_system(plan),
+        user=_user_prompt(
+            week_start, week_end, briefings, script_length, candidates, positive, submissions,
+            stage="write", packet_text=source_packet.render_for_prompt(packet), dossier=dossier,
+        ),
+        grounded=False,
     )
     data = desk._parse_json(result["content"])
-    data["_citations"] = result["citations"]
     data["_model"] = result["model"]
+    return data
+
+
+_FACT_CHECK_SYSTEM = (
+    "You are a meticulous news fact-checker for a podcast. You compare a recording script against the numbered "
+    "source articles it was written from and report every claim the sources do not support or contradict. "
+    "Pay special attention to DATES, DEADLINES and WINDOWS (is a deadline described as 'this week' / 'closes soon' / "
+    "a different date than the source gives?), numbers, names, titles, places, and whether a proposal, discussion "
+    "or allegation is stated as a decision or fact. Do not nitpick wording. Return ONLY JSON: "
+    '{"issues": [{"claim": "the script sentence", "problem": "what the source actually says", '
+    '"source_id": "S3", "suggested_fix": "corrected wording", "severity": "high|medium|low"}]}. '
+    'If everything is supported return {"issues": []}.'
+)
+
+
+async def fact_check_script(script: str, packet: List[Dict[str, Any]], week_start: str, week_end: str) -> List[Dict[str, Any]]:
+    from lib import llm, source_packet
+
+    today = datetime.now(desk.EASTERN).strftime("%A, %B %d, %Y")
+    user = (
+        f"TODAY: {today}. Episode week: {week_start} through {week_end}.\n\n=== SCRIPT ===\n{script}\n\n"
+        f"=== SOURCES ===\n{source_packet.render_for_prompt(packet)}"
+    )
+    result = await llm.generate(system=_FACT_CHECK_SYSTEM, user=user, grounded=False)
+    data = desk._parse_json(result["content"])
+    issues = [i for i in (data.get("issues") or []) if isinstance(i, dict) and i.get("claim")]
+    for i in issues:
+        i["fixed"] = False
+    return issues
+
+
+_REVISE_SUFFIX = (
+    "\n\nYou are REVISING an existing script, not writing a new one. Change only what the feedback requires and keep "
+    "every unaffected sentence word-for-word. Keep the chapter header format and the verbatim introduction. Do not "
+    "add a support/fundraising chapter. The host is the editor and is authoritative on editorial direction and on "
+    "corrections of fact; when the sources contradict a factual claim in the feedback, follow the sources and say "
+    "so in change_notes. When feedback asks for something the sources do not cover, say so in change_notes instead "
+    "of inventing it. Return ONLY JSON: "
+    '{"recording_script": "the full revised script", "chapters": ["ordered chapter titles"], '
+    '"editorial_summary": "updated only if the changes affect it, else the original", '
+    '"change_notes": "2-5 short sentences: what you changed and anything you could not do"}'
+)
+
+
+async def revise_script(
+    *, plan: str, script: str, summary: str, packet: List[Dict[str, Any]], feedback: str,
+    week_start: str, week_end: str, dossier: str = "",
+) -> Dict[str, Any]:
+    from lib import llm, source_packet
+
+    mech, _schema = _split_contract()
+    today = datetime.now(desk.EASTERN).strftime("%A, %B %d, %Y")
+    user = (
+        f"TODAY: {today}. Episode week: {week_start} through {week_end}.\n\n"
+        f"=== FEEDBACK TO APPLY ===\n{feedback.strip()}\n\n"
+        f"=== CURRENT EDITORIAL SUMMARY ===\n{summary}\n\n=== CURRENT SCRIPT ===\n{script}\n\n"
+        + (f"=== NEW RESEARCH FOR THIS REVISION ===\n{dossier}\n\n" if dossier else "")
+        + f"=== SOURCES ===\n{source_packet.render_for_prompt(packet)}"
+    )
+    result = await llm.generate(system=plan + "\n\n" + mech + _REVISE_SUFFIX, user=user, grounded=False)
+    data = desk._parse_json(result["content"])
+    if not str(data.get("recording_script") or "").strip():
+        raise ValueError("The revision came back empty — nothing was changed.")
     return data
 
 
@@ -418,6 +484,136 @@ async def relink_episode(week_of: str) -> Dict[str, Any]:
     return ep.model_dump()
 
 
+_revise_lock = asyncio.Lock()
+
+
+async def _load_packet(doc: Dict[str, Any]):
+    """The stored source packet for an episode; episodes made before packets existed get one built
+    on demand from their links (only links that actually fetch, or came from Google grounding)."""
+    from lib import source_packet
+
+    week_of = doc["week_of"]
+    pk = await db.episode_packets.find_one({"week_of": week_of}, {"_id": 0})
+    if pk and pk.get("packet"):
+        return pk["packet"], pk.get("dossier", "")
+    links = list(doc.get("source_log") or []) + list(doc.get("episode_links") or [])
+    for st in doc.get("selected_stories") or []:
+        links += list(st.get("sources") or [])
+    cites = [
+        {"url": l.get("url", ""), "title": l.get("title", ""), "grounded": bool(l.get("grounded"))}
+        for l in links if isinstance(l, dict)
+    ]
+    packet = await source_packet.build_packet(cites)
+    await db.episode_packets.replace_one(
+        {"week_of": week_of}, {"week_of": week_of, "packet": packet, "dossier": ""}, upsert=True
+    )
+    return packet, ""
+
+
+async def revise_episode(week_of: str, feedback: str, allow_research: bool = False) -> Dict[str, Any]:
+    """Apply host feedback to an existing script (minimal edits, no full regeneration). Snapshots the
+    prior version so it can be restored. Raises ValueError('not_found' | 'empty_feedback' | 'busy')."""
+    from lib import source_packet
+
+    feedback = (feedback or "").strip()
+    if not feedback:
+        raise ValueError("empty_feedback")
+    if _revise_lock.locked():
+        raise ValueError("busy")
+    async with _revise_lock:
+        doc = await db.episodes.find_one({"week_of": week_of})
+        if not doc:
+            raise ValueError("not_found")
+        doc.pop("_id", None)
+        cfg = await db.desk_config.find_one({"key": "singleton"}, {"_id": 0}) or {}
+        plan = await load_plan()
+        packet, dossier = await _load_packet(doc)
+        new_dossier = ""
+        added = False
+        if allow_research:
+            new_dossier, cites, _m = await _research(
+                plan, doc.get("week_start", ""), doc.get("week_end", ""), [], cfg.get("script_length", "standard"),
+                [], [], [],
+                extra="TARGETED RESEARCH REQUEST from the editor, to be applied to an existing script. Research only what "
+                      "this feedback needs, with the same date discipline:\n" + feedback,
+            )
+            before = len(packet)
+            packet = await source_packet.build_packet(cites, existing=packet)
+            added = len(packet) > before
+            await db.episode_packets.replace_one(
+                {"week_of": week_of}, {"week_of": week_of, "packet": packet, "dossier": dossier}, upsert=True
+            )
+
+        current = str(doc.get("recording_script") or "")
+        rev = await revise_script(
+            plan=plan, script=_remove_support(current), summary=str(doc.get("editorial_summary") or ""),
+            packet=packet, feedback=feedback, week_start=doc.get("week_start", ""), week_end=doc.get("week_end", ""),
+            dossier=new_dossier,
+        )
+        base = _ensure_intro(str(rev["recording_script"]))
+        support_on = bool(doc.get("support_included", True))
+        new_script = _ensure_support(base, cfg.get("support_segment") or REQUIRED_SUPPORT) if support_on else base
+        chapters = _extract_chapters(new_script)
+
+        await db.episode_revisions.insert_one({
+            "id": str(uuid.uuid4()), "week_of": week_of, "at": datetime.now(timezone.utc).isoformat(),
+            "feedback": feedback, "script_before": current, "summary_before": doc.get("editorial_summary", ""),
+            "notes": str(rev.get("change_notes") or ""),
+        })
+
+        updates: Dict[str, Any] = {
+            "recording_script": new_script,
+            "chapters": chapters,
+            "editorial_summary": str(rev.get("editorial_summary") or doc.get("editorial_summary") or ""),
+            "last_revision_notes": str(rev.get("change_notes") or ""),
+            "revision_count": int(doc.get("revision_count", 0)) + 1,
+        }
+        if added:
+            existing = {l.get("url") for l in (doc.get("source_log") or [])}
+            new_links = [l for l in source_packet.to_links(packet, [p["id"] for p in packet]) if l["url"] not in existing]
+            updates["source_log"] = list(doc.get("source_log") or []) + new_links
+            updates["episode_links"] = list(doc.get("episode_links") or []) + [
+                l for l in new_links if l["url"] not in {x.get("url") for x in (doc.get("episode_links") or [])}
+            ]
+        try:
+            issues = await fact_check_script(base, packet, doc.get("week_start", ""), doc.get("week_end", ""))
+            updates["fact_check"] = issues
+        except Exception:
+            logger.exception("post-revision fact-check failed (non-fatal)")
+        await db.episodes.update_one({"week_of": week_of}, {"$set": updates})
+        doc.update(updates)
+        return doc
+
+
+async def list_revisions(week_of: str) -> List[Dict[str, Any]]:
+    docs = await db.episode_revisions.find({"week_of": week_of}, {"_id": 0, "script_before": 0, "summary_before": 0}).sort("at", -1).to_list(50)
+    return docs
+
+
+async def restore_revision(week_of: str, revision_id: str) -> Dict[str, Any]:
+    """Put back the script as it was BEFORE the given revision (the current script is snapshotted first)."""
+    rev = await db.episode_revisions.find_one({"week_of": week_of, "id": revision_id})
+    doc = await db.episodes.find_one({"week_of": week_of})
+    if not rev or not doc:
+        raise ValueError("not_found")
+    doc.pop("_id", None)
+    await db.episode_revisions.insert_one({
+        "id": str(uuid.uuid4()), "week_of": week_of, "at": datetime.now(timezone.utc).isoformat(),
+        "feedback": "(restored an earlier version)", "script_before": doc.get("recording_script", ""),
+        "summary_before": doc.get("editorial_summary", ""), "notes": "",
+    })
+    script = rev["script_before"]
+    updates = {
+        "recording_script": script,
+        "chapters": _extract_chapters(script),
+        "editorial_summary": rev.get("summary_before", doc.get("editorial_summary", "")),
+        "last_revision_notes": "Restored an earlier version.",
+    }
+    await db.episodes.update_one({"week_of": week_of}, {"$set": updates})
+    doc.update(updates)
+    return doc
+
+
 async def produce_episode(week_of: Optional[str] = None, trigger: str = "manual") -> WeeklyEpisode:
     week_of = week_of or await resolve_week_of()
     week_end_dt = datetime.strptime(week_of, "%Y-%m-%d")
@@ -452,15 +648,34 @@ async def produce_episode(week_of: Optional[str] = None, trigger: str = "manual"
                 .sort("submitted_at", -1)
                 .to_list(50)
             )
-            data = await _call_model(week_start, week_end, briefings, script_length, candidates, positive, submissions)
+            from lib import source_packet
+
+            plan = await load_plan()
+            plan_is_custom = plan != DEFAULT_PLAN
+            args = (week_start, week_end, briefings, script_length, candidates, positive, submissions)
+
+            _status.message = "Stage 1/4: researching the week with Google Search…"
+            dossier, cites, _research_model = await _research(plan, *args)
+
+            _status.message = f"Stage 2/4: reading {len(cites)} candidate source(s)…"
+            packet = await source_packet.build_packet(cites)
+            if not packet:
+                raise RuntimeError("Research found no readable sources — check the AI key and web access.")
+
+            _status.message = f"Stage 3/4: writing the script from {len(packet)} source article(s)…"
+            data = await _write(plan, *args, packet, dossier)
 
             selected: List[EpisodeStory] = []
+            used_ids: List[str] = []
             for raw in data.get("selected_stories") or []:
                 if not isinstance(raw, dict):
                     continue
                 cls = raw.get("classification")
                 if isinstance(cls, str):
                     raw["classification"] = [cls]
+                ids = source_packet.parse_ids(raw.pop("source_ids", []))
+                used_ids += ids
+                raw["sources"] = source_packet.to_links(packet, ids)
                 try:
                     selected.append(EpisodeStory(**raw))
                 except Exception as exc:
@@ -470,19 +685,40 @@ async def produce_episode(week_of: Optional[str] = None, trigger: str = "manual"
                 NotSelectedStory(**r) for r in (data.get("not_selected") or []) if isinstance(r, dict)
             ]
             look_ahead = [
-                LookAheadItem(**r) if isinstance(r, dict) else LookAheadItem(label=str(r))
+                LookAheadItem(**{k: str(v) for k, v in r.items() if k in ("label", "date")})
+                if isinstance(r, dict) else LookAheadItem(label=str(r))
                 for r in (data.get("look_ahead") or [])
             ]
 
-            source_log = list(data.get("source_log") or [])
-            have = {(s or {}).get("url") for s in source_log if isinstance(s, dict)}
-            for c in data.get("_citations") or []:
-                if c["url"] not in have:
-                    source_log.append(SourceLink(url=c["url"], outlet=c.get("title", "")).model_dump())
-                    have.add(c["url"])
+            used_ids += source_packet.parse_ids(data.get("source_ids_used"))
+            log_links = source_packet.to_links(packet, used_ids or [p["id"] for p in packet])
+            source_log = [SourceLink(**l) for l in log_links]
 
             support_on = bool(cfg.get("support_default_on", True))
             base_script = _ensure_intro(str(data.get("recording_script") or ""))
+
+            _status.message = "Stage 4/4: fact-checking the script against the sources…"
+            fact_issues: List[Dict[str, Any]] = []
+            try:
+                fact_issues = await fact_check_script(base_script, packet, week_start, week_end)
+                serious = [i for i in fact_issues if str(i.get("severity", "medium")).lower() in ("high", "medium")]
+                if serious:
+                    _status.message = f"Correcting {len(serious)} fact-check issue(s)…"
+                    notes = "\n".join(
+                        f"- Script says: {i['claim']}\n  Source {i.get('source_id','')} actually says: {i.get('problem','')}\n  Fix: {i.get('suggested_fix','')}"
+                        for i in serious
+                    )
+                    rev = await revise_script(
+                        plan=plan, script=base_script, summary=str(data.get("editorial_summary") or ""),
+                        packet=packet, feedback="Fact-checker findings — correct each one:\n" + notes,
+                        week_start=week_start, week_end=week_end,
+                    )
+                    base_script = _ensure_intro(str(rev["recording_script"]))
+                    for i in serious:
+                        i["fixed"] = True
+            except Exception:
+                logger.exception("fact-check step failed (non-fatal)")
+
             final_script = (
                 _ensure_support(base_script, cfg.get("support_segment") or REQUIRED_SUPPORT)
                 if support_on
@@ -503,17 +739,13 @@ async def produce_episode(week_of: Optional[str] = None, trigger: str = "manual"
                 chapters=chapters,
                 support_included=support_on,
                 source_log=source_log,
+                fact_check=fact_issues,
+                plan_is_custom=plan_is_custom,
             )
-
-            _status.message = "Resolving source links…"
-            links = list(episode.source_log)
-            for s in episode.selected_stories:
-                links.extend(s.sources)
-            await desk.resolve_links(links)
-            episode.source_log = desk._valid_sources(episode.source_log)
-            for s in episode.selected_stories:
-                s.sources = desk._valid_sources(s.sources)
             episode.episode_links = _collect_links(episode.source_log, episode.selected_stories)
+            await db.episode_packets.replace_one(
+                {"week_of": week_of}, {"week_of": week_of, "packet": packet, "dossier": dossier}, upsert=True
+            )
 
             await db.episodes.replace_one({"week_of": week_of}, episode.model_dump(), upsert=True)
             _status.message = f"WVEdTalk episode for week of {week_of} is ready ({len(selected)} stories)."

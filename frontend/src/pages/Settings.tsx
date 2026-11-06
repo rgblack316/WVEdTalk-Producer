@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { apiGet, apiPost, apiDelete, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/useAuth";
-import type { AuthState, DeskConfig, DigestSendResult, RunLogEntry, Subscriber, ExportArchive, ImportResult, ImportPreview } from "@/lib/types";
+import type { ProducerPlan, AuthState, DeskConfig, DigestSendResult, RunLogEntry, Subscriber, ExportArchive, ImportResult, ImportPreview } from "@/lib/types";
 
 const DOW = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const pad = (n: number) => String(n).padStart(2, "0");
@@ -51,6 +51,7 @@ export default function Settings() {
   const [tz, setTz] = useState("America/New_York");
   const [supportText, setSupportText] = useState("");
   const [supportOn, setSupportOn] = useState(true);
+  const [planText, setPlanText] = useState("");
   const [testEmail, setTestEmail] = useState("");
 
   const { data, isLoading } = useQuery({
@@ -365,6 +366,31 @@ export default function Settings() {
     onError: (e) => toast.error(errMsg(e)),
   });
 
+  const { data: planData } = useQuery({
+    queryKey: ["producer-plan"],
+    queryFn: () => apiGet<ProducerPlan>("/settings/plan"),
+  });
+  useEffect(() => {
+    if (planData) setPlanText(planData.plan);
+  }, [planData]);
+  const savePlan = useMutation({
+    mutationFn: () => apiPost<ProducerPlan>("/settings/plan", { plan: planText }),
+    onSuccess: (d) => {
+      qc.setQueryData(["producer-plan"], d);
+      toast.success(d.is_default ? "Plan matches the default" : "Weekly script plan saved — used from the next episode and revision");
+    },
+    onError: (e) => toast.error(errMsg(e)),
+  });
+  const resetPlan = useMutation({
+    mutationFn: () => apiPost<ProducerPlan>("/settings/plan/reset"),
+    onSuccess: (d) => {
+      qc.setQueryData(["producer-plan"], d);
+      setPlanText(d.plan);
+      toast.success("Plan reset to the default");
+    },
+    onError: (e) => toast.error(errMsg(e)),
+  });
+
   const saveSupport = useMutation({
     mutationFn: () => apiPost<DeskConfig>("/settings/support", { segment: supportText, default_on: supportOn }),
     onSuccess: (cfg) => {
@@ -671,6 +697,43 @@ export default function Settings() {
             >
               Save schedule
             </Button>
+          </section>
+          )}
+
+          {canEdit && (
+          <section className="rounded-md border border-border bg-card p-5 md:col-span-2" data-testid="plan-panel">
+            <h3 className="flex items-center gap-2 font-heading text-lg font-bold">
+              <FlaskConical className="size-4 text-primary" /> Weekly script plan
+            </h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              The editorial brief the weekly producer follows: what to look for, how to weigh stories, tone, length, and
+              standards. Edit it in plain language; it applies to the next episode and to feedback revisions.
+              The mechanical rules (chapter headers, your required intro, where the support read goes, the JSON shape, and
+              citing only fetched sources) are fixed so an edit here can't break the script.
+              {planData && !planData.is_default && <span className="font-semibold text-foreground"> Currently using your custom plan.</span>}
+            </p>
+            <textarea
+              value={planText}
+              onChange={(e) => setPlanText(e.target.value)}
+              className="mt-3 h-96 w-full rounded-sm border border-border bg-background p-3 font-mono text-xs leading-5"
+              data-testid="plan-text"
+            />
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Button size="sm" disabled={savePlan.isPending || !planText.trim()} onClick={() => savePlan.mutate()} data-testid="save-plan-button">
+                Save plan
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={resetPlan.isPending || !!planData?.is_default}
+                onClick={() => {
+                  if (window.confirm("Replace your plan with the built-in default?")) resetPlan.mutate();
+                }}
+                data-testid="reset-plan-button"
+              >
+                <RotateCcw className="size-4" /> Reset to default
+              </Button>
+            </div>
           </section>
           )}
 

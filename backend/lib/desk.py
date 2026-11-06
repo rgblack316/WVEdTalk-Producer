@@ -503,6 +503,10 @@ async def resolve_links(links: List[SourceLink]) -> None:
                 link.verified = True
             else:
                 link.verified = await _check_reachable(client, resolved, link.title, pages)
+                if not link.verified and link.grounded:
+                    # A Google-grounded publisher link that merely refuses our bot (401/403/429) is still real.
+                    status = (pages.get(resolved) or (0,))[0]
+                    link.verified = status in (401, 403, 429, 999)
 
         await asyncio.gather(*(fix(link) for link in links), return_exceptions=True)
 
