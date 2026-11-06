@@ -29,10 +29,20 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _loosen(path: Path, mode: int) -> None:
+    """The backend runs as root in Docker while the host watcher runs as the install's normal user, and
+    both write here. Keep the control dir and files writable by both (best effort; never fatal)."""
+    try:
+        os.chmod(path, mode)
+    except OSError:
+        pass
+
+
 def available() -> bool:
     """True when the control volume exists and is writable (i.e. self-hosted + mounted)."""
     try:
         CONTROL_DIR.mkdir(parents=True, exist_ok=True)
+        _loosen(CONTROL_DIR, 0o777)
         probe = CONTROL_DIR / ".write-probe"
         probe.write_text("ok", encoding="utf-8")
         probe.unlink()
@@ -57,6 +67,7 @@ def watcher_alive() -> bool:
 
 
 def status() -> dict:
+    _loosen(STATUS_FILE, 0o666)
     data = _read_json(STATUS_FILE) or {"state": "idle"}
     data["pending"] = REQUEST_FILE.exists()
     data["available"] = available()
@@ -86,4 +97,6 @@ def request_upgrade(by: str) -> dict:
         ),
         encoding="utf-8",
     )
+    _loosen(REQUEST_FILE, 0o666)
+    _loosen(STATUS_FILE, 0o666)
     return {"queued": True, "already": False, **status()}

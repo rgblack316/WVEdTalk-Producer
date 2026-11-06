@@ -161,8 +161,9 @@ to roll back.
 > `control/` volume and a small **host-side watcher** (`upgrade-watch.sh`) runs `./upgrade.sh` for it
 > and reports progress back to the UI. `install.sh` installs the watcher as the systemd service
 > **`wvedtalk-updater`** (manage with `sudo systemctl status/enable/disable wvedtalk-updater`). If you
-> installed before this service existed, run it once on the host: `./upgrade-watch.sh` (loop) or wire
-> `./upgrade-watch.sh --once` into cron. The panel warns when the updater service isn't detected.
+> installed before this service existed, `./upgrade.sh` now installs it for you (run it a second time after
+> the first upgrade, since the installer ships in the update), or run `./install-updater.sh` directly.
+> Without systemd, run `./upgrade-watch.sh` (loop) or wire `./upgrade-watch.sh --once` into cron. The panel warns when the updater service isn't detected.
 
 ## Getting started (local dev)
 

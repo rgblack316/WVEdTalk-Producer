@@ -26,19 +26,26 @@ INTERVAL="${WATCH_INTERVAL:-15}"
 mkdir -p "$CONTROL_DIR"
 iso() { date -u '+%Y-%m-%dT%H:%M:%S+00:00'; }
 
+# The app (a root process in Docker) creates upgrade.status, so this user may not be allowed to
+# overwrite it in place. Write a temp file in the (writable) control dir and rename it over.
+write_status() {
+  local tmp="$STATUS.tmp.$$"
+  cat > "$tmp" && mv -f "$tmp" "$STATUS"
+}
+
 run_once() {
   [ -f "$REQ" ] || return 0
   local before after
   before="$(cd "$APP_DIR" 2>/dev/null && git rev-parse --short HEAD 2>/dev/null || echo unknown)"
   printf '{"state":"running","message":"Applying update…","started_at":"%s","revision_before":"%s"}\n' \
-    "$(iso)" "$before" > "$STATUS"
+    "$(iso)" "$before" | write_status
   if (cd "$APP_DIR" && ./upgrade.sh) > "$LOG" 2>&1; then
     after="$(cd "$APP_DIR" 2>/dev/null && git rev-parse --short HEAD 2>/dev/null || echo unknown)"
     printf '{"state":"success","message":"Update complete.","finished_at":"%s","revision_before":"%s","revision_after":"%s"}\n' \
-      "$(iso)" "$before" "$after" > "$STATUS"
+      "$(iso)" "$before" "$after" | write_status
   else
     printf '{"state":"failed","message":"Upgrade failed — see control/upgrade.log on the server.","finished_at":"%s","revision_before":"%s"}\n' \
-      "$(iso)" "$before" > "$STATUS"
+      "$(iso)" "$before" | write_status
   fi
   rm -f "$REQ"
 }

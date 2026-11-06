@@ -28,6 +28,13 @@ docker_cmd() { if docker info >/dev/null 2>&1; then docker "$@"; else sudo docke
 docker_cmd compose version >/dev/null 2>&1 || fail "Docker Compose is not available."
 [ -f .env ] || fail "No .env in $APP_DIR. Refusing to continue."
 
+# ---- make sure the one-click updater service exists (older installs predate it) ----
+# Needs install-updater.sh from the repo, so on the very first upgrade it appears after the pull;
+# run ./upgrade.sh once more (or ./install-updater.sh) and the service gets set up.
+if [ -f ./install-updater.sh ]; then
+  INSTALL_DIR="$APP_DIR" TARGET_USER="$(stat -c %U "$APP_DIR" 2>/dev/null || id -un)" bash ./install-updater.sh || true
+fi
+
 echo
 echo "=========================================="
 echo " WV Education News Desk — Upgrade"
