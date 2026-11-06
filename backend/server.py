@@ -28,6 +28,8 @@ from routers.publish import router as publish_router
 from routers.submissions import router as submissions_router
 from routers.data_io import router as data_io_router
 from routers.version import router as version_router
+from routers.backups import router as backups_router
+from lib.backup import scheduler_loop as backup_scheduler_loop
 
 
 # Startup runs before the yield, shutdown after it. Add your own setup/teardown here.
@@ -36,7 +38,9 @@ async def lifespan(app: FastAPI):
     app.state.index_task = asyncio.create_task(ensure_indexes())  # background: a big index build must not block boot
     app.state.scheduler_task = asyncio.create_task(scheduler_loop())  # daily edition (gated by runs_enabled)
     app.state.weekly_task = asyncio.create_task(weekly_scheduler_loop())  # Friday 2:00 PM ET WVEdTalk episode
+    app.state.backup_task = asyncio.create_task(backup_scheduler_loop())  # S3 backups (gated by Settings → Backups)
     yield
+    app.state.backup_task.cancel()
     app.state.scheduler_task.cancel()
     app.state.weekly_task.cancel()
     client.close()
@@ -66,6 +70,7 @@ api_router.include_router(version_router, dependencies=_guard)
 api_router.include_router(episodes_router, dependencies=_guard)
 api_router.include_router(submissions_router, dependencies=_guard)
 api_router.include_router(users_router, dependencies=[Depends(require_admin)])
+api_router.include_router(backups_router, dependencies=[Depends(require_admin)])  # S3-compatible backups, admin-only
 api_router.include_router(data_io_router, dependencies=[Depends(require_admin)])  # full DB export/import, admin-only
 
 # Include the router in the main app

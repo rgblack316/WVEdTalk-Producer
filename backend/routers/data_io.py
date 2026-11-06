@@ -41,10 +41,10 @@ class ImportRequest(BaseModel):
     archive: Dict[str, Any]
 
 
-@router.get("/data/export")
-async def export_data():
-    """Return a complete, portable JSON archive of every collection the app uses. Includes user
-    accounts with hashed passwords (never plaintext). `_id` is stripped — the target DB regenerates it."""
+async def build_archive() -> Dict[str, Any]:
+    """A complete, portable archive of every collection the app uses (also used by scheduled backups).
+    Includes user accounts with hashed passwords (never plaintext). `_id` is stripped — the target DB
+    regenerates it. Datetimes become ISO strings so the archive is pure JSON."""
     collections: Dict[str, List[dict]] = {}
     counts: Dict[str, int] = {}
     for name in COLLECTIONS:
@@ -59,8 +59,13 @@ async def export_data():
         "counts": counts,
         "collections": collections,
     }
-    # jsonable_encoder turns any stored datetimes into ISO strings so the archive is pure JSON.
     return jsonable_encoder(archive)
+
+
+@router.get("/data/export")
+async def export_data():
+    """Return the full archive as JSON (see build_archive)."""
+    return await build_archive()
 
 
 @router.post("/data/import")

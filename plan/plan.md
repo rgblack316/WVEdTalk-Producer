@@ -92,12 +92,12 @@ The complete hard cut, delivered in one build:
   stack) and `upgrade.sh` (git-safety checks, mandatory pre-upgrade database backup, in-place update).
 
 ### Phase 2 — Later
-- Scheduled/automatic off-server backups on a cadence, and a short history of recent backups.
+- ~~Scheduled/automatic off-server backups~~ — built: S3-compatible destinations, independent schedule and retention (Settings → Backups).
 - Selective export/import (choose collections or a date range) for partial transfers.
-- An in-app "update available" indicator that surfaces when a newer version has been published.
+- ~~In-app "update available" indicator~~ — built (commit-based; Settings → Software updates).
 
 ### Phase 3 — Later
-- Optional one-click HTTPS/own-domain setup (e.g. automatic certificate issuance) in front of the app.
+- ~~One-click HTTPS/own-domain setup~~ — not needed: HTTPS is provided by the Cloudflare Tunnel in front of the app.
 - Additional AI providers beyond Gemini/OpenAI, and additional email providers, behind the same
   Integrations settings.
 

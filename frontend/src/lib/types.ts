@@ -388,3 +388,51 @@ export interface Integrations {
   runs_enabled: boolean;
   digests_enabled: boolean;
 }
+
+export interface BackupPreset {
+  id: string;
+  label: string;
+  endpoint: string;
+  region: string;
+  style: string;
+  hint: string;
+}
+
+export interface BackupLogEntry {
+  id: string;
+  at: string;
+  trigger: string;
+  status: string;
+  key: string;
+  size: number;
+  pruned: number;
+  error: string;
+}
+
+export interface BackupConfig {
+  enabled: boolean;
+  endpoint_url: string;
+  region: string;
+  bucket: string;
+  prefix: string;
+  addressing_style: string;
+  access_key_id_mask: string;
+  secret_access_key_set: boolean;
+  frequency: "hours" | "daily" | "weekly";
+  every_hours: number;
+  hour: number;
+  minute: number;
+  dow: number;
+  keep_last: number;
+  keep_days: number;
+  configured: boolean;
+  next_run: string | null;
+  last: BackupLogEntry | null;
+  presets: BackupPreset[];
+}
+
+export interface RemoteBackup {
+  key: string;
+  size: number;
+  at: string;
+}

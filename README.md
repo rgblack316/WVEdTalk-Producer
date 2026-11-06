@@ -274,6 +274,23 @@ The publish endpoint returns **stories, sources and trends only**. Importance / 
 scores, podcast angles and questions, the Podcast Opportunities section, the host's private notes and
 candidate/excluded/positive flags, and source links flagged unverified are never included.
 
+## Scheduled backups to S3-compatible storage
+
+Admins can send automatic backups to a bucket on **Amazon S3, Cloudflare R2, Backblaze B2, DigitalOcean
+Spaces, Wasabi, MinIO**, or any S3-compatible service from **Settings → Backups to S3 storage**.
+Pick a provider to pre-fill the typical endpoint/region, enter the bucket and access keys (stored
+encrypted, never shown again), and use **Test connection** (writes, reads and deletes a small test file).
+
+- **Schedule** — every 1–12 hours, daily, or weekly at a chosen time (the desk timezone). A failed run
+  is retried after 30 minutes.
+- **Retention** (separate from the schedule) — keep the newest *N* backups and/or delete backups older
+  than *D* days; 0 means no limit on that dimension. The newest backup is never deleted, and only files
+  this app created (`wvedtalk-backup-YYYYMMDD-HHMMSS.json.gz` in the chosen folder) are ever deleted.
+- **Back up now**, **Download** (as plain JSON, loadable with the import tool or first-run wizard), and
+  **Restore** (merge, or replace-all with confirmation) work from the list of backups in the bucket.
+- Use a **private** bucket: backups contain user accounts (hashed passwords) and all desk data. The key
+  needs read, write and delete on that bucket (for R2: an API token with Object Read & Write).
+
 ## Backup & moving servers (data export & import)
 
 An admin-only **Data export & import** panel lives on the Settings page for moving the News Desk's
