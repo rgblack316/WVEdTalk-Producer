@@ -69,8 +69,7 @@ publishing to the public website.
 - **Frontend** — Vite + React 19 + TypeScript (strict), Tailwind v4, shadcn/ui, TanStack Query,
   React Router.
 - **LLM** — configurable per deployment in Settings → Integrations: **Google Gemini** (default,
-  `google-genai` with Google Search grounding) or **OpenAI** (Responses API web search). No Emergent
-  dependency.
+  `google-genai` with Google Search grounding) or **OpenAI** (Responses API web search)..
 - **Email** — Resend (default) with an SMTP fallback, using the operator's own account/keys.
 - **CAPTCHA** — Cloudflare Turnstile on the public submission form (optional; honeypot-only
   fallback when keys are absent).
@@ -164,10 +163,6 @@ to roll back.
 > **`wvedtalk-updater`** (manage with `sudo systemctl status/enable/disable wvedtalk-updater`). If you
 > installed before this service existed, run it once on the host: `./upgrade-watch.sh` (loop) or wire
 > `./upgrade-watch.sh --once` into cron. The panel warns when the updater service isn't detected.
-
-> **Publishing the repo first:** use Emergent's **Save → Save to GitHub** to push this project to
-> `github.com/rgblack316/WVEdTalk-Producer` so `install.sh` can clone it. Secrets/`.env` are excluded
-> from the push by design — `install.sh` generates `SESSION_SECRET`, and the rest are managed in-app.
 
 ## Getting started (local dev)
 
@@ -279,25 +274,25 @@ The publish endpoint returns **stories, sources and trends only**. Importance / 
 scores, podcast angles and questions, the Podcast Opportunities section, the host's private notes and
 candidate/excluded/positive flags, and source links flagged unverified are never included.
 
-## Migrating off Emergent / self-hosting (data export & import)
+## Backup & moving servers (data export & import)
 
 An admin-only **Data export & import** panel lives on the Settings page for moving the News Desk's
-data to your own server (or keeping an off-platform backup). On a brand-new self-hosted install you
+data to another server (or keeping an off-platform backup). On a brand-new self-hosted install you
 can also load that same export directly from the **first-run setup wizard** ("Import a backup"),
 which restores accounts + data in one step.
 
-1. **Capture production data.** Sign in to the **published Emergent site** as an admin, open
+1. **Capture the data.** Sign in to the current app as an admin, open
    **Settings → Data export & import**, and click **Download a full copy**. Because the app reads and
    writes the live database, the archive reflects production at the moment you take it. It is a single,
    human-readable JSON file (one section per collection — briefings, episodes, submissions,
    subscribers, users, settings/schedule, run history, delivery records — plus a header with the date
    and per-collection counts). User accounts are included with their **hashed** passwords (plaintext is
    never stored or exported), so everyone logs in unchanged after the move.
-2. **Stand up the self-hosted app.** Run `install.sh` (Docker) or follow *Getting started (local dev)*
+2. **Stand up the new server.** Run `install.sh` (Docker) or follow *Getting started (local dev)*
    against your own MongoDB. The only secret you must set is `SESSION_SECRET` (the install script
    generates it); AI, email, and Turnstile keys are added in-app via **Settings → Integrations** and
    are **not** part of the export (by design, for security).
-3. **Load the data.** Sign in to the self-hosted app as an admin, open the same panel, choose the
+3. **Load the data.** Sign in to the new app as an admin, open the same panel, choose the
    downloaded file, pick a mode, and load:
    - **Merge** (default) — add/replace records by their id; anything already present that isn't in the
      archive is left untouched.
@@ -307,15 +302,6 @@ which restores accounts + data in one step.
 4. **Sign in fresh.** Login sessions do not transfer (the session signing secret differs per
    environment), which is expected and harmless — everyone signs in again with their existing
    credentials.
-
-### Requesting a raw native database dump from Emergent
-
-The in-app export is portable JSON. If you'd instead prefer a **byte-for-byte native MongoDB dump**
-(e.g. a `mongodump` BSON archive), that lives in Emergent's managed database and is provided by the
-platform, not by this app. Request it through Emergent support / your account contact, asking for a
-`mongodump` of the app's database for the deployed environment. Use it to restore with `mongorestore`
-against your own MongoDB. The in-app JSON export and a native dump are complementary — either can
-rehydrate a self-hosted instance.
 
 ## Notes
 

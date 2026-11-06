@@ -1,4 +1,4 @@
-"""Direct email transport for the self-hosted edition — no Emergent dependency.
+"""Direct email transport for the self-hosted edition.
 
 Resend (default) with an SMTP fallback. `send()` tries Resend when a Resend key is configured, and
 falls back to SMTP when Resend is unset or a Resend send fails and SMTP is configured. Callers

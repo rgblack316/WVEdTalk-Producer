@@ -1,4 +1,4 @@
-"""Direct LLM provider layer for the self-hosted edition — no Emergent dependency.
+"""Direct LLM provider layer for the self-hosted edition.
 
 Supports two providers, selected in Settings → Integrations:
   * Gemini (default) via the `google-genai` SDK with the Google Search grounding tool.

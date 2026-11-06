@@ -300,16 +300,6 @@
   resolved "https://registry.yarnpkg.com/@dotenvx/primitives/-/primitives-0.8.0.tgz#25f3af8f876717deb00b21c64df8a7ba05d16b2c"
   integrity sha512-VYJy0uhFm9zTJ1TxBaW/pA8bjbOM/OttaNMwZ1RHG4JKyRG7DhSdiqD1ipQoAyoD22olUtxbP78W9xY3Wd11bg==
 
-"@emergentbase/overlay@https://assets.emergent.sh/npm/emergentbase-overlay-0.1.29.tgz":
-  version "0.1.29"
-  resolved "https://assets.emergent.sh/npm/emergentbase-overlay-0.1.29.tgz#742e5fcfe467ee1306970449a11c8b12d4e6a431"
-  dependencies:
-    "@jridgewell/trace-mapping" "^0.3.25"
-
-"@emergentbase/visual-edits@https://assets.emergent.sh/npm/emergentbase-visual-edits-1.0.15.tgz":
-  version "1.0.15"
-  resolved "https://assets.emergent.sh/npm/emergentbase-visual-edits-1.0.15.tgz#5195a67db48276c05c8ba5ed8d363545d50a545c"
-
 "@emnapi/core@1.11.1":
   version "1.11.1"
   resolved "https://registry.yarnpkg.com/@emnapi/core/-/core-1.11.1.tgz#b9e1064f3a6b1631e241e638eb48d736bfd372a6"
@@ -502,7 +492,7 @@
   resolved "https://registry.yarnpkg.com/@jridgewell/sourcemap-codec/-/sourcemap-codec-1.6.0.tgz#f4c663e862f06dc98ca4d453862c46902789a18d"
   integrity sha512-T7jf+5zgsZHwNJ4lvQ7/aezbyk0nNX+zJVWpmHA7VYsEx7a7qr5Rg5IbtJFqkgze5Y2sruq1RUY8Q837Od7iFw==
 
-"@jridgewell/trace-mapping@0.3.31", "@jridgewell/trace-mapping@^0.3.24", "@jridgewell/trace-mapping@^0.3.25", "@jridgewell/trace-mapping@^0.3.28":
+"@jridgewell/trace-mapping@0.3.31", "@jridgewell/trace-mapping@^0.3.24", "@jridgewell/trace-mapping@^0.3.28":
   version "0.3.31"
   resolved "https://registry.yarnpkg.com/@jridgewell/trace-mapping/-/trace-mapping-0.3.31.tgz#db15d6781c931f3a251a3dac39501c98a6082fd0"
   integrity sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==
