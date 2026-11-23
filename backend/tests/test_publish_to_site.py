@@ -259,5 +259,6 @@ def test_subscriber_email_matches_website_content(monkeypatch):
     )
     assert "Importance" not in html and "Podcast 9" not in html and "10/10" not in html
     assert "Kanawha County" in html and "News / Official" in html
-    assert "example.com" in html and "example.org" not in html
+    assert 'href="https://example.com/a"' in html
+    assert 'href="https://example.org/b"' not in html
     email_digest._assert_safe_email("subject", html)
