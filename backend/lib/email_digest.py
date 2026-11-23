@@ -223,6 +223,8 @@ def _safe_source_links(sources) -> str:
     single bad source URL must not block the whole subscriber send."""
     parts = []
     for s in sources or []:
+        if getattr(s, "verified", True) is False:
+            continue  # the website hides links we couldn't verify; the email matches it
         url = (getattr(s, "url", "") or "").strip()
         if not url.lower().startswith("https://"):
             continue
@@ -251,14 +253,11 @@ def _field(label: str, value: str) -> str:
 
 
 def _story_block(s) -> str:
+    # Mirrors the public website: no importance / podcast scores (those are internal desk data).
     loc = escape(s.location) if s.location else ""
     badges = []
     if s.classification:
         badges.append(" / ".join(escape(c) for c in s.classification))
-    if s.importance is not None:
-        badges.append(f"Importance {s.importance}/10")
-    if s.podcast_potential is not None:
-        badges.append(f"Podcast {s.podcast_potential}/10")
     meta = " · ".join([b for b in ([loc] if loc else []) + badges if b])
 
     body = _field("What happened", s.what_happened) + _field("Why it matters", s.why_it_matters)

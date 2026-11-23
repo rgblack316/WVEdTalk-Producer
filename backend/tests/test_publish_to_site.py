@@ -238,3 +238,25 @@ async def test_email_omits_web_link_without_site_url(monkeypatch):
     )
     assert "View this briefing on the web" not in html
     email_digest._assert_safe_email("subject", html)
+
+
+def test_subscriber_email_matches_website_content():
+    """Subscriber email shows what the website shows: no importance/podcast scores, no unverified links."""
+    html = email_digest._full_digest_html(
+        Briefing(
+            date="2026-10-28",
+            stories=[Story(
+                section="big_three", headline="H", location="Kanawha County", classification=["News", "Official"],
+                importance=10, podcast_potential=9, what_happened="It happened.", why_it_matters="It matters.",
+                sources=[
+                    SourceLink(title="Good", url="https://example.com/a"),
+                    SourceLink(title="Unverified", url="https://example.org/b", verified=False),
+                ],
+            )],
+        ),
+        "https://wvedtalk.com/daily/2026-10-28",
+    )
+    assert "Importance" not in html and "Podcast 9" not in html and "10/10" not in html
+    assert "Kanawha County" in html and "News / Official" in html
+    assert "example.com" in html and "example.org" not in html
+    email_digest._assert_safe_email("subject", html)
