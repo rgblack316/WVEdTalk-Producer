@@ -240,8 +240,9 @@ async def test_email_omits_web_link_without_site_url(monkeypatch):
     email_digest._assert_safe_email("subject", html)
 
 
-def test_subscriber_email_matches_website_content():
+def test_subscriber_email_matches_website_content(monkeypatch):
     """Subscriber email shows what the website shows: no importance/podcast scores, no unverified links."""
+    monkeypatch.setattr(email_digest, "APP_URL", "https://news-desk.wvedtalk.com")
     html = email_digest._full_digest_html(
         Briefing(
             date="2026-10-28",
