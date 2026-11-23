@@ -23,6 +23,23 @@ fail() { echo "ERROR: $*" >&2; exit 1; }
 [ -d "$APP_DIR/.git" ] || fail "Git repository not found: $APP_DIR (set APP_DIR to your install path)"
 cd "$APP_DIR"
 
+# ---- keep the repo owned by its normal user ---------------------------------
+# Running this script with sudo makes git write root-owned files into .git, after which the
+# one-click updater (which runs as the normal user) fails with "insufficient permission for adding
+# an object to repository database". So: when run as root, give everything back to the repo owner
+# on exit; when run as a normal user, say exactly how to repair it instead of failing mid-way.
+REPO_OWNER="$(stat -c %U "$APP_DIR" 2>/dev/null || true)"
+fix_ownership() {
+  [ "$(id -u)" -eq 0 ] && [ -n "$REPO_OWNER" ] && [ "$REPO_OWNER" != "root" ] || return 0
+  chown -R "$REPO_OWNER:$(id -gn "$REPO_OWNER")" "$APP_DIR" 2>/dev/null || true
+}
+if [ "$(id -u)" -eq 0 ]; then
+  fix_ownership                      # repair anything an earlier sudo run left behind
+  trap fix_ownership EXIT
+elif [ -n "$(find .git ! -user "$(id -un)" -print -quit 2>/dev/null)" ]; then
+  fail "Some files in $APP_DIR/.git are owned by another user (from an earlier 'sudo ./upgrade.sh'). Fix once with:  sudo chown -R $(id -un):$(id -gn) $APP_DIR"
+fi
+
 command -v docker >/dev/null 2>&1 || fail "Docker is not installed. Run install.sh, or install Docker manually."
 docker_cmd() { if docker info >/dev/null 2>&1; then docker "$@"; else sudo docker "$@"; fi; }
 docker_cmd compose version >/dev/null 2>&1 || fail "Docker Compose is not available."
