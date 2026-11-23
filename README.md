@@ -92,7 +92,7 @@ frontend/          Vite + React app
   src/components/  DeskLayout, AuthGate, SetupWizard, IntegrationsPanel, BriefingView,
                    ScriptView, StoryCard, TurnstileWidget, ui/*
   src/lib/         api (typed fetch over /api), types, useAuth, regions, episode, session
-memory/            spec.md, test_credentials.md
+memory/            spec.md
 install.sh / upgrade.sh    self-hosted Docker install & upgrade
 docker-compose.yml, env.example, plan/plan.md
 ```

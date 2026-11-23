@@ -40,10 +40,6 @@ elif _cs in ("false", "0", "no"):
 else:
     COOKIE_SECURE = os.environ.get("APP_URL", "").strip().lower().startswith("https")
 
-# Bootstrap admin — seeded once if the users collection is empty.
-SEED_ADMIN_EMAIL = "admin"
-SEED_ADMIN_PASSWORD = "admin"
-
 # Service token for programmatic/downstream access (header X-Desk-Passcode).
 _SERVICE_PASSCODE = os.environ.get("APP_PASSCODE", "")
 _SECRET = os.environ.get("SESSION_SECRET", "")
@@ -126,14 +122,6 @@ async def create_user(email: str, role: str, password: str) -> dict:
 
 async def set_password(user_id: str, new_password: str) -> None:
     await db.users.update_one({"id": user_id}, {"$set": {"password_hash": hash_password(new_password)}})
-
-
-async def ensure_seed_admin() -> None:
-    """Create the bootstrap admin the first time the app starts with no users."""
-    if await db.users.count_documents({}) > 0:
-        return
-    await create_user(SEED_ADMIN_EMAIL, "admin", SEED_ADMIN_PASSWORD)
-    logger.info("seeded bootstrap admin %s", SEED_ADMIN_EMAIL)
 
 
 # ---- session token (cookie) --------------------------------------------------

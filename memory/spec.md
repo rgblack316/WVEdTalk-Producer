@@ -162,8 +162,7 @@ send emails, or change any shared setting). Replaced the earlier single shared p
 - Session = stateless HMAC-signed httpOnly cookie (`lib/auth.py`, cookie `wv_desk_session`, 30-day
   expiry, `secure`+`samesite=lax`) bound to the user's id + current password-hash prefix, so a
   password change/reset revokes that user's sessions. `SESSION_SECRET` in backend/.env.
-- Bootstrap admin seeded on first startup if `users` is empty (`ensure_seed_admin`):
-  username `admin` / password `admin` (fresh DBs only; change immediately — see memory/test_credentials.md).
+- No default account: the first admin is created in the first-run setup wizard (`routers/setup.py`).
 - Auth routes open (`routers/auth.py`): POST /api/auth/login {email,password}, POST /api/auth/logout,
   GET /api/auth/me → {authenticated, user}. Login throttled 10/5min per IP → 429.
 - User management (`routers/users.py`, admin-guarded via `require_admin`): GET /api/users,
