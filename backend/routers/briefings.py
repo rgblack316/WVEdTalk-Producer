@@ -229,13 +229,11 @@ async def list_positive_stories():
     return out
 
 
-@router.post("/candidates/clear", response_model=ClearCandidatesResponse)
-async def clear_candidates(body: Optional[ClearCandidatesRequest] = None, _edit=Depends(require_editor)):
-    """Un-flag stories tagged as episode candidates. Scope by `date` (one edition/day), by an
-    inclusive `from_date`/`to_date` range, or omit all to clear every flagged story. Prep notes are
-    preserved so a story can be re-flagged and reconsidered later. Returns the exact refs cleared so
-    the UI can offer Undo. Manual only — candidates never auto-clear."""
-    query: dict = {"stories.is_candidate": True}
+async def _clear_flag(field: str, body: Optional[ClearCandidatesRequest]) -> dict:
+    """Un-flag stories carrying `field` (is_candidate / is_positive). Scope by `date` (one
+    edition/day), by an inclusive `from_date`/`to_date` range, or omit all to clear every flagged
+    story. Returns the exact refs cleared so the UI can offer Undo."""
+    query: dict = {f"stories.{field}": True}
     if body and body.date:
         query["date"] = body.date
     elif body and (body.from_date or body.to_date):
@@ -247,36 +245,59 @@ async def clear_candidates(body: Optional[ClearCandidatesRequest] = None, _edit=
         if rng:
             query["date"] = rng
     docs = await db.briefings.find(
-        query, {"date": 1, "stories.id": 1, "stories.is_candidate": 1}
+        query, {"date": 1, "stories.id": 1, f"stories.{field}": 1}
     ).to_list(1000)
     refs = [
         {"date": d["date"], "story_id": s.get("id")}
         for d in docs
         for s in d.get("stories", [])
-        if s.get("is_candidate") and s.get("id")
+        if s.get(field) and s.get("id")
     ]
     if refs:
         await db.briefings.update_many(
             query,
-            {"$set": {"stories.$[el].is_candidate": False}},
-            array_filters=[{"el.is_candidate": True}],
+            {"$set": {f"stories.$[el].{field}": False}},
+            array_filters=[{f"el.{field}": True}],
         )
     return {"cleared": len(refs), "refs": refs}
 
 
-@router.post("/candidates/reflag")
-async def reflag_candidates(body: ReflagRequest, _edit=Depends(require_editor)):
-    """Re-flag specific stories that were just cleared — powers the 'Undo' on the Podcast Prep board."""
+async def _reflag(field: str, body: ReflagRequest) -> dict:
     by_date: dict = {}
     for r in body.refs:
         by_date.setdefault(r.date, []).append(r.story_id)
     for date, ids in by_date.items():
         await db.briefings.update_one(
             {"date": date},
-            {"$set": {"stories.$[el].is_candidate": True}},
+            {"$set": {f"stories.$[el].{field}": True}},
             array_filters=[{"el.id": {"$in": ids}}],
         )
     return {"restored": len(body.refs)}
+
+
+@router.post("/candidates/clear", response_model=ClearCandidatesResponse)
+async def clear_candidates(body: Optional[ClearCandidatesRequest] = None, _edit=Depends(require_editor)):
+    """Un-flag episode candidates. Prep notes are preserved so a story can be re-flagged later.
+    Manual only — candidates never auto-clear."""
+    return await _clear_flag("is_candidate", body)
+
+
+@router.post("/candidates/reflag")
+async def reflag_candidates(body: ReflagRequest, _edit=Depends(require_editor)):
+    """Re-flag specific stories that were just cleared — powers the 'Undo' on the Podcast Prep board."""
+    return await _reflag("is_candidate", body)
+
+
+@router.post("/positive-stories/clear", response_model=ClearCandidatesResponse)
+async def clear_positive_stories(body: Optional[ClearCandidatesRequest] = None, _edit=Depends(require_editor)):
+    """Un-flag positive stories, same scoping as /candidates/clear. Prep notes are kept."""
+    return await _clear_flag("is_positive", body)
+
+
+@router.post("/positive-stories/reflag")
+async def reflag_positive_stories(body: ReflagRequest, _edit=Depends(require_editor)):
+    """Undo for /positive-stories/clear."""
+    return await _reflag("is_positive", body)
 
 
 @router.get("/run-status", response_model=RunStatus)

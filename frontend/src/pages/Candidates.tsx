@@ -122,32 +122,37 @@ export default function Candidates() {
   const data = view === "candidates" ? candData : posData;
   const isLoading = view === "candidates" ? candLoading : posLoading;
 
+  const isPositive = view === "positive";
+  // Candidates and positive stories share the same clear/undo flow; only the endpoint and wording differ.
+  const base = isPositive ? "/positive-stories" : "/candidates";
+    const plural = (n: number) => (isPositive ? (n === 1 ? "positive story" : "positive stories") : `candidate${n === 1 ? "" : "s"}`);
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ["candidates"] });
+    qc.invalidateQueries({ queryKey: ["positive-stories"] });
     qc.invalidateQueries({ queryKey: ["briefing"] });
   };
   const errText = (e: unknown) =>
     e instanceof ApiError ? String((e.body as { detail?: string })?.detail ?? e.message) : String(e);
 
   const reflag = useMutation({
-    mutationFn: (refs: CandidateRef[]) => apiPost<{ restored: number }>("/candidates/reflag", { refs }),
+    mutationFn: (refs: CandidateRef[]) => apiPost<{ restored: number }>(`${base}/reflag`, { refs }),
     onSuccess: (r) => {
       invalidate();
-      toast.success(`Restored ${r.restored} candidate${r.restored === 1 ? "" : "s"}`);
+      toast.success(`Restored ${r.restored} ${plural(r.restored)}`);
     },
     onError: (e) => toast.error(errText(e)),
   });
 
   const clearMut = useMutation({
     mutationFn: (body: { date?: string | null; from_date?: string; to_date?: string }) =>
-      apiPost<{ cleared: number; refs: CandidateRef[] }>("/candidates/clear", body),
+      apiPost<{ cleared: number; refs: CandidateRef[] }>(`${base}/clear`, body),
     onSuccess: (r) => {
       invalidate();
       if (r.cleared === 0) {
-        toast.success("No candidates to clear");
+        toast.success(`No ${plural(0)} to clear`);
         return;
       }
-      toast.success(`Cleared ${r.cleared} candidate${r.cleared === 1 ? "" : "s"} (prep notes kept)`, {
+      toast.success(`Cleared ${r.cleared} ${plural(r.cleared)} (prep notes kept)`, {
         duration: 8000,
         action: { label: "Undo", onClick: () => reflag.mutate(r.refs) },
       });
@@ -184,8 +189,7 @@ export default function Candidates() {
 
   const total = data?.length ?? 0;
   const hasItems = total > 0;
-  const isPositive = view === "positive";
-  const showClearControls = canEdit && !isPositive; // clear/undo only applies to candidate flags
+  const showClearControls = canEdit;
   const targetCount =
     target === null ? total : typeof target === "string" ? groups.find(([d]) => d === target)?.[1].length ?? 0 : 0;
 
@@ -257,7 +261,7 @@ export default function Candidates() {
             )}
             {showClearControls && (
               <Button variant="outline" size="sm" onClick={() => setTarget(null)} data-testid="clear-candidates-button">
-                <Trash2 className="size-4" /> Clear all candidates
+                <Trash2 className="size-4" /> {isPositive ? "Clear all positive stories" : "Clear all candidates"}
               </Button>
             )}
           </div>
@@ -332,7 +336,9 @@ export default function Candidates() {
       <Dialog open={target !== undefined} onOpenChange={(o) => !o && setTarget(undefined)}>
         <DialogContent data-testid="clear-candidates-dialog">
           <DialogHeader>
-            <DialogTitle>{target ? "Clear this day's candidates?" : "Clear all episode candidates?"}</DialogTitle>
+            <DialogTitle>{target
+                ? `Clear this day's ${isPositive ? "positive stories" : "candidates"}?`
+                : `Clear all ${isPositive ? "positive stories" : "episode candidates"}?`}</DialogTitle>
             <DialogDescription>
               This un-flags{" "}
               {target ? (
@@ -360,7 +366,7 @@ export default function Candidates() {
               data-testid="clear-candidates-confirm"
             >
               {clearMut.isPending ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
-              {target ? "Clear this day" : "Clear candidates"}
+              {target ? "Clear this day" : isPositive ? "Clear positive stories" : "Clear candidates"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -369,9 +375,9 @@ export default function Candidates() {
       <Dialog open={rangeOpen} onOpenChange={(o) => !o && setRangeOpen(false)}>
         <DialogContent data-testid="clear-range-dialog">
           <DialogHeader>
-            <DialogTitle>Clear candidates in a date range</DialogTitle>
+            <DialogTitle>Clear {isPositive ? "positive stories" : "candidates"} in a date range</DialogTitle>
             <DialogDescription>
-              Un-flags every candidate whose edition date falls between these dates (inclusive). Prep
+              Un-flags every {isPositive ? "positive story" : "candidate"} whose edition date falls between these dates (inclusive). Prep
               notes are kept and you can Undo right after.
             </DialogDescription>
           </DialogHeader>
