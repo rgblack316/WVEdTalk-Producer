@@ -1,10 +1,13 @@
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
-import { Loader2, Mic, Copy, Download, ExternalLink, Clock, Mail, ListTree, Link2, ArrowUpDown, Search } from "lucide-react";
+import { Loader2, Mic, Copy, Download, ExternalLink, Clock, Mail, ListTree, Link2, ArrowUpDown, Search, CalendarRange } from "lucide-react";
 import DeskLayout from "@/components/DeskLayout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ScoreChip } from "@/components/StoryCard";
 import { ScriptView } from "@/components/ScriptView";
 import { apiGet, apiPost, ApiError } from "@/lib/api";
@@ -21,6 +24,16 @@ function fmt(date: string) {
     year: "numeric",
     timeZone: "UTC",
   });
+}
+
+function shiftDate(date: string, days: number) {
+  const [y, m, d] = date.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
+}
+
+function daysBetween(start: string, end: string) {
+  const t = (v: string) => Date.parse(`${v}T00:00:00Z`);
+  return Math.round((t(end) - t(start)) / 86400000) + 1;
 }
 
 function SectionHeading({ children }: { children: React.ReactNode }) {
@@ -69,10 +82,38 @@ export default function Episodes() {
     refetchInterval: (q) => (q.state.data?.running ? 5000 : 30000),
   });
 
+  const { data: stdWindow } = useQuery({
+    queryKey: ["produce-window"],
+    queryFn: () => apiGet<{ week_start: string; week_end: string; max_days: number }>("/produce-window"),
+  });
+  const [windowOpen, setWindowOpen] = useState(false);
+  const [winStart, setWinStart] = useState("");
+  const [winEnd, setWinEnd] = useState("");
+  const openWindow = () => {
+    setWinStart(stdWindow?.week_start ?? "");
+    setWinEnd(stdWindow?.week_end ?? "");
+    setWindowOpen(true);
+  };
+  const maxDays = stdWindow?.max_days ?? 35;
+  const winDays = winStart && winEnd ? daysBetween(winStart, winEnd) : 0;
+  const winError =
+    !winStart || !winEnd
+      ? "Choose a start and end date."
+      : winDays < 1
+        ? "The start date must be on or before the end date."
+        : winDays > maxDays
+          ? `The window can cover at most ${maxDays} days.`
+          : stdWindow && winEnd > stdWindow.week_end && winEnd > new Date().toISOString().slice(0, 10)
+            ? "The end date can't be in the future."
+            : "";
+  const replacing = !!list?.some((e) => e.week_of === winEnd);
+
   const produce = useMutation({
-    mutationFn: () => apiPost<ProduceStatus>("/produce"),
+    mutationFn: (window?: { week_start: string; week_end: string }) =>
+      apiPost<ProduceStatus>("/produce", window),
     onSuccess: () => {
-      toast.success("Producing this week's WVEdTalk episode — this takes a few minutes.");
+      setWindowOpen(false);
+      toast.success("Producing the WVEdTalk episode — this takes a few minutes.");
       qc.invalidateQueries({ queryKey: ["produce-status"] });
     },
     onError: (e) => {
@@ -179,14 +220,24 @@ export default function Episodes() {
           </p>
         </div>
         {canEdit && (
+        <div className="flex flex-wrap gap-2">
         <Button
           disabled={running || produce.isPending}
-          onClick={() => produce.mutate()}
+          onClick={() => produce.mutate(undefined)}
           data-testid="produce-now-button"
         >
           {running ? <Loader2 className="size-4 animate-spin" /> : <Mic className="size-4" />}
           {running ? "Producing…" : "Produce this week"}
         </Button>
+          <Button
+            variant="outline"
+            disabled={running || produce.isPending || !stdWindow}
+            onClick={openWindow}
+            data-testid="adjust-window-button"
+          >
+            <CalendarRange className="size-4" /> Adjust date window…
+          </Button>
+        </div>
         )}
       </div>
 
@@ -427,6 +478,79 @@ export default function Episodes() {
           </p>
         </div>
       )}
+
+      <Dialog open={windowOpen} onOpenChange={setWindowOpen}>
+        <DialogContent data-testid="produce-window-dialog">
+          <DialogHeader>
+            <DialogTitle>Adjust the episode's date window</DialogTitle>
+            <DialogDescription>
+              By default an episode covers the 7 days ending on the scheduled run day. Widen it to catch up after
+              a missed week, or move it to cover a different stretch. The episode is saved under its end date.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-wrap items-end gap-3">
+            <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+              Start
+              <Input type="date" value={winStart} max={winEnd || undefined} onChange={(e) => setWinStart(e.target.value)} data-testid="window-start" />
+            </label>
+            <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+              End
+              <Input type="date" value={winEnd} onChange={(e) => setWinEnd(e.target.value)} data-testid="window-end" />
+            </label>
+            <span className="pb-2 text-xs text-muted-foreground" data-testid="window-days">
+              {winDays > 0 ? `${winDays} day${winDays === 1 ? "" : "s"}` : ""}
+            </span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={!winStart}
+              onClick={() => setWinStart(shiftDate(winStart, -7))}
+              data-testid="window-add-week"
+            >
+              Add the previous week
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              disabled={!stdWindow}
+              onClick={() => {
+                setWinStart(stdWindow?.week_start ?? "");
+                setWinEnd(stdWindow?.week_end ?? "");
+              }}
+              data-testid="window-reset"
+            >
+              Reset to the standard week
+            </Button>
+          </div>
+          {winError && (
+            <p className="text-xs text-destructive" data-testid="window-error">
+              {winError}
+            </p>
+          )}
+          {!winError && replacing && (
+            <p className="text-xs text-amber-700" data-testid="window-replace-warning">
+              An episode already exists for {fmt(winEnd)}. Producing will replace it (and its script edits).
+            </p>
+          )}
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setWindowOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              disabled={!!winError || produce.isPending}
+              onClick={() => produce.mutate({ week_start: winStart, week_end: winEnd })}
+              data-testid="window-produce"
+            >
+              {produce.isPending ? <Loader2 className="size-4 animate-spin" /> : <Mic className="size-4" />}
+              Produce this window
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </DeskLayout>
   );
 }

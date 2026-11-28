@@ -11,7 +11,7 @@ from lib.auth import require_editor
 from lib.db import db
 from lib.email_digest import send_episode
 from models.briefing import SourceLink
-from models.episode import EpisodeSummary, ProduceStatus, WeeklyEpisode
+from models.episode import EpisodeSummary, ProduceRequest, ProduceStatus, WeeklyEpisode
 
 router = APIRouter(tags=["episodes"])
 
@@ -52,15 +52,28 @@ async def produce_status():
     return producer.get_status()
 
 
+@router.get("/produce-window")
+async def produce_window():
+    """The standard coverage window (what a plain 'Produce' uses) and the maximum allowed span."""
+    start, end = await producer.resolve_window()
+    return {"week_start": start, "week_end": end, "max_days": producer.MAX_WINDOW_DAYS}
+
+
 @router.post("/produce", response_model=ProduceStatus)
-async def trigger_produce(_edit=Depends(require_editor)):
+async def trigger_produce(body: Optional[ProduceRequest] = None, _edit=Depends(require_editor)):
     status = producer.get_status()
     if status.running:
         raise HTTPException(status_code=409, detail="An episode is already being produced")
+    try:
+        start, end = await producer.resolve_window(
+            body.week_start if body else None, body.week_end if body else None
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
 
     async def _bg():
         try:
-            await producer.produce_episode()
+            await producer.produce_episode(end, week_start=start)
         except Exception:
             pass  # status object carries the error
 

@@ -40,6 +40,13 @@ class LookAheadItem(BaseModel):
     date: str = ""
 
 
+class ProduceRequest(BaseModel):
+    """Optional custom coverage window for a manual production (inclusive, YYYY-MM-DD).
+    The episode is keyed by `week_end`."""
+    week_start: Optional[str] = None
+    week_end: Optional[str] = None
+
+
 class WeeklyEpisode(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     week_of: str  # the Friday date, YYYY-MM-DD (ET) — the key

@@ -66,6 +66,36 @@ async def resolve_week_of() -> str:
     return anchor.strftime("%Y-%m-%d")
 
 
+MAX_WINDOW_DAYS = 35  # sanity cap so a typo can't ask the model to research a whole semester
+
+
+def validate_window(week_start: Optional[str], week_end: Optional[str], anchor: str, today: str) -> tuple:
+    """Pure check of a requested coverage window -> (start, end), both YYYY-MM-DD inclusive.
+    Defaults: end = the scheduled week's anchor day, start = 6 days before end (the standard week).
+    Raises ValueError with a message safe to show the user."""
+    def _d(label: str, v: str) -> datetime:
+        try:
+            return datetime.strptime(v, "%Y-%m-%d")
+        except (TypeError, ValueError):
+            raise ValueError(f"{label} must be a date like 2026-11-20")
+
+    end_dt = _d("End date", week_end or anchor)
+    start_dt = _d("Start date", week_start) if week_start else end_dt - timedelta(days=6)
+    if start_dt > end_dt:
+        raise ValueError("The start date must be on or before the end date")
+    if end_dt.strftime("%Y-%m-%d") > today:
+        raise ValueError("The end date can't be in the future")
+    if (end_dt - start_dt).days + 1 > MAX_WINDOW_DAYS:
+        raise ValueError(f"The window can cover at most {MAX_WINDOW_DAYS} days")
+    return start_dt.strftime("%Y-%m-%d"), end_dt.strftime("%Y-%m-%d")
+
+
+async def resolve_window(week_start: Optional[str] = None, week_end: Optional[str] = None) -> tuple:
+    s = await desk.load_schedule()
+    today = datetime.now(desk._safe_zone(s["timezone"])).strftime("%Y-%m-%d")
+    return validate_window(week_start, week_end, await resolve_week_of(), today)
+
+
 from lib.producer_plan import DEFAULT_PLAN, OUTPUT_CONTRACT
 
 
@@ -614,11 +644,16 @@ async def restore_revision(week_of: str, revision_id: str) -> Dict[str, Any]:
     return doc
 
 
-async def produce_episode(week_of: Optional[str] = None, trigger: str = "manual") -> WeeklyEpisode:
+async def produce_episode(
+    week_of: Optional[str] = None, trigger: str = "manual", week_start: Optional[str] = None
+) -> WeeklyEpisode:
+    """`week_of` is the window's last day (and the episode's key). `week_start` widens or narrows the
+    window; by default it is the standard 7 days ending on `week_of`."""
     week_of = week_of or await resolve_week_of()
     week_end_dt = datetime.strptime(week_of, "%Y-%m-%d")
-    week_start = (week_end_dt - timedelta(days=6)).strftime("%Y-%m-%d")
+    week_start = week_start or (week_end_dt - timedelta(days=6)).strftime("%Y-%m-%d")
     week_end = week_of
+    window_days = (week_end_dt - datetime.strptime(week_start, "%Y-%m-%d")).days + 1
 
     async with _lock:
         _status.running = True
@@ -635,7 +670,7 @@ async def produce_episode(week_of: Optional[str] = None, trigger: str = "manual"
                     {"date": {"$gte": week_start, "$lte": week_end}, "status": "complete"}
                 )
                 .sort("date", 1)
-                .to_list(14)
+                .to_list(max(14, window_days + 1))
             )
             cfg = await db.desk_config.find_one({"key": "singleton"}, {"_id": 0}) or {}
             script_length = cfg.get("script_length", "standard")
